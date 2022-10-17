@@ -33,8 +33,8 @@ module axi_lite_to_reg #(
   ) (
     input  logic           clk_i         ,
     input  logic           rst_ni        ,
-    input  axi_lite_req_t  axi_lite_req_i,
-    output axi_lite_rsp_t  axi_lite_rsp_o,
+    input  axi_lite_req_t  axi_lite_req_i,  // contains all request signals
+    output axi_lite_rsp_t  axi_lite_rsp_o,  // contains all response signals
     output reg_req_t       reg_req_o     ,
     input  reg_rsp_t       reg_rsp_i
   );
@@ -47,6 +47,7 @@ module axi_lite_to_reg #(
     end
     `endif
   
+    // Struct to be used for AW and W AXI Lite channels
     typedef struct packed {
       logic [ADDR_WIDTH-1:0]   addr;
       logic [DATA_WIDTH-1:0]   data;
@@ -58,23 +59,28 @@ module axi_lite_to_reg #(
       logic write;
     } req_t;
   
+    // Struct to be used for R channel (read response)
     typedef struct packed {
       logic [DATA_WIDTH-1:0] data;
       logic error;
     } resp_t;
   
+    // AW/W channels
     logic   write_fifo_full, write_fifo_empty;
     write_t write_fifo_in,   write_fifo_out;
     logic   write_fifo_push, write_fifo_pop;
   
+    // B channel
     logic   write_resp_fifo_full, write_resp_fifo_empty;
     logic   write_resp_fifo_in,   write_resp_fifo_out;
     logic   write_resp_fifo_push, write_resp_fifo_pop;
   
+    // AR channel
     logic   read_fifo_full, read_fifo_empty;
     logic [ADDR_WIDTH-1:0]  read_fifo_in,   read_fifo_out;
     logic   read_fifo_push, read_fifo_pop;
   
+    // R channel
     logic   read_resp_fifo_full, read_resp_fifo_empty;
     resp_t  read_resp_fifo_in,   read_resp_fifo_out;
     logic   read_resp_fifo_push, read_resp_fifo_pop;
@@ -83,7 +89,12 @@ module axi_lite_to_reg #(
     logic read_valid, write_valid;
     logic read_ready, write_ready;
   
-    // Combine AW/W Channel
+    //* Write Address (AW) and Write Data (W) Channels:
+    // Each entry contains WAddr, WData and WStrb signals
+    // Receives data from AXI side Request bus
+    // WData and WStrb go directly to Reg IF Request bus. WAddr goes to the stream arbiter
+    // Push signal is set when input data is VALID and AW/W FIFO is not full
+    //? Pop signal is set by Stream Arbiter signals
     fifo_v3 #(
       .FALL_THROUGH ( !DECOUPLE_W  ),
       .DEPTH        ( BUFFER_DEPTH ),
@@ -102,15 +113,28 @@ module axi_lite_to_reg #(
       .pop_i      ( write_fifo_pop   )
     );
   
+    /*
+      INFO: The source generates the VALID signal to indicate when the data or control information is available. 
+      The destination generates the READY signal to indicate that it accepts the data or control information. 
+      Transfer occurs only when both the VALID and READY signals are HIGH.
+    */
+    // Accept data from input AXI side. Push into FIFO and set ready signals if input data is VALID and AW/W FIFO is not full
     assign axi_lite_rsp_o.aw_ready = write_fifo_push;
-    assign axi_lite_rsp_o.w_ready = write_fifo_push;
-    assign write_fifo_push = axi_lite_req_i.aw_valid & axi_lite_req_i.w_valid & ~write_fifo_full;
+    assign axi_lite_rsp_o.w_ready = write_fifo_push;    
+    assign write_fifo_push = axi_lite_req_i.aw_valid & axi_lite_req_i.w_valid & ~write_fifo_full; // write to AW/W FIFO
+    // Fill entry with AXI input bus data
     assign write_fifo_in.addr = axi_lite_req_i.aw.addr;
     assign write_fifo_in.data = axi_lite_req_i.w.data;
     assign write_fifo_in.strb = axi_lite_req_i.w.strb;
+    //? What are these signals for ?
     assign write_fifo_pop = write_valid & write_ready;
   
-    //  B Channel
+    //*  Write Response (B) Channel:
+    // One-bit entries!
+    // Receives the error flag from register interface
+    // The output bit is used to chose the response code for the WR response
+    // Push signal is triggered by setting VALID, READY (by receiver), and Write signals at the Reg IF side.
+    // Pop signal is triggered by the setting of (B) VALID and READY (by receiver) signals at the AXI side
     fifo_v3 #(
       .DEPTH        ( BUFFER_DEPTH ),
       .dtype        ( logic        )
@@ -127,14 +151,20 @@ module axi_lite_to_reg #(
       .data_o     ( write_resp_fifo_out   ),
       .pop_i      ( write_resp_fifo_pop   )
     );
-  
-    assign axi_lite_rsp_o.b_valid = ~write_resp_fifo_empty;
-    assign axi_lite_rsp_o.b.resp = write_resp_fifo_out ? axi_pkg::RESP_SLVERR : axi_pkg::RESP_OKAY;
+    
+    // Respond with valid signal to write requester, associated with B FIFO not being empty
+    assign axi_lite_rsp_o.b_valid = ~write_resp_fifo_empty;   // any entry present will trigger valid signal
+    assign axi_lite_rsp_o.b.resp = write_resp_fifo_out ? axi_pkg::RESP_SLVERR : axi_pkg::RESP_OKAY; // Slave error / OKAY
     assign write_resp_fifo_in = reg_rsp_i.error;
     assign write_resp_fifo_push = reg_req_o.valid & reg_rsp_i.ready & reg_req_o.write;
     assign write_resp_fifo_pop = axi_lite_rsp_o.b_valid & axi_lite_req_i.b_ready;
   
-    // AR Channel
+    //* Read Address (AR) Channel:
+    // Each entry represents the address for read requests
+    // Receives the read address from the AXI side request bus
+    // The output goes to the Stream arbiter
+    // Push signal is set when AR READY and VALID (by requester) signals are set
+    //? Pop signal is set by Stream arbiter signals
     fifo_v3 #(
       .DEPTH        ( BUFFER_DEPTH ),
       .DATA_WIDTH   ( ADDR_WIDTH   )
@@ -153,11 +183,16 @@ module axi_lite_to_reg #(
     );
   
     assign read_fifo_pop = read_valid && read_ready;
-    assign axi_lite_rsp_o.ar_ready = ~read_fifo_full;
+    assign axi_lite_rsp_o.ar_ready = ~read_fifo_full;   // AR FIFO will always receive until is full
     assign read_fifo_push = axi_lite_rsp_o.ar_ready & axi_lite_req_i.ar_valid;
     assign read_fifo_in = axi_lite_req_i.ar.addr;
   
-    // R Channel
+    //* Read Data (R) Channel:
+    // Each entry contains rdata and error signals
+    // Receives input directly from Reg IF
+    // Sends data to AXI IF, error code according to received error flag value
+    // Push signal is set when R output VALID and input READY signals are set, and output write signal is clear
+    // Pop signal is triggered by AXI side R VALID and READY signals
     fifo_v3 #(
       .DEPTH        ( BUFFER_DEPTH ),
       .dtype        ( resp_t       )
@@ -178,22 +213,23 @@ module axi_lite_to_reg #(
     assign axi_lite_rsp_o.r.data = read_resp_fifo_out.data;
     assign axi_lite_rsp_o.r.resp =
       read_resp_fifo_out.error ? axi_pkg::RESP_SLVERR : axi_pkg::RESP_OKAY;
-    assign axi_lite_rsp_o.r_valid = ~read_resp_fifo_empty;
+    assign axi_lite_rsp_o.r_valid = ~read_resp_fifo_empty;  // RVALID set whenever the FIFO is not empty
     assign read_resp_fifo_pop = axi_lite_rsp_o.r_valid & axi_lite_req_i.r_ready;
     assign read_resp_fifo_push = reg_req_o.valid & reg_rsp_i.ready & ~reg_req_o.write;
     assign read_resp_fifo_in.data = reg_rsp_i.rdata;
     assign read_resp_fifo_in.error = reg_rsp_i.error;
   
     // Make sure we can capture the responses (e.g. have enough fifo space)
-    assign read_valid = ~read_fifo_empty & ~read_resp_fifo_full;
-    assign write_valid = ~write_fifo_empty & ~write_resp_fifo_full;
+    assign read_valid = ~read_fifo_empty & ~read_resp_fifo_full;  // AR fifo is not empty and R fifo is not full
+    assign write_valid = ~write_fifo_empty & ~write_resp_fifo_full; // AW/W fifo is not empty and B fifo is not full
   
-    // Arbitrate between read/write
+    // Arbitrate between AXI read/write requests
     assign read_req.addr = read_fifo_out;
     assign read_req.write = 1'b0;
     assign write_req.addr = write_fifo_out.addr;
     assign write_req.write = 1'b1;
   
+    // Once `oup_valid_o` is asserted, `oup_data_o` remains invariant until the output VALID-READY handshake has occurred.
     stream_arbiter #(
       .DATA_T  ( req_t ),
       .N_INP   ( 2     ),
@@ -201,9 +237,9 @@ module axi_lite_to_reg #(
     ) i_stream_arbiter (
       .clk_i,
       .rst_ni,
-      .inp_data_i  ( {read_req,   write_req}   ),
-      .inp_valid_i ( {read_valid, write_valid} ),
-      .inp_ready_o ( {read_ready, write_ready} ),
+      .inp_data_i  ( {read_req,   write_req}   ),   // R/W addresses + R /W flag
+      .inp_valid_i ( {read_valid, write_valid} ),   //? to check whether there is space
+      .inp_ready_o ( {read_ready, write_ready} ),   //? ???
       .oup_data_o  ( arb_req     ),
       .oup_valid_o ( reg_req_o.valid ),
       .oup_ready_i ( reg_rsp_i.ready )
