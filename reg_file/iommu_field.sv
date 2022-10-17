@@ -10,11 +10,12 @@
 //
 // IOMMU Register Field module: Instance of a variable width IOMMU register field
 
+`include "iommu_field_pkg.sv"
+
 module iommu_field
-    import iommu_field_pkg::*;
     #(
         parameter int DW = 32,                          // bit width of the register field (2-state)
-        parameter sw_access_e SwAccess = SwAccessRW,    // SW access permission
+        parameter iommu_field_pkg::sw_access_e SwAccess = SwAccessRW,    // SW access permission
         parameter logic [DW-1:0] RESVAL = '0            // reset value, 
     )
     (
@@ -37,6 +38,8 @@ module iommu_field
         output logic [DW-1:0] ds,
         output logic [DW-1:0] qs
     );
+
+    import iommu_field_pkg::*;
 
     // Write arbiter output signals signals.
     // It takes WE, WD, DE, D, Q signals and yields the valid WE and WD that will cause writes to the register

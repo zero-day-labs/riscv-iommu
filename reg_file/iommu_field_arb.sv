@@ -11,6 +11,8 @@
 // IOMMU Register field internal write arbiter
 //
 
+`include "iommu_field_pkg.sv"
+
 module iommu_field_arb
     import iommu_field_pkg::*;
     #(

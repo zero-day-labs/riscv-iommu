@@ -35,4 +35,22 @@
     `REG_BUS_TYPEDEF_REQ(name``_req_t, addr_t, data_t, strb_t) \
     `REG_BUS_TYPEDEF_RSP(name``_rsp_t, data_t)
 
+    typedef logic [13-1:0] addr_t;
+    typedef logic [64-1:0] data_t;
+    typedef logic [8-1:0] strb_t;
+
+    typedef struct packed {
+        addr_t addr;
+        logic  write;
+        data_t wdata;
+        strb_t wstrb;
+        logic  valid;
+    } reg_req_t;
+
+    typedef struct packed {
+        data_t rdata;
+        logic  error;
+        logic  ready;
+    } reg_rsp_t;
+
 `endif

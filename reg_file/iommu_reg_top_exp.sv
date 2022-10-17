@@ -14,24 +14,28 @@
 
 
 `include "include/assertions.svh"
+`include "iommu_reg_pkg_exp.sv"
+`include "iommu_field_pkg.sv"
+`include "include/typedef.svh"
 
-module iommu_reg_top #(
-    parameter type reg_req_t = logic,
-    parameter type reg_rsp_t = logic,
-    parameter int AW = 13
-) (
-  input clk_i,
-  input rst_ni,
-  input  reg_req_t reg_req_i,
-  output reg_rsp_t reg_rsp_o,
-  // To HW
-  output iommu_reg_pkg::iommu_reg2hw_t reg2hw, // Write
-  input  iommu_reg_pkg::iommu_hw2reg_t hw2reg, // Read
+module iommu_reg_top 
+  #(
+      // parameter type reg_req_t = logic,
+      // parameter type reg_rsp_t = logic,
+      parameter int AW = 13
+  ) (
+    input clk_i,
+    input nrst_i,
+    input  reg_req_t reg_req_i,
+    output reg_rsp_t reg_rsp_o,
+    // To HW
+    output iommu_reg_pkg::iommu_reg2hw_t reg2hw, // Write
+    input  iommu_reg_pkg::iommu_hw2reg_t hw2reg, // Read
 
 
-  // Config
-  input devmode_i // If 1, explicit error return for unmapped register access
-);
+    // Config
+    input devmode_i // If 1, explicit error return for unmapped register access
+  );
 
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
@@ -55,6 +59,13 @@ module iommu_reg_top #(
 
   // Below register interface can be changed
   // EXP: Conversion from the input generic register interface and the register file signals
+  // Register types must be defined in the top level module that instantiates the IOMMU
+  // typedef logic [AW-1:0] addr_t;
+  // typedef logic [DW-1:0] data_t;
+  // typedef logic [DBW-1:0] strb_t;
+
+  // `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
+
   reg_req_t  reg_intf_req;
   reg_rsp_t  reg_intf_rsp;
 
@@ -99,7 +110,7 @@ module iommu_reg_top #(
   logic capabilities_amo_qs;
   logic capabilities_ats_qs;
   logic capabilities_t2gpa_qs;
-  logic capabilities_end_qs;
+  logic capabilities_endi_qs;
   logic [1:0] capabilities_igs_qs;
   logic capabilities_hpm_qs;
   logic capabilities_dbg_qs;
@@ -403,7 +414,7 @@ module iommu_reg_top #(
   //   .RESVAL  (8'h10)
   // ) u_capabilities_version (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -431,7 +442,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -459,7 +470,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -485,7 +496,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -512,7 +523,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -539,7 +550,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_svnapot (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -566,7 +577,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_svpbmt (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -594,7 +605,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32x4 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -621,7 +632,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39x4 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -648,7 +659,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48x4 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -675,7 +686,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57x4 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -702,7 +713,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_msi_flat (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -729,7 +740,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_msi_mrif (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -756,7 +767,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_amo (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -783,7 +794,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_ats (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -810,7 +821,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_t2gpa (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -830,14 +841,14 @@ module iommu_reg_top #(
   assign capabilities_t2gpa_qs = 1'h0;
 
 
-  //   F[end]: 27:27
+  //   F[endi]: 27:27
   // iommu_field #(
   //   .DW      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
-  // ) u_capabilities_end (
+  // ) u_capabilities_endi (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -848,13 +859,13 @@ module iommu_reg_top #(
 
   //   // to internal hardware
   //   .qe     (),
-  //   .q      (reg2hw.capabilities.end.q ),
+  //   .q      (reg2hw.capabilities.endi.q ),
 
   //   // to register interface (read)
-  //   .qs     (capabilities_end_qs)
+  //   .qs     (capabilities_endi_qs)
   // );
-  assign reg2hw.capabilities.end.q = 1'h0;
-  assign capabilities_end_qs = 1'h0;
+  assign reg2hw.capabilities.endi.q = 1'h0;
+  assign capabilities_endi_qs = 1'h0;
 
 
   //   F[igs]: 29:28
@@ -864,7 +875,7 @@ module iommu_reg_top #(
   //   .RESVAL  (2'h0)
   // ) u_capabilities_igs (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -891,7 +902,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_hpm (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -918,7 +929,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_dbg (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -945,7 +956,7 @@ module iommu_reg_top #(
   //   .RESVAL  (6'h22)          // Physical Address Size reset value of 34 for Sv32
   // ) u_capabilities_pas (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -973,7 +984,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h1)
   // ) u_capabilities_pd8 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1000,7 +1011,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd17 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1027,7 +1038,7 @@ module iommu_reg_top #(
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd20 (
   //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  //   .nrst_i  (nrst_i  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1056,7 +1067,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fctl_be (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fctl_be_we),
@@ -1064,6 +1075,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fctl.be.de),
+    .ds     (),
     .d      (hw2reg.fctl.be.d ),
 
     // to internal hardware
@@ -1082,7 +1094,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fctl_wsi (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fctl_wsi_we),
@@ -1090,6 +1102,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fctl.wsi.de),
+    .ds     (),
     .d      (hw2reg.fctl.wsi.d ),
 
     // to internal hardware
@@ -1108,7 +1121,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h1)
   ) u_fctl_adfd (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fctl_adfd_we),
@@ -1116,6 +1129,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fctl.adfd.de),
+    .ds     (),
     .d      (hw2reg.fctl.adfd.d ),
 
     // to internal hardware
@@ -1136,7 +1150,7 @@ module iommu_reg_top #(
     .RESVAL  (4'h0)
   ) u_ddtp_iommu_mode (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ddtp_iommu_mode_we),
@@ -1144,6 +1158,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ddtp.iommu_mode.de),
+    .ds     (),
     .d      (hw2reg.ddtp.iommu_mode.d ),
 
     // to internal hardware
@@ -1162,14 +1177,15 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_ddtp_busy (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
-    .de     (reg2hw.ddtp.busy.de),
-    .d      (reg2hw.ddtp.busy.d ),
+    .de     (hw2reg.ddtp.busy.de),
+    .ds     (),
+    .d      (hw2reg.ddtp.busy.d ),
 
     // to internal hardware
     .qe     (),
@@ -1187,7 +1203,7 @@ module iommu_reg_top #(
     .RESVAL  (44'h0)
   ) u_ddtp_ppn (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ddtp_ppn_we),
@@ -1195,6 +1211,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ddtp.ppn.de),
+    .ds     (),
     .d      (hw2reg.ddtp.ppn.d ),
 
     // to internal hardware
@@ -1215,7 +1232,7 @@ module iommu_reg_top #(
     .RESVAL  (5'h0)
   ) u_cqb_log2sz_1 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqb_log2sz_1_we),
@@ -1223,6 +1240,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqb.log2sz_1.de),
+    .ds     (),
     .d      (hw2reg.cqb.log2sz_1.d ),
 
     // to internal hardware
@@ -1241,7 +1259,7 @@ module iommu_reg_top #(
     .RESVAL  (44'h0)
   ) u_cqb_ppn (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqb_ppn_we),
@@ -1249,6 +1267,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqb.ppn.de),
+    .ds     (),
     .d      (hw2reg.cqb.ppn.d ),
 
     // to internal hardware
@@ -1268,13 +1287,14 @@ module iommu_reg_top #(
     .RESVAL  (32'h0)
   ) u_cqh (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.cqh.de),
+    .ds     (),
     .d      (hw2reg.cqh.d ),
 
     // to internal hardware
@@ -1294,7 +1314,7 @@ module iommu_reg_top #(
     .RESVAL  (32'h0)
   ) u_cqt (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqt_we),
@@ -1302,6 +1322,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqt.de),
+    .ds     (),
     .d      (hw2reg.cqt.d ),
 
     // to internal hardware
@@ -1322,7 +1343,7 @@ module iommu_reg_top #(
     .RESVAL  (5'h0)
   ) fqb_log2sz_1 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqb_log2sz_1_we),
@@ -1330,6 +1351,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqb.log2sz_1.de),
+    .ds     (),
     .d      (hw2reg.fqb.log2sz_1.d ),
 
     // to internal hardware
@@ -1348,7 +1370,7 @@ module iommu_reg_top #(
     .RESVAL  (44'h0)
   ) fqb_ppn (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqb_ppn_we),
@@ -1356,6 +1378,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqb.ppn.de),
+    .ds     (),
     .d      (hw2reg.fqb.ppn.d ),
 
     // to internal hardware
@@ -1375,7 +1398,7 @@ module iommu_reg_top #(
     .RESVAL  (32'h0)
   ) u_fqh (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqh_we),
@@ -1383,6 +1406,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqh.de),
+    .ds     (),
     .d      (hw2reg.fqh.d ),
 
     // to internal hardware
@@ -1402,13 +1426,14 @@ module iommu_reg_top #(
     .RESVAL  (32'h0)
   ) u_fqt (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.fqt.de),
+    .ds     (),
     .d      (hw2reg.fqt.d ),
 
     // to internal hardware
@@ -1429,7 +1454,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cqen (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_cqen_we),
@@ -1437,6 +1462,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cqen.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cqen.d ),
 
     // to internal hardware
@@ -1455,7 +1481,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cie (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_cie_we),
@@ -1463,6 +1489,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cie.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cie.d ),
 
     // to internal hardware
@@ -1481,7 +1508,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cqmf (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_cqmf_we),
@@ -1489,6 +1516,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cqmf.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cqmf.d ),
 
     // to internal hardware
@@ -1507,7 +1535,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_to (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_cmd_to_we),
@@ -1515,6 +1543,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cmd_to.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cmd_to.d ),
 
     // to internal hardware
@@ -1533,7 +1562,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_ill (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_cmd_ill_we),
@@ -1541,6 +1570,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cmd_ill.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cmd_ill.d ),
 
     // to internal hardware
@@ -1559,7 +1589,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_fence_w_ip (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (cqcsr_fence_w_ip_we),
@@ -1567,6 +1597,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.cqcsr.fence_w_ip.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.fence_w_ip.d ),
 
     // to internal hardware
@@ -1585,13 +1616,14 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_cqon (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.cqcsr.cqon.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.cqon.d ),
 
     // to internal hardware
@@ -1610,13 +1642,14 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_cqcsr_busy (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.cqcsr.busy.de),
+    .ds     (),
     .d      (hw2reg.cqcsr.busy.d ),
 
     // to internal hardware
@@ -1637,7 +1670,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_fqen (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqcsr_fqen_we),
@@ -1645,6 +1678,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqcsr.fqen.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.fqen.d ),
 
     // to internal hardware
@@ -1663,7 +1697,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_fie (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqcsr_fie_we),
@@ -1671,6 +1705,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqcsr.fie.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.fie.d ),
 
     // to internal hardware
@@ -1689,7 +1724,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_fqmf (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqcsr_fqmf_we),
@@ -1697,6 +1732,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqcsr.fqmf.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.fqmf.d ),
 
     // to internal hardware
@@ -1715,7 +1751,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_fqof (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (fqcsr_fqof_we),
@@ -1723,6 +1759,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.fqcsr.fqof.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.fqof.d ),
 
     // to internal hardware
@@ -1741,13 +1778,14 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_fqon (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.fqcsr.fqon.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.fqon.d ),
 
     // to internal hardware
@@ -1766,13 +1804,14 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_fqcsr_busy (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (hw2reg.fqcsr.busy.de),
+    .ds     (),
     .d      (hw2reg.fqcsr.busy.d ),
 
     // to internal hardware
@@ -1793,7 +1832,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_ipsr_cip (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ipsr_cip_we),
@@ -1801,6 +1840,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ipsr.cip.de),
+    .ds     (),
     .d      (hw2reg.ipsr.cip.d ),
 
     // to internal hardware
@@ -1819,7 +1859,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_ipsr_fip (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ipsr_fip_we),
@@ -1827,6 +1867,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ipsr.fip.de),
+    .ds     (),
     .d      (hw2reg.ipsr.fip.d ),
 
     // to internal hardware
@@ -1845,7 +1886,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_ipsr_pmip (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ipsr_pmip_we),
@@ -1853,6 +1894,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ipsr.pmip.de),
+    .ds     (),
     .d      (hw2reg.ipsr.pmip.d ),
 
     // to internal hardware
@@ -1871,7 +1913,7 @@ module iommu_reg_top #(
     .RESVAL  (1'h0)
   ) u_ipsr_pip (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (ipsr_pip_we),
@@ -1879,6 +1921,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.ipsr.pip.de),
+    .ds     (),
     .d      (hw2reg.ipsr.pip.d ),
 
     // to internal hardware
@@ -1899,7 +1942,7 @@ module iommu_reg_top #(
     .RESVAL  (4'h0)
   ) u_icvec_civ (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (icvec_civ_we),
@@ -1907,6 +1950,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.icvec.civ.de),
+    .ds     (),
     .d      (hw2reg.icvec.civ.d ),
 
     // to internal hardware
@@ -1925,7 +1969,7 @@ module iommu_reg_top #(
     .RESVAL  (4'h0)
   ) u_icvec_fiv (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (icvec_fiv_we),
@@ -1933,6 +1977,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.icvec.fiv.de),
+    .ds     (),
     .d      (hw2reg.icvec.fiv.d ),
 
     // to internal hardware
@@ -1951,7 +1996,7 @@ module iommu_reg_top #(
     .RESVAL  (4'h0)
   ) u_icvec_pmiv (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (icvec_pmiv_we),
@@ -1959,6 +2004,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.icvec.pmiv.de),
+    .ds     (),
     .d      (hw2reg.icvec.pmiv.d ),
 
     // to internal hardware
@@ -1977,7 +2023,7 @@ module iommu_reg_top #(
     .RESVAL  (4'h0)
   ) u_icvec_piv (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (icvec_piv_we),
@@ -1985,6 +2031,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.icvec.piv.de),
+    .ds     (),
     .d      (hw2reg.icvec.piv.d ),
 
     // to internal hardware
@@ -1999,19 +2046,20 @@ module iommu_reg_top #(
   // R[msi_addr_0]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_0_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2024,13 +2072,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_0_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_0_addr_we),
@@ -2038,6 +2086,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_0.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_0.addr.d ),
 
     // to internal hardware
@@ -2051,13 +2100,13 @@ module iommu_reg_top #(
 
   // R[msi_data_0]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_0 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_0_we),
@@ -2065,6 +2114,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_0.de),
+    .ds     (),
     .d      (hw2reg.msi_data_0.d ),
 
     // to internal hardware
@@ -2078,13 +2128,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_0]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_0 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_0_we),
@@ -2092,6 +2142,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_0.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_0.d ),
 
     // to internal hardware
@@ -2106,19 +2157,20 @@ module iommu_reg_top #(
   // R[msi_addr_1]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_1_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2131,13 +2183,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_1_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_1_addr_we),
@@ -2145,6 +2197,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_1.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_1.addr.d ),
 
     // to internal hardware
@@ -2158,13 +2211,13 @@ module iommu_reg_top #(
 
   // R[msi_data_1]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_1 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_1_we),
@@ -2172,6 +2225,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_1.de),
+    .ds     (),
     .d      (hw2reg.msi_data_1.d ),
 
     // to internal hardware
@@ -2185,13 +2239,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_1]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_1 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_1_we),
@@ -2199,6 +2253,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_1.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_1.d ),
 
     // to internal hardware
@@ -2213,19 +2268,20 @@ module iommu_reg_top #(
   // R[msi_addr_2]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_2_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2238,13 +2294,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_2_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_2_addr_we),
@@ -2252,6 +2308,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_2.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_2.addr.d ),
 
     // to internal hardware
@@ -2265,13 +2322,13 @@ module iommu_reg_top #(
 
   // R[msi_data_2]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_2 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_2_we),
@@ -2279,6 +2336,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_2.de),
+    .ds     (),
     .d      (hw2reg.msi_data_2.d ),
 
     // to internal hardware
@@ -2292,13 +2350,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_2]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_2 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_2_we),
@@ -2306,6 +2364,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_2.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_2.d ),
 
     // to internal hardware
@@ -2320,19 +2379,20 @@ module iommu_reg_top #(
   // R[msi_addr_3]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_3_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2345,13 +2405,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_3_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_3_addr_we),
@@ -2359,6 +2419,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_3.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_3.addr.d ),
 
     // to internal hardware
@@ -2372,13 +2433,13 @@ module iommu_reg_top #(
 
   // R[msi_data_3]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_3 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_3_we),
@@ -2386,6 +2447,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_3.de),
+    .ds     (),
     .d      (hw2reg.msi_data_3.d ),
 
     // to internal hardware
@@ -2399,13 +2461,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_3]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_3 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_3_we),
@@ -2413,6 +2475,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_3.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_3.d ),
 
     // to internal hardware
@@ -2427,19 +2490,20 @@ module iommu_reg_top #(
   // R[msi_addr_4]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_4_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2452,13 +2516,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_4_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_4_addr_we),
@@ -2466,6 +2530,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_4.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_4.addr.d ),
 
     // to internal hardware
@@ -2479,13 +2544,13 @@ module iommu_reg_top #(
 
   // R[msi_data_4]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_4 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_4_we),
@@ -2493,10 +2558,12 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_4.de),
+    .ds     (),
     .d      (hw2reg.msi_data_4.d ),
 
     // to internal hardware
     .qe     (),
+
     .q      (reg2hw.msi_data_4.q ),
 
     // to register interface (read)
@@ -2506,13 +2573,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_4]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_4 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_4_we),
@@ -2520,6 +2587,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_4.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_4.d ),
 
     // to internal hardware
@@ -2534,19 +2602,20 @@ module iommu_reg_top #(
   // R[msi_addr_5]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_5_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2559,13 +2628,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_5_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_5_addr_we),
@@ -2573,6 +2642,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_5.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_5.addr.d ),
 
     // to internal hardware
@@ -2586,13 +2656,13 @@ module iommu_reg_top #(
 
   // R[msi_data_5]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_5 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_5_we),
@@ -2600,6 +2670,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_5.de),
+    .ds     (),
     .d      (hw2reg.msi_data_5.d ),
 
     // to internal hardware
@@ -2613,13 +2684,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_5]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_5 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_5_we),
@@ -2627,6 +2698,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_5.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_5.d ),
 
     // to internal hardware
@@ -2641,19 +2713,20 @@ module iommu_reg_top #(
   // R[msi_addr_6]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_6_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2666,13 +2739,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_6_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_6_addr_we),
@@ -2680,6 +2753,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_6.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_6.addr.d ),
 
     // to internal hardware
@@ -2693,13 +2767,13 @@ module iommu_reg_top #(
 
   // R[msi_data_6]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_6 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_6_we),
@@ -2707,6 +2781,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_6.de),
+    .ds     (),
     .d      (hw2reg.msi_data_6.d ),
 
     // to internal hardware
@@ -2720,13 +2795,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_6]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_6 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_6_we),
@@ -2734,6 +2809,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_6.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_6.d ),
 
     // to internal hardware
@@ -2748,19 +2824,20 @@ module iommu_reg_top #(
   // R[msi_addr_7]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_7_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2773,13 +2850,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_7_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_7_addr_we),
@@ -2787,6 +2864,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_7.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_7.addr.d ),
 
     // to internal hardware
@@ -2800,13 +2878,13 @@ module iommu_reg_top #(
 
   // R[msi_data_7]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_7 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_7_we),
@@ -2814,6 +2892,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_7.de),
+    .ds     (),
     .d      (hw2reg.msi_data_7.d ),
 
     // to internal hardware
@@ -2827,13 +2906,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_7]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_7 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_7_we),
@@ -2841,6 +2920,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_7.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_7.d ),
 
     // to internal hardware
@@ -2855,19 +2935,20 @@ module iommu_reg_top #(
   // R[msi_addr_8]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_8_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2880,13 +2961,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_8_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_8_addr_we),
@@ -2894,6 +2975,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_8.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_8.addr.d ),
 
     // to internal hardware
@@ -2907,13 +2989,13 @@ module iommu_reg_top #(
 
   // R[msi_data_8]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_8 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_8_we),
@@ -2921,6 +3003,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_8.de),
+    .ds     (),
     .d      (hw2reg.msi_data_8.d ),
 
     // to internal hardware
@@ -2934,13 +3017,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_8]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_8 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_8_we),
@@ -2948,6 +3031,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_8.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_8.d ),
 
     // to internal hardware
@@ -2962,19 +3046,20 @@ module iommu_reg_top #(
   // R[msi_addr_9]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_9_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -2987,13 +3072,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_9_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_9_addr_we),
@@ -3001,6 +3086,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_9.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_9.addr.d ),
 
     // to internal hardware
@@ -3014,13 +3100,13 @@ module iommu_reg_top #(
 
   // R[msi_data_9]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_9 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_9_we),
@@ -3028,6 +3114,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_9.de),
+    .ds     (),
     .d      (hw2reg.msi_data_9.d ),
 
     // to internal hardware
@@ -3041,13 +3128,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_9]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_9 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_9_we),
@@ -3055,6 +3142,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_9.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_9.d ),
 
     // to internal hardware
@@ -3069,19 +3157,20 @@ module iommu_reg_top #(
   // R[msi_addr_10]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_10_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3094,19 +3183,20 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_10_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_10_addr_we),
     .wd     (msi_addr_10_addr_wd),
 
     // from internal hardware
+    .ds     (),
     .de     (hw2reg.msi_addr_10.addr.de),
     .d      (hw2reg.msi_addr_10.addr.d ),
 
@@ -3121,13 +3211,13 @@ module iommu_reg_top #(
 
   // R[msi_data_10]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_10 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_10_we),
@@ -3135,6 +3225,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_10.de),
+    .ds     (),
     .d      (hw2reg.msi_data_10.d ),
 
     // to internal hardware
@@ -3148,13 +3239,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_10]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_10 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_10_we),
@@ -3162,6 +3253,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_10.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_10.d ),
 
     // to internal hardware
@@ -3176,19 +3268,20 @@ module iommu_reg_top #(
   // R[msi_addr_11]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_11_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3201,13 +3294,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_11_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_11_addr_we),
@@ -3215,6 +3308,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_11.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_11.addr.d ),
 
     // to internal hardware
@@ -3228,13 +3322,13 @@ module iommu_reg_top #(
 
   // R[msi_data_11]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_11 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_11_we),
@@ -3242,6 +3336,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_11.de),
+    .ds     (),
     .d      (hw2reg.msi_data_11.d ),
 
     // to internal hardware
@@ -3255,13 +3350,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_11]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_11 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_11_we),
@@ -3269,6 +3364,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_11.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_11.d ),
 
     // to internal hardware
@@ -3283,19 +3379,20 @@ module iommu_reg_top #(
   // R[msi_addr_12]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_12_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3308,13 +3405,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_12_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_12_addr_we),
@@ -3322,6 +3419,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_12.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_12.addr.d ),
 
     // to internal hardware
@@ -3335,13 +3433,13 @@ module iommu_reg_top #(
 
   // R[msi_data_12]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_12 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_12_we),
@@ -3349,6 +3447,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_12.de),
+    .ds     (),
     .d      (hw2reg.msi_data_12.d ),
 
     // to internal hardware
@@ -3362,13 +3461,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_12]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_12 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_12_we),
@@ -3376,6 +3475,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_12.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_12.d ),
 
     // to internal hardware
@@ -3390,19 +3490,20 @@ module iommu_reg_top #(
   // R[msi_addr_13]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_13_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3415,13 +3516,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_13_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_13_addr_we),
@@ -3429,6 +3530,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_13.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_13.addr.d ),
 
     // to internal hardware
@@ -3442,13 +3544,13 @@ module iommu_reg_top #(
 
   // R[msi_data_13]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_13 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_13_we),
@@ -3456,6 +3558,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_13.de),
+    .ds     (),
     .d      (hw2reg.msi_data_13.d ),
 
     // to internal hardware
@@ -3469,13 +3572,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_13]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_13 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_13_we),
@@ -3483,6 +3586,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_13.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_13.d ),
 
     // to internal hardware
@@ -3497,19 +3601,20 @@ module iommu_reg_top #(
   // R[msi_addr_14]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_14_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3522,13 +3627,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_14_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_14_addr_we),
@@ -3536,6 +3641,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_14.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_14.addr.d ),
 
     // to internal hardware
@@ -3549,13 +3655,13 @@ module iommu_reg_top #(
 
   // R[msi_data_14]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_14 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_14_we),
@@ -3563,6 +3669,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_14.de),
+    .ds     (),
     .d      (hw2reg.msi_data_14.d ),
 
     // to internal hardware
@@ -3576,13 +3683,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_14]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_14 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_14_we),
@@ -3590,6 +3697,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_14.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_14.d ),
 
     // to internal hardware
@@ -3604,19 +3712,20 @@ module iommu_reg_top #(
   // R[msi_addr_15]: V(False)
 
   //   F[zero]: 1:0
-  prim_subreg #(
+  iommu_field #(
     .DW      (2),
     .SwAccess(SwAccessRO),
     .RESVAL  (2'h0)
   ) u_msi_addr_15_zero (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     .we     (1'b0),
     .wd     ('0  ),
 
     // from internal hardware
     .de     (1'b0),
+    .ds     (),
     .d      ('0  ),
 
     // to internal hardware
@@ -3629,13 +3738,13 @@ module iommu_reg_top #(
 
 
   //   F[addr]: 55:2
-  prim_subreg #(
+  iommu_field #(
     .DW      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_15_addr (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_addr_15_addr_we),
@@ -3643,6 +3752,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_addr_15.addr.de),
+    .ds     (),
     .d      (hw2reg.msi_addr_15.addr.d ),
 
     // to internal hardware
@@ -3656,13 +3766,13 @@ module iommu_reg_top #(
 
   // R[msi_data_15]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_15 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_data_15_we),
@@ -3670,6 +3780,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_data_15.de),
+    .ds     (),
     .d      (hw2reg.msi_data_15.d ),
 
     // to internal hardware
@@ -3683,13 +3794,13 @@ module iommu_reg_top #(
 
   // R[msi_vec_ctl_15]: V(False)
 
-  prim_subreg #(
+  iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_15 (
     .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+    .nrst_i  (nrst_i  ),
 
     // from register interface
     .we     (msi_vec_ctl_15_we),
@@ -3697,6 +3808,7 @@ module iommu_reg_top #(
 
     // from internal hardware
     .de     (hw2reg.msi_vec_ctl_15.de),
+    .ds     (),
     .d      (hw2reg.msi_vec_ctl_15.d ),
 
     // to internal hardware
@@ -3855,12 +3967,15 @@ module iommu_reg_top #(
   assign fctl_be_wd = reg_wdata[0];
 
   // Interrupts can not be generated as MSI (0) if caps.IGS != {0,2}, and can not be generated as WSI (1) if caps.IGS != {1,2}
-  always_comb begin
-    if((addr_hit[1] & reg_we & !reg_error) & 
-        (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
-        (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10}))
-      fctl_wsi_we = 1'b1;
-  end
+  // always_comb begin
+  //   if((addr_hit[1] & reg_we & !reg_error) & 
+  //       (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
+  //       (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10}))
+  //     fctl_wsi_we = 1'b1;
+  // end
+  assign fctl_wsi_we = (addr_hit[1] & reg_we & !reg_error) & 
+    (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
+    (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10});
   assign fctl_wsi_wd = reg_wdata[1];
 
   assign fctl_adfd_we = addr_hit[1] & reg_we & !reg_error;
@@ -3891,7 +4006,7 @@ module iommu_reg_top #(
 
   // Only LOG2SZ-1:0 bits are writable.
   assign fqh_we = addr_hit[7] & reg_we & !reg_error;
-  assign fqt_wd = reg_wdata[31:0] & ({32{1'b1}} >> (31 - reg2hw.fqb.log2sz_1.q));
+  assign fqh_wd = reg_wdata[31:0] & ({32{1'b1}} >> (31 - reg2hw.fqb.log2sz_1.q));
 
   assign cqcsr_cqen_we = addr_hit[9] & reg_we & !reg_error;
   assign cqcsr_cqen_wd = reg_wdata[0];
@@ -4114,7 +4229,7 @@ module iommu_reg_top #(
         reg_rdata_next[24] = capabilities_amo_qs;
         reg_rdata_next[25] = capabilities_ats_qs;
         reg_rdata_next[26] = capabilities_t2gpa_qs;
-        reg_rdata_next[27] = capabilities_end_qs;
+        reg_rdata_next[27] = capabilities_endi_qs;
         reg_rdata_next[29:28] = capabilities_igs_qs;
         reg_rdata_next[30] = capabilities_hpm_qs;
         reg_rdata_next[31] = capabilities_dbg_qs;

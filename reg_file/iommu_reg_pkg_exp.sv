@@ -13,6 +13,9 @@
 //  - Register offsets
 //  - Registers legal writability masks
 
+`ifndef IOMMU_REG_PKG_DEF // if the already-compiled flag is not set...
+`define IOMMU_REG_PKG_DEF // set the flag
+
 package iommu_reg_pkg;
 
   // Address widths within the block
@@ -21,8 +24,6 @@ package iommu_reg_pkg;
   ////////////////////////////
   // Typedefs for registers //
   ////////////////////////////
-
-  // TODO: check signals for WARL fields
 
   typedef struct packed {
     struct packed {
@@ -75,7 +76,7 @@ package iommu_reg_pkg;
     } t2gpa;
     struct packed {
       logic        q;
-    } end;
+    } endi;
     struct packed {
       logic [1:0]  q;
     } igs;
@@ -1210,8 +1211,6 @@ package iommu_reg_pkg;
   } iommu_id_e;
 
   // Register width information to check illegal writes
-  // TODO:  Modify this block to 8-bit byte enables. Check writtable fields one by one.
-  //        What happens now that registers have variable widths ???
   parameter logic [7:0] IOMMU_PERMIT [61] = '{
     8'b 00111111, // index[ 0] IOMMU_CAPABILITIES
     8'b 00000001, // index[ 1] IOMMU_FCTL
@@ -1225,7 +1224,7 @@ package iommu_reg_pkg;
     8'b 00000111, // index[ 9] IOMMU_CQCSR
     8'b 00000111, // index[10] IOMMU_FQCSR
     8'b 00000001, // index[11] IOMMU_IPSR
-    8'b 00000011  // index[12] IOMMU_ICVEC
+    8'b 00000011, // index[12] IOMMU_ICVEC
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
     8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
@@ -1273,8 +1272,9 @@ package iommu_reg_pkg;
     8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00000001 // index[15] IOMMU_MSI_VEC_CTL_0
   };
 
 endpackage
 
+`endif

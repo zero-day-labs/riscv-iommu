@@ -8,6 +8,9 @@
 //
 // IOMMU Register field package: Contains SW access permissions
 
+`ifndef IOMMU_FIELD_PKG_DEF
+`define IOMMU_FIELD_PKG_DEF
+
 package iommu_field_pkg;
 
     // SW access permissions specifier
@@ -23,3 +26,4 @@ package iommu_field_pkg;
 
 endpackage
 
+`endif
