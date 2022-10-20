@@ -1,7 +1,3 @@
-# TODO: Check what's better for permissions for the registers (for SW and HW). Also check for reset values.
-# For WARL registers, the appropriate access behavior may be implemented with RW HWExt and external logic. This way, the register value is maintained outside the auto-generated logic
-
-
 {
 	name: "iommu",
     // clocking: [{clock: "clk_i", reset: "nrst_i"}],
@@ -35,7 +31,7 @@
             bits: "8",
             name: "Sv32",
             desc: "Page-based 32-bit addressing is supported.",
-            resval: "1" // TODO: Check if Sv32 is actually implemented
+            resval: "0" // TODO: Check if Sv32 is actually implemented
         }
         {
             bits: "9",
@@ -71,7 +67,7 @@
             bits: "16",
             name: "Sv32x4",
             desc: "Page-based 34-bit virtual addressing for G-stage translation is supported.",
-            resval: "1" // TODO: Check if Sv32x4 is actually implemented
+            resval: "0" // TODO: Check if Sv32x4 is actually implemented
         }
         {
             bits: "17",
@@ -158,7 +154,7 @@
             bits: "37:32",
             name: "PAS",
             desc: "Physical Address Size (value between 32 and 56)"     // 34 bits for Sv32. 56 bits for Sv39, Sv48 and Sv57
-            resval: "32"     // TODO: check which will be the translation scheme by default
+            resval: "56"     // TODO: check which will be the translation scheme by default
         }
         {
             bits: "38",

@@ -40,17 +40,17 @@
     typedef logic [8-1:0] strb_t;
 
     typedef struct packed {
-        addr_t addr;
-        logic  write;
-        data_t wdata;
-        strb_t wstrb;
-        logic  valid;
+        addr_t addr;    // [86:74]  [12:0]
+        logic  write;   // [73]     [13]
+        data_t wdata;   // [72:9]   [77:14]
+        strb_t wstrb;   // [8:1]    [85:78]
+        logic  valid;   // [0]      [86]
     } reg_req_t;
 
     typedef struct packed {
-        data_t rdata;
-        logic  error;
-        logic  ready;
+        data_t rdata;   // [65:2]   [63:0]
+        logic  error;   // [1]      [64]
+        logic  ready;   // [0]      [65]
     } reg_rsp_t;
 
 `endif

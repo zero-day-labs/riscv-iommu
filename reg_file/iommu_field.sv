@@ -10,7 +10,7 @@
 //
 // IOMMU Register Field module: Instance of a variable width IOMMU register field
 
-`include "iommu_field_pkg.sv"
+`include "packages/iommu_field_pkg.sv"
 
 module iommu_field
     #(
@@ -20,7 +20,7 @@ module iommu_field
     )
     (
         input clk_i,
-        input nrst_i,
+        input rst_ni,
 
         // Signals from SW side: valid for RW, WO, W1C, W1S, W0C, RC
         // In case of RC, top module connects Read Pulse to WE. WD should be 1'b0 in this case ???
@@ -62,8 +62,8 @@ module iommu_field
     );
 
     // Register update logic
-    always_ff @(posedge clk_i or negedge nrst_i) begin
-        if (!nrst_i) begin
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
             q <= RESVAL;
         end
         else if (arb_wr_en) begin

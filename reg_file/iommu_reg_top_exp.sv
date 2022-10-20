@@ -14,8 +14,8 @@
 
 
 `include "include/assertions.svh"
-`include "iommu_reg_pkg_exp.sv"
-`include "iommu_field_pkg.sv"
+`include "packages/iommu_reg_pkg_exp.sv"
+`include "packages/iommu_field_pkg.sv"
 `include "include/typedef.svh"
 
 module iommu_reg_top 
@@ -25,7 +25,7 @@ module iommu_reg_top
       parameter int AW = 13
   ) (
     input clk_i,
-    input nrst_i,
+    input rst_ni,
     input  reg_req_t reg_req_i,
     output reg_rsp_t reg_rsp_o,
     // To HW
@@ -52,6 +52,7 @@ module iommu_reg_top
   logic [DBW-1:0] reg_be;
   logic [DW-1:0]  reg_rdata;
   logic           reg_error;
+  logic           reg_ready;
 
   logic          addrmiss, wr_err;
 
@@ -81,10 +82,19 @@ module iommu_reg_top
   assign reg_be = reg_intf_req.wstrb;
   assign reg_intf_rsp.rdata = reg_rdata;
   assign reg_intf_rsp.error = reg_error;
-  assign reg_intf_rsp.ready = 1'b1;
+  assign reg_intf_rsp.ready = reg_we | reg_re;
+  // assign reg_intf_rsp.ready = 1'b1;
 
-  assign reg_rdata = reg_rdata_next;
+  assign reg_rdata = reg_re ? reg_rdata_next : '0;
   assign reg_error = (devmode_i & addrmiss) | wr_err;   // when in development mode, address misses are not silent
+
+  // Ready setting logic
+  // always_ff @(posedge clk_i) begin
+  //   if(reg_we || reg_re)
+  //     reg_ready <= 1'b1;
+  //   else
+  //     reg_ready <= 1'b0;
+  // end
 
 
   // Define SW related signals
@@ -414,7 +424,7 @@ module iommu_reg_top
   //   .RESVAL  (8'h10)
   // ) u_capabilities_version (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -442,7 +452,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -458,8 +468,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_sv32_qs)
   // );
-  assign reg2hw.capabilities.sv32.q = 1'h1;
-  assign capabilities_sv32_qs = 1'h1;
+  assign reg2hw.capabilities.sv32.q = 1'h0;
+  assign capabilities_sv32_qs = 1'h0;
 
 
   //   F[sv39]: 9:9
@@ -470,7 +480,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -496,7 +506,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -523,7 +533,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -539,8 +549,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_sv57_qs)
   // );
-  assign reg2hw.capabilities.sv57.q = 1'h1;
-  assign capabilities_sv57_qs = 1'h1;
+  assign reg2hw.capabilities.sv57.q = 1'h0;
+  assign capabilities_sv57_qs = 1'h0;
 
 
   //   F[svnapot]: 14:14
@@ -550,7 +560,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_svnapot (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -577,7 +587,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_svpbmt (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -605,7 +615,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32x4 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -621,8 +631,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_sv32x4_qs)
   // );
-  assign reg2hw.capabilities.sv32x4.q = 1'h1;
-  assign capabilities_sv32x4_qs = 1'h1;
+  assign reg2hw.capabilities.sv32x4.q = 1'h0;
+  assign capabilities_sv32x4_qs = 1'h0;
 
 
   //   F[sv39x4]: 17:17
@@ -632,7 +642,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39x4 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -659,7 +669,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48x4 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -686,7 +696,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57x4 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -713,7 +723,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_msi_flat (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -740,7 +750,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_msi_mrif (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -756,7 +766,7 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_msi_mrif_qs)
   // );
-  assign capabilities_msi_flat_qs = 1'h0;
+  assign reg2hw.capabilities.msi_mrif.q = 1'h0;
   assign capabilities_msi_mrif_qs = 1'h0;
 
 
@@ -767,7 +777,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_amo (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -794,7 +804,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_ats (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -821,7 +831,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_t2gpa (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -848,7 +858,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_endi (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -875,7 +885,7 @@ module iommu_reg_top
   //   .RESVAL  (2'h0)
   // ) u_capabilities_igs (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -902,7 +912,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_hpm (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -929,7 +939,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_dbg (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -956,7 +966,7 @@ module iommu_reg_top
   //   .RESVAL  (6'h22)          // Physical Address Size reset value of 34 for Sv32
   // ) u_capabilities_pas (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -972,8 +982,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_pas_qs)
   // );
-  assign reg2hw.capabilities.pas.q = 6'h22;
-  assign capabilities_pas_qs = 6'h22;
+  assign reg2hw.capabilities.pas.q = 6'h38;
+  assign capabilities_pas_qs = 6'h38;
 
 
   //   F[pd8]: 38:38
@@ -984,7 +994,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h1)
   // ) u_capabilities_pd8 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1000,8 +1010,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_pd8_qs)
   // );
-  assign reg2hw.capabilities.pd8.q = 1'h0;
-  assign capabilities_pd8_qs = 1'h0;
+  assign reg2hw.capabilities.pd8.q = 1'h1;
+  assign capabilities_pd8_qs = 1'h1;
 
 
   //   F[pd17]: 39:39
@@ -1011,7 +1021,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd17 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1027,8 +1037,8 @@ module iommu_reg_top
   //   // to register interface (read)
   //   .qs     (capabilities_pd17_qs)
   // );
-  assign reg2hw.capabilities.pd17.q = 1'h1;
-  assign capabilities_pd17_qs = 1'h1;
+  assign reg2hw.capabilities.pd17.q = 1'h0;
+  assign capabilities_pd17_qs = 1'h0;
 
 
   //   F[pd20]: 40:40
@@ -1038,7 +1048,7 @@ module iommu_reg_top
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd20 (
   //   .clk_i   (clk_i    ),
-  //   .nrst_i  (nrst_i  ),
+  //   .rst_ni  (rst_ni  ),
 
   //   .we     (1'b0),
   //   .wd     ('0  ),
@@ -1067,7 +1077,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fctl_be (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fctl_be_we),
@@ -1094,7 +1104,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fctl_wsi (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fctl_wsi_we),
@@ -1121,7 +1131,7 @@ module iommu_reg_top
     .RESVAL  (1'h1)
   ) u_fctl_adfd (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fctl_adfd_we),
@@ -1150,7 +1160,7 @@ module iommu_reg_top
     .RESVAL  (4'h0)
   ) u_ddtp_iommu_mode (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ddtp_iommu_mode_we),
@@ -1177,7 +1187,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_ddtp_busy (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1203,7 +1213,7 @@ module iommu_reg_top
     .RESVAL  (44'h0)
   ) u_ddtp_ppn (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ddtp_ppn_we),
@@ -1232,7 +1242,7 @@ module iommu_reg_top
     .RESVAL  (5'h0)
   ) u_cqb_log2sz_1 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqb_log2sz_1_we),
@@ -1259,7 +1269,7 @@ module iommu_reg_top
     .RESVAL  (44'h0)
   ) u_cqb_ppn (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqb_ppn_we),
@@ -1287,7 +1297,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_cqh (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1314,7 +1324,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_cqt (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqt_we),
@@ -1343,7 +1353,7 @@ module iommu_reg_top
     .RESVAL  (5'h0)
   ) fqb_log2sz_1 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqb_log2sz_1_we),
@@ -1370,7 +1380,7 @@ module iommu_reg_top
     .RESVAL  (44'h0)
   ) fqb_ppn (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqb_ppn_we),
@@ -1398,7 +1408,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_fqh (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqh_we),
@@ -1426,7 +1436,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_fqt (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1454,7 +1464,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cqen (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_cqen_we),
@@ -1481,7 +1491,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cie (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_cie_we),
@@ -1508,7 +1518,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cqmf (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_cqmf_we),
@@ -1535,7 +1545,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_to (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_cmd_to_we),
@@ -1562,7 +1572,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_ill (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_cmd_ill_we),
@@ -1589,7 +1599,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_fence_w_ip (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (cqcsr_fence_w_ip_we),
@@ -1616,7 +1626,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_cqon (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1642,7 +1652,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_cqcsr_busy (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1670,7 +1680,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_fqen (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqcsr_fqen_we),
@@ -1697,7 +1707,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_fie (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqcsr_fie_we),
@@ -1724,7 +1734,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_fqmf (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqcsr_fqmf_we),
@@ -1751,7 +1761,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_fqof (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (fqcsr_fqof_we),
@@ -1778,7 +1788,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_fqon (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1804,7 +1814,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_fqcsr_busy (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -1832,7 +1842,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_ipsr_cip (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ipsr_cip_we),
@@ -1859,7 +1869,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_ipsr_fip (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ipsr_fip_we),
@@ -1886,7 +1896,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_ipsr_pmip (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ipsr_pmip_we),
@@ -1913,7 +1923,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_ipsr_pip (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (ipsr_pip_we),
@@ -1942,7 +1952,7 @@ module iommu_reg_top
     .RESVAL  (4'h0)
   ) u_icvec_civ (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (icvec_civ_we),
@@ -1969,7 +1979,7 @@ module iommu_reg_top
     .RESVAL  (4'h0)
   ) u_icvec_fiv (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (icvec_fiv_we),
@@ -1996,7 +2006,7 @@ module iommu_reg_top
     .RESVAL  (4'h0)
   ) u_icvec_pmiv (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (icvec_pmiv_we),
@@ -2023,7 +2033,7 @@ module iommu_reg_top
     .RESVAL  (4'h0)
   ) u_icvec_piv (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (icvec_piv_we),
@@ -2052,7 +2062,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_0_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2078,7 +2088,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_0_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_0_addr_we),
@@ -2106,7 +2116,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_0 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_0_we),
@@ -2134,7 +2144,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_0 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_0_we),
@@ -2163,7 +2173,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_1_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2189,7 +2199,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_1_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_1_addr_we),
@@ -2217,7 +2227,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_1 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_1_we),
@@ -2245,7 +2255,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_1 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_1_we),
@@ -2274,7 +2284,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_2_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2300,7 +2310,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_2_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_2_addr_we),
@@ -2328,7 +2338,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_2 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_2_we),
@@ -2356,7 +2366,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_2 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_2_we),
@@ -2385,7 +2395,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_3_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2411,7 +2421,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_3_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_3_addr_we),
@@ -2439,7 +2449,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_3 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_3_we),
@@ -2467,7 +2477,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_3 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_3_we),
@@ -2496,7 +2506,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_4_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2522,7 +2532,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_4_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_4_addr_we),
@@ -2550,7 +2560,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_4 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_4_we),
@@ -2579,7 +2589,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_4 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_4_we),
@@ -2608,7 +2618,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_5_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2634,7 +2644,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_5_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_5_addr_we),
@@ -2662,7 +2672,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_5 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_5_we),
@@ -2690,7 +2700,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_5 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_5_we),
@@ -2719,7 +2729,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_6_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2745,7 +2755,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_6_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_6_addr_we),
@@ -2773,7 +2783,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_6 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_6_we),
@@ -2801,7 +2811,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_6 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_6_we),
@@ -2830,7 +2840,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_7_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2856,7 +2866,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_7_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_7_addr_we),
@@ -2884,7 +2894,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_7 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_7_we),
@@ -2912,7 +2922,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_7 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_7_we),
@@ -2941,7 +2951,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_8_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -2967,7 +2977,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_8_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_8_addr_we),
@@ -2995,7 +3005,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_8 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_8_we),
@@ -3023,7 +3033,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_8 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_8_we),
@@ -3052,7 +3062,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_9_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3078,7 +3088,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_9_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_9_addr_we),
@@ -3106,7 +3116,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_9 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_9_we),
@@ -3134,7 +3144,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_9 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_9_we),
@@ -3163,7 +3173,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_10_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3189,7 +3199,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_10_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_10_addr_we),
@@ -3217,7 +3227,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_10 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_10_we),
@@ -3245,7 +3255,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_10 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_10_we),
@@ -3274,7 +3284,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_11_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3300,7 +3310,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_11_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_11_addr_we),
@@ -3328,7 +3338,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_11 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_11_we),
@@ -3356,7 +3366,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_11 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_11_we),
@@ -3385,7 +3395,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_12_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3411,7 +3421,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_12_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_12_addr_we),
@@ -3439,7 +3449,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_12 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_12_we),
@@ -3467,7 +3477,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_12 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_12_we),
@@ -3496,7 +3506,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_13_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3522,7 +3532,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_13_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_13_addr_we),
@@ -3550,7 +3560,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_13 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_13_we),
@@ -3578,7 +3588,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_13 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_13_we),
@@ -3607,7 +3617,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_14_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3633,7 +3643,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_14_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_14_addr_we),
@@ -3661,7 +3671,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_14 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_14_we),
@@ -3689,7 +3699,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_14 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_14_we),
@@ -3718,7 +3728,7 @@ module iommu_reg_top
     .RESVAL  (2'h0)
   ) u_msi_addr_15_zero (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     .we     (1'b0),
     .wd     ('0  ),
@@ -3744,7 +3754,7 @@ module iommu_reg_top
     .RESVAL  (54'h0)
   ) u_msi_addr_15_addr (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_addr_15_addr_we),
@@ -3772,7 +3782,7 @@ module iommu_reg_top
     .RESVAL  (32'h0)
   ) u_msi_data_15 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_data_15_we),
@@ -3800,7 +3810,7 @@ module iommu_reg_top
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_15 (
     .clk_i   (clk_i    ),
-    .nrst_i  (nrst_i  ),
+    .rst_ni  (rst_ni  ),
 
     // from register interface
     .we     (msi_vec_ctl_15_we),
