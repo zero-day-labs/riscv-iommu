@@ -11,6 +11,8 @@
 // Fabian Schuiki <fschuiki@iis.ee.ethz.ch>
 // Florian Zaruba <zarubaf@iis.ee.ethz.ch>
 
+`include "packages/axi_pkg.sv"
+
 /// A protocol converter from AXI4-Lite to a register interface.
 module axi_lite_to_reg #(
     /// The width of the address.
@@ -21,15 +23,16 @@ module axi_lite_to_reg #(
     parameter int BUFFER_DEPTH = 2,
     /// Whether the AXI-Lite W channel should be decoupled with a register. This
     /// can help break long paths at the expense of registers.
-    parameter bit DECOUPLE_W = 1,
-    /// AXI-Lite request struct type.
-    parameter type axi_lite_req_t = logic,
-    /// AXI-Lite response struct type.
-    parameter type axi_lite_rsp_t = logic,
-    /// Regbus request struct type.
-    parameter type reg_req_t = logic,
-    /// Regbus response struct type.
-    parameter type reg_rsp_t = logic
+    parameter bit DECOUPLE_W = 1
+    //* No need to pass type as parameter since they will be defined in 'typedef_global.svh' for all scope
+    // /// AXI-Lite request struct type.
+    // parameter type axi_lite_req_t = logic,
+    // /// AXI-Lite response struct type.
+    // parameter type axi_lite_rsp_t = logic,
+    // /// Regbus request struct type.
+    // parameter type reg_req_t = logic,
+    // /// Regbus response struct type.
+    // parameter type reg_rsp_t = logic
   ) (
     input  logic           clk_i         ,
     input  logic           rst_ni        ,
@@ -252,10 +255,11 @@ module axi_lite_to_reg #(
   
   endmodule
   
-  `include "register_interface/typedef.svh"
-  `include "register_interface/assign.svh"
-  `include "axi/typedef.svh"
-  `include "axi/assign.svh"
+  `include "include/typedef_reg.svh"
+  `include "include/assign_reg.svh"
+  `include "include/typedef_axi.svh"
+  `include "include/assign_axi.svh"
+  `include "include/typedef_global.svh"
   
   /// Interface wrapper.
   module axi_lite_to_reg_intf #(
@@ -271,52 +275,68 @@ module axi_lite_to_reg #(
   ) (
     input  logic   clk_i  ,
     input  logic   rst_ni ,
-    AXI_LITE.Slave axi_i  ,
-    REG_BUS.out    reg_o
+    // AXI_LITE.Slave axi_i  ,
+    // REG_BUS.out    reg_o
+    //* Avoid interfaces to save complexity. Performed pass through connection to interface submodule
+    input axi_lite_req_t  axi_lite_req_i,
+    output axi_lite_rsp_t axi_lite_rsp_o,
+    output reg_req_t reg_req_o,
+    input reg_rsp_t reg_rsp_i
   );
   
-    typedef logic [ADDR_WIDTH-1:0] addr_t;
-    typedef logic [DATA_WIDTH-1:0] data_t;
-    typedef logic [DATA_WIDTH/8-1:0] strb_t;
+    //* Typedef structs defined in 'typedef_global.svh'
+    // typedef logic [ADDR_WIDTH-1:0] addr_t;
+    // typedef logic [DATA_WIDTH-1:0] data_t;
+    // typedef logic [DATA_WIDTH/8-1:0] strb_t;
   
-    `REG_BUS_TYPEDEF_REQ(reg_req_t, addr_t, data_t, strb_t)
-    `REG_BUS_TYPEDEF_RSP(reg_rsp_t, data_t)
+    // // Reg IF typedef structs declaration
+    // `REG_BUS_TYPEDEF_REQ(reg_req_t, addr_t, data_t, strb_t)
+    // `REG_BUS_TYPEDEF_RSP(reg_rsp_t, data_t)
   
-    `AXI_LITE_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t)
-    `AXI_LITE_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t)
-    `AXI_LITE_TYPEDEF_B_CHAN_T(b_chan_t)
-    `AXI_LITE_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t)
-    `AXI_LITE_TYPEDEF_R_CHAN_T(r_chan_t, data_t)
-    `AXI_LITE_TYPEDEF_REQ_T(axi_req_t, aw_chan_t, w_chan_t, ar_chan_t)
-    `AXI_LITE_TYPEDEF_RESP_T(axi_resp_t, b_chan_t, r_chan_t)
+    // // AXI-Lite typedef structs declaration
+    // `AXI_LITE_TYPEDEF_AW_CHAN_T(aw_chan_t, addr_t)
+    // `AXI_LITE_TYPEDEF_W_CHAN_T(w_chan_t, data_t, strb_t)
+    // `AXI_LITE_TYPEDEF_B_CHAN_T(b_chan_t)
+    // `AXI_LITE_TYPEDEF_AR_CHAN_T(ar_chan_t, addr_t)
+    // `AXI_LITE_TYPEDEF_R_CHAN_T(r_chan_t, data_t)
+    // `AXI_LITE_TYPEDEF_REQ_T(axi_req_t, aw_chan_t, w_chan_t, ar_chan_t)
+    // `AXI_LITE_TYPEDEF_RESP_T(axi_resp_t, b_chan_t, r_chan_t)
   
-    axi_req_t  axi_req;
-    axi_resp_t axi_resp;
-    reg_req_t reg_req;
-    reg_rsp_t reg_rsp;
+    // pass through
+    axi_lite_req_t  axi_lite_req_w;
+    axi_lite_rsp_t axi_lite_rsp_w;
+    reg_req_t reg_req_w;
+    reg_rsp_t reg_rsp_w;
   
-    `AXI_LITE_ASSIGN_TO_REQ(axi_req, axi_i)
-    `AXI_LITE_ASSIGN_FROM_RESP(axi_i, axi_resp)
+    //* Avoid usage of interfaces
+    // `AXI_LITE_ASSIGN_TO_REQ(axi_req, axi_i)
+    // `AXI_LITE_ASSIGN_FROM_RESP(axi_i, axi_resp)
   
-    `REG_BUS_ASSIGN_FROM_REQ(reg_o, reg_req)
-    `REG_BUS_ASSIGN_TO_RSP(reg_rsp, reg_o)
+    // `REG_BUS_ASSIGN_FROM_REQ(reg_o, reg_req)
+    // `REG_BUS_ASSIGN_TO_RSP(reg_rsp, reg_o)
+
+    assign axi_lite_req_w = axi_lite_req_i;
+    assign axi_lite_rsp_o = axi_lite_rsp_w;
+    assign reg_rsp_w = reg_rsp_i;
+    assign reg_req_o = reg_req_w;
+
   
     axi_lite_to_reg #(
       .ADDR_WIDTH (ADDR_WIDTH),
       .DATA_WIDTH (DATA_WIDTH),
       .BUFFER_DEPTH (BUFFER_DEPTH),
-      .DECOUPLE_W (DECOUPLE_W),
-      .axi_lite_req_t (axi_req_t),
-      .axi_lite_rsp_t (axi_resp_t),
-      .reg_req_t (reg_req_t),
-      .reg_rsp_t (reg_rsp_t)
+      .DECOUPLE_W (DECOUPLE_W)
+      // .axi_lite_req_t (axi_lite_req_t),
+      // .axi_lite_rsp_t (axi_lite_rsp_t),
+      // .reg_req_t (reg_req_t),
+      // .reg_rsp_t (reg_rsp_t)
     ) i_axi_lite_to_reg (
       .clk_i (clk_i),
       .rst_ni (rst_ni),
-      .axi_lite_req_i (axi_req),
-      .axi_lite_rsp_o (axi_resp),
-      .reg_req_o (reg_req),
-      .reg_rsp_i (reg_rsp)
+      .axi_lite_req_i (axi_lite_req_w),
+      .axi_lite_rsp_o (axi_lite_rsp_w),
+      .reg_req_o (reg_req_w),
+      .reg_rsp_i (reg_rsp_w)
     );
   
   endmodule

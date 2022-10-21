@@ -18,13 +18,15 @@
 `include "include/assertions.svh"
 `include "packages/iommu_reg_pkg_exp.sv"
 `include "packages/iommu_field_pkg.sv"
-`include "include/typedef.svh"
+`include "include/typedef_reg.svh"
+`include "include/typedef_global.svh"
 
 module iommu_reg_top 
   #(
       // parameter type reg_req_t = logic,
       // parameter type reg_rsp_t = logic,
-      parameter int AW = 13
+      parameter int AW = 13,
+      parameter int DW = 64
   ) (
     input clk_i,
     input rst_ni,
@@ -42,7 +44,6 @@ module iommu_reg_top
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
-  localparam int DW = 64;
   localparam int DBW = DW/8;                    // Byte Width
 
   // register signals
@@ -1517,7 +1518,7 @@ module iommu_reg_top
   iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h1)     //! testing
+    .RESVAL  (1'h0)
   ) u_cqcsr_cqmf (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -1544,7 +1545,7 @@ module iommu_reg_top
   iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h1)   //! testing
+    .RESVAL  (1'h0)
   ) u_cqcsr_cmd_to (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),

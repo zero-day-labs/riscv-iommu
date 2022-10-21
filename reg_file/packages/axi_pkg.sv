@@ -16,6 +16,9 @@
 // - Fabian Schuiki <fschuiki@iis.ee.ethz.ch>
 // - Matheus Cavalcante <matheusd@iis.ee.ethz.ch>
 
+`ifndef AXI_PKG_DEF
+`define AXI_PKG_DEF
+
 //! AXI Package
 /// Contains all necessary type definitions, constants, and generally useful functions.
 package axi_pkg;
@@ -421,3 +424,5 @@ package axi_pkg;
     logic [31:0] end_addr;
   } xbar_rule_32_t;
 endpackage
+
+`endif

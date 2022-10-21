@@ -15,6 +15,13 @@
 `ifndef REGISTER_INTERFACE_TYPEDEF_SVH_
 `define REGISTER_INTERFACE_TYPEDEF_SVH_
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Register Interface Request/Response Structs
+//
+// Usage Example:
+// `REG_BUS_TYPEDEF_REQ(reg_req_t, addr_t, data_t, strb_t) \
+// `REG_BUS_TYPEDEF_RSP(reg_rsp_t, data_t)
+
 `define REG_BUS_TYPEDEF_REQ(req_t, addr_t, data_t, strb_t) \
     typedef struct packed { \
         addr_t addr; \
@@ -34,23 +41,5 @@
 `define REG_BUS_TYPEDEF_ALL(name, addr_t, data_t, strb_t) \
     `REG_BUS_TYPEDEF_REQ(name``_req_t, addr_t, data_t, strb_t) \
     `REG_BUS_TYPEDEF_RSP(name``_rsp_t, data_t)
-
-    typedef logic [13-1:0] addr_t;
-    typedef logic [64-1:0] data_t;
-    typedef logic [8-1:0] strb_t;
-
-    typedef struct packed {
-        addr_t addr;    // [86:74]  [12:0]
-        logic  write;   // [73]     [13]
-        data_t wdata;   // [72:9]   [77:14]
-        strb_t wstrb;   // [8:1]    [85:78]
-        logic  valid;   // [0]      [86]
-    } reg_req_t;
-
-    typedef struct packed {
-        data_t rdata;   // [65:2]   [63:0]
-        logic  error;   // [1]      [64]
-        logic  ready;   // [0]      [65]
-    } reg_rsp_t;
 
 `endif
