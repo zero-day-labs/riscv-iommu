@@ -12,6 +12,8 @@
 //    - Hardwired registers/fields
 //    - Write external arbiter logic to check illegal values
 
+// TODO: update FCTL register with GXL field, instead of ADFD
+
 
 `include "include/assertions.svh"
 `include "packages/iommu_reg_pkg_exp.sv"
@@ -1515,7 +1517,7 @@ module iommu_reg_top
   iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h0)
+    .RESVAL  (1'h1)     //! testing
   ) u_cqcsr_cqmf (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
@@ -1542,7 +1544,7 @@ module iommu_reg_top
   iommu_field #(
     .DW      (1),
     .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h0)
+    .RESVAL  (1'h1)   //! testing
   ) u_cqcsr_cmd_to (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),

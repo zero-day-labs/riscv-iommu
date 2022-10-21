@@ -1,10 +1,14 @@
 # Testbench generation script to validate IOMMU register file reading and writing
-# Test listing:
-# 
-#   capabilities register read test: Validate caps hardwired values
-#   unconditioned fields writing test: Write to registers that may accept any value, read back and compare values
-#   conditioned fields writing test: Write illegal values to registers, read and compare stored value
 #
+#*  Some details discovered when working with verilator and COCÔtb:
+#       1.  Accessing to SV packed struct members by their names is not supported by Verilator/cocotb.
+#           The packed struct must be handled as an homogeneous array of bits.
+#           Reads may be performed using slices. 
+#           Writes should be performed through a user-defined function to construct the whole packed struct with desired values
+#       2.  When writing, SV packed structs are stored by the simulator so the LS member of the struct is the last one listed in the declaration.
+#           When reading, the LS member of the struct is the first one listed in the declaration.
+#           All members are stored with the declared edianness.
+
 import os
 import re
 import logging
@@ -40,16 +44,12 @@ class IOMMURegTB:
         # self.axi_pmp_cfg = AxiLiteMaster(AxiLiteBus.from_prefix(dut, "cfg_axi"), dut.clk_i, dut.rst_ni, False)
 
 
-    async def cycle_reset(self):
-        self.dut.rst_ni.setimmediatevalue(1)
-        await RisingEdge(self.dut.clk_i)
-        await RisingEdge(self.dut.clk_i)
+    # Reset coroutine
+    async def resetDUT(self, duration_ns):
         self.dut.rst_ni.value = 0
-        await RisingEdge(self.dut.clk_i)
-        await RisingEdge(self.dut.clk_i)
+        await Timer(duration_ns, units="ns")
         self.dut.rst_ni.value = 1
-        await RisingEdge(self.dut.clk_i)
-        await RisingEdge(self.dut.clk_i)
+        self.dut._log.debug("Reset complete")
 
 # Register indexes
 class RegIndex(IntEnum):
@@ -245,7 +245,7 @@ REG_WSTRB = [
     bitarray('00000001')
 ]
 
-# Register Request interface slices
+# Register Request interface slices (upward direcion)
 REG_REQ_VALID   = 0
 REG_REQ_WSTRB   = slice(1,8)
 REG_REQ_WDATA   = slice(9,72)
@@ -266,7 +266,7 @@ async def resetDUT(reset_n, duration_ns):
 
 
 # Generate int value to write to whole reg request bus
-def formReqData(addr, write, wdata, wstrb, valid) -> int:
+def formReqData(addr: int, write: int, wdata: int, wstrb:int, valid:int) -> int:
     addrBA = int2ba(addr,13)
     writeBA = int2ba(write,1)
     wdataBA = int2ba(wdata,64)
@@ -278,10 +278,14 @@ def formReqData(addr, write, wdata, wstrb, valid) -> int:
 
 
 # Write to one register (64-bits)
-async def reg_write(dut, waddr, wdata, wstrb):
+async def regWrite(dut, waddr: bitarray, wdata: bitarray, wstrb: bitarray):
 
-    # Set write signals (should be all at the same clock cycle
-    reqData = formReqData(waddr, 1, wdata, wstrb, 1)
+    waddrInt = ba2int(waddr)
+    wdataInt = ba2int(wdata)
+    wstrbInt = ba2int(wstrb)
+
+    # Set write signals
+    reqData = formReqData(waddrInt, 1, wdataInt, wstrbInt, 1)
     dut.reg_req_i.value = reqData
 
     # wait some time
@@ -304,7 +308,7 @@ async def reg_write(dut, waddr, wdata, wstrb):
 
 
 # Read from one register (64-bits)
-async def reg_read(dut, raddr):
+async def regRead(dut, raddr):
 
     # convert raddr to int
     addr = ba2int(raddr)
@@ -335,17 +339,17 @@ async def reg_read(dut, raddr):
     return resp
 
 # Capabilities register read test
-@cocotb.test()
-async def caps_read_test(dut):
+# @cocotb.test()
+async def capsReadTest(dut):
 
     # get DUT and reset
-    # tb = IOMMURegTB(dut)
-    # await tb.cycle_reset()
-    cocotb.start_soon(Clock(dut.clk_i, 1, units="ns").start())    # clock generation
-    await resetDUT(dut.rst_ni, 10)
+    tb = IOMMURegTB(dut)
+    await tb.resetDUT(10)
+    # cocotb.start_soon(Clock(dut.clk_i, 1, units="ns").start())    # clock generation
+    # await resetDUT(dut.rst_ni, 10)
 
     # Read doubleword from caps register
-    rdata = await reg_read(dut, REG_OFFSETS[RegIndex.IOMMU_CAPS])
+    rdata = await regRead(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CAPS])
 
     # Convert rdata to 64-bit bitarray
     rdataBA = int2ba(int(rdata), 64)
@@ -356,3 +360,74 @@ async def caps_read_test(dut):
     assert rdataBA == refBA, "Supported features do not match"
 
     # await Timer(10, units='ns')
+
+# Write/read test
+@cocotb.test()
+async def WRTest(dut):
+    
+    FCTL_WWORD = zeros(61) + bitarray('111')
+    FCTL_WWORD_EXP = zeros(61) + bitarray('101')
+    DDTP_WWORD = zeros(10) + int2ba(4561384684, 44) + zeros(5) + bitarray('1 0110')
+    DDTP_WWORD_EXP = zeros(10) + int2ba(4561384684, 44) + zeros(5) + bitarray('0 0000')
+    CQB_WWORD = zeros(59) + bitarray('00100')
+    CQT_WWORD = zeros(54) + bitarray('1111111111')
+    CQT_WWORD_EXP = zeros(54) + bitarray('0000011111')
+    CQCSR_WWORD = zeros(64)
+    CQCSR_WWORD.setall(1)
+    CQCSR_WWORD_EXP = zeros(62) + bitarray('11')
+
+
+    # get DUT, generate clock and reset
+    tb = IOMMURegTB(dut)
+    await tb.resetDUT(10)
+
+    # FCTL: Attempt to write to a constrained field (MSI bit)
+    # write to fctl register
+    await regWrite(tb.dut, REG_OFFSETS[RegIndex.IOMMU_FCTL], FCTL_WWORD, REG_WSTRB[RegIndex.IOMMU_FCTL])
+    await Timer(2, units='ns')
+    # Read doubleword from FCTL register
+    rdata = await regRead(tb.dut, REG_OFFSETS[RegIndex.IOMMU_FCTL])
+    # Convert rdata to 64-bit bitarray
+    rdataBA = int2ba(int(rdata), 64)
+    # Compare with expected
+    assert rdataBA == FCTL_WWORD_EXP, "Value read from FCTL does not match with expected"
+
+    await Timer(2, units='ns')
+
+    # DDTP: Attempt to write to a RO field, and to a constrained field
+    # write to ddtp register
+    await regWrite(tb.dut, REG_OFFSETS[RegIndex.IOMMU_DDTP], DDTP_WWORD, REG_WSTRB[RegIndex.IOMMU_DDTP])
+    await Timer(2, units='ns')
+    # Read doubleword from DDTP register
+    rdata = await regRead(tb.dut, REG_OFFSETS[RegIndex.IOMMU_DDTP])
+    # Convert rdata to 64-bit bitarray
+    rdataBA = int2ba(int(rdata), 64)
+    # Compare with expected
+    assert rdataBA == DDTP_WWORD_EXP, "Value read from DDTP does not match with expected"
+
+    await Timer(2, units='ns')
+
+    # CQB and CQT: Test LOGSZ-1 logic
+    # write to CQB register
+    await regWrite(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CQB], CQB_WWORD, REG_WSTRB[RegIndex.IOMMU_CQB])
+    await Timer(2, units='ns')
+    # write to CQT register
+    await regWrite(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CQT], CQT_WWORD, REG_WSTRB[RegIndex.IOMMU_CQT])
+    await Timer(2, units='ns')
+    # Read doubleword from CQT register
+    rdata = await regRead(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CQT])
+    # Convert rdata to 64-bit bitarray
+    rdataBA = int2ba(int(rdata), 64)
+    # Compare with expected
+    assert rdataBA == CQT_WWORD_EXP, "Value read from CQT does not match with expected"
+
+    # CQCSR: Test RW1C logic
+    # write to cqcsr register
+    await regWrite(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CQCSR], CQCSR_WWORD, REG_WSTRB[RegIndex.IOMMU_CQCSR])
+    await Timer(2, units='ns')
+    # Read doubleword from cqcsr register
+    rdata = await regRead(tb.dut, REG_OFFSETS[RegIndex.IOMMU_CQCSR])
+    # Convert rdata to 64-bit bitarray
+    rdataBA = int2ba(int(rdata), 64)
+    # Compare with expected
+    assert rdataBA == CQCSR_WWORD_EXP, "Value read from CQCSR does not match with expected"
