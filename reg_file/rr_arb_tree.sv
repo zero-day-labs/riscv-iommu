@@ -205,10 +205,13 @@ module rr_arb_tree #(
         idx_t             upper_idx,   lower_idx,   next_idx;
         logic             upper_empty, lower_empty;
 
+        //* Added unsigned lint off tag to avoid verilator warnings
+        /* verilator lint_off UNSIGNED */
         for (genvar i = 0; i < NumIn; i++) begin : gen_mask
           assign upper_mask[i] = (i >  rr_q) ? req_d[i] : 1'b0;
           assign lower_mask[i] = (i <= rr_q) ? req_d[i] : 1'b0;
         end
+        /* verilator lint_on UNSIGNED */
 
         lzc #(
           .WIDTH ( NumIn ),

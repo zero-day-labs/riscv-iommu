@@ -5,10 +5,11 @@ SIM ?= verilator
 TOPLEVEL_LANG ?= verilog	# SV
 
 # SV source files
-VERILOG_SOURCES += $(PWD)/../iommu_reg_top_exp.sv $(PWD)/../iommu_field.sv $(PWD)/../iommu_field_arb.sv
+VERILOG_SOURCES += $(PWD)/../iommu_axi_reg_top.sv
+# $(PWD)/../iommu_regmap_top.sv $(PWD)/../iommu_field.sv $(PWD)/../iommu_field_arb.sv
 
 # TOPLEVEL is the name of the toplevel module in your Verilog or VHDL file
-TOPLEVEL = iommu_reg_top
+TOPLEVEL = iommu_axi_cfg_top
 
 # MODULE is the basename of the Python test file
 MODULE = iommu_reg_test

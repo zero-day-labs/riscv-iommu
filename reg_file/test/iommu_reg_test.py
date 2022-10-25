@@ -1,5 +1,7 @@
 # Testbench generation script to validate IOMMU register file reading and writing
 #
+#   TODO: Check AXI transactions timing
+#
 #*  Some details discovered when working with verilator and COCÔtb:
 #       1.  Accessing to SV packed struct members by their names is not supported by Verilator/cocotb.
 #           The packed struct must be handled as an homogeneous array of bits.
@@ -8,6 +10,8 @@
 #       2.  When writing, SV packed structs are stored by the simulator so the LS member of the struct is the last one listed in the declaration.
 #           When reading, the LS member of the struct is the first one listed in the declaration.
 #           All members are stored with the declared edianness.
+#       3.  A reset MUST be performed handling the AXI interface, otherwise it won't work well
+#       4.  bready and rready are "hardwired" to 1 when reset is active.
 
 import os
 import re
@@ -18,7 +22,7 @@ import cocotb
 import random
 from cocotb.triggers import FallingEdge, Timer, RisingEdge
 from cocotb.clock import Clock
-from cocotbext.axi import AxiLiteBus, AxiLiteMaster, AxiLiteSlave
+from cocotbext.axi import AxiLiteBus, AxiLiteMaster, AxiResp, AxiLiteAWBus
 from cocotb.handle import Force, Release
 
 import numpy as np
@@ -41,8 +45,9 @@ class IOMMURegTB:
         cocotb.start_soon(Clock(dut.clk_i, 1, units="ns").start())    # clock generation
 
         # connect IOMMU configuration AXI Lite port
-        # self.axi_pmp_cfg = AxiLiteMaster(AxiLiteBus.from_prefix(dut, "cfg_axi"), dut.clk_i, dut.rst_ni, False)
-
+        #? Is the False argument correct ?
+        bus = AxiLiteBus.from_prefix(dut, "s_axil")
+        self.axi_iommu_cfg = AxiLiteMaster(AxiLiteBus.from_prefix(dut, "s_axil"), dut.clk_i)
 
     # Reset coroutine
     async def resetDUT(self, duration_ns):
@@ -50,6 +55,93 @@ class IOMMURegTB:
         await Timer(duration_ns, units="ns")
         self.dut.rst_ni.value = 1
         self.dut._log.debug("Reset complete")
+
+    async def cycle_reset(self):
+        self.dut.rst_ni.setimmediatevalue(0)
+        await RisingEdge(self.dut.clk_i)
+        await RisingEdge(self.dut.clk_i)
+        self.dut.rst_ni.value = 1
+        await RisingEdge(self.dut.clk_i)
+        await RisingEdge(self.dut.clk_i)
+        self.dut.rst_ni.value = 0
+        await RisingEdge(self.dut.clk_i)
+        await RisingEdge(self.dut.clk_i)
+
+    async def AXI_WRTestExp(self):
+
+        await Timer(2, units='ns')
+
+        self.dut.s_axil_awaddr.value = 1
+        self.dut.s_axil_awprot.value = 1
+        self.dut.s_axil_awvalid.value = 1
+
+        self.dut.s_axil_wdata.value = 1
+        self.dut.s_axil_wstrb.value = 1
+        self.dut.s_axil_wvalid.value = 1
+
+        self.dut.s_axil_bready.value = 1
+
+        self.dut.s_axil_araddr.value = 1
+        self.dut.s_axil_arprot.value = 1
+        self.dut.s_axil_arvalid.value = 1
+
+        self.dut.s_axil_rready.value = 1
+
+        await Timer(2, units='ns')
+
+        self.dut.s_axil_awaddr.value = 0
+        self.dut.s_axil_awprot.value = 0
+        self.dut.s_axil_awvalid.value = 0
+
+        self.dut.s_axil_wdata.value = 0
+        self.dut.s_axil_wstrb.value = 0
+        self.dut.s_axil_wvalid.value = 0
+
+        self.dut.s_axil_bready.value = 0
+
+        self.dut.s_axil_araddr.value = 0
+        self.dut.s_axil_arprot.value = 0
+        self.dut.s_axil_arvalid.value = 0
+
+        self.dut.s_axil_rready.value = 0
+
+        await Timer(2, units='ns')
+
+        self.dut.s_axil_awaddr.value = 1
+        self.dut.s_axil_awprot.value = 1
+        self.dut.s_axil_awvalid.value = 1
+
+        self.dut.s_axil_wdata.value = 1
+        self.dut.s_axil_wstrb.value = 1
+        self.dut.s_axil_wvalid.value = 1
+
+        self.dut.s_axil_bready.value = 1
+
+        self.dut.s_axil_araddr.value = 1
+        self.dut.s_axil_arprot.value = 1
+        self.dut.s_axil_arvalid.value = 1
+
+        self.dut.s_axil_rready.value = 1
+
+        await Timer(2, units='ns')
+        
+        self.dut.s_axil_awaddr.value = 0
+        self.dut.s_axil_awprot.value = 0
+        self.dut.s_axil_awvalid.value = 0
+
+        self.dut.s_axil_wdata.value = 0
+        self.dut.s_axil_wstrb.value = 0
+        self.dut.s_axil_wvalid.value = 0
+
+        self.dut.s_axil_bready.value = 0
+
+        self.dut.s_axil_araddr.value = 0
+        self.dut.s_axil_arprot.value = 0
+        self.dut.s_axil_arvalid.value = 0
+
+        self.dut.s_axil_rready.value = 0
+
+        await Timer(2, units='ns')
 
 # Register indexes
 class RegIndex(IntEnum):
@@ -258,7 +350,7 @@ REG_RSP_ERROR   = 64
 REG_RSP_RDATA   = slice(0,63)
 
 # Reset coroutine
-async def resetDUT(reset_n, duration_ns):
+async def resetCycle(reset_n, duration_ns):
     reset_n.value = 0
     await Timer(duration_ns, units="ns")
     reset_n.value = 1
@@ -362,7 +454,7 @@ async def capsReadTest(dut):
     # await Timer(10, units='ns')
 
 # Write/read test
-@cocotb.test()
+# @cocotb.test()
 async def WRTest(dut):
     
     FCTL_WWORD = zeros(61) + bitarray('111')
@@ -431,3 +523,57 @@ async def WRTest(dut):
     rdataBA = int2ba(int(rdata), 64)
     # Compare with expected
     assert rdataBA == CQCSR_WWORD_EXP, "Value read from CQCSR does not match with expected"
+
+# AXI Lite Interface write/read test
+@cocotb.test()
+async def AXI_WRTest(dut):
+    
+    FCTL_WWORD = zeros(61) + bitarray('111')
+    FCTL_WWORD_EXP = zeros(61) + bitarray('101')
+    DDTP_WWORD = zeros(10) + int2ba(4561384684, 44) + zeros(5) + bitarray('1 0110')
+    DDTP_WWORD_EXP = zeros(10) + int2ba(4561384684, 44) + zeros(5) + bitarray('0 0000')
+    # CQB_WWORD = zeros(59) + bitarray('00100')
+    # CQT_WWORD = zeros(54) + bitarray('1111111111')
+    # CQT_WWORD_EXP = zeros(54) + bitarray('0000011111')
+    CQCSR_WWORD = zeros(64)
+    CQCSR_WWORD.setall(1)
+    CQCSR_WWORD_EXP = zeros(62) + bitarray('11')
+
+    # get DUT, generate clock and reset
+    tb = IOMMURegTB(dut)
+    await tb.resetDUT(2)
+
+    # FCTL: Attempt to write to a constrained field (MSI bit)
+    # write to fctl register
+    await tb.axi_iommu_cfg.write_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_FCTL]), ba2int(FCTL_WWORD), byteorder='little')
+    await Timer(1, units='ns')
+    # Read doubleword from FCTL register
+    rRes = await tb.axi_iommu_cfg.read_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_FCTL]), byteorder='little')
+    # Compare with expected
+    assert rRes == ba2int(FCTL_WWORD_EXP), "Value read from FCTL does not match with expected"
+
+    await Timer(2, units='ns')
+
+    # DDTP
+    # write to DTP register
+    await tb.axi_iommu_cfg.write_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_DDTP]), ba2int(DDTP_WWORD), byteorder='little')
+    await Timer(1, units='ns')
+    # Read doubleword from DDTP register
+    rRes = await tb.axi_iommu_cfg.read_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_DDTP]), byteorder='little')
+    # Compare with expected
+    assert rRes == ba2int(DDTP_WWORD_EXP), "Value read from DDTP does not match with expected"
+
+    await Timer(2, units='ns')
+
+    # CQCSR
+    # write to CQCSR register
+    await tb.axi_iommu_cfg.write_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_CQCSR]), ba2int(CQCSR_WWORD), byteorder='little')
+    await Timer(1, units='ns')
+    # Read doubleword from CQCSR register
+    rRes = await tb.axi_iommu_cfg.read_qword(ba2int(REG_OFFSETS[RegIndex.IOMMU_CQCSR]), byteorder='little')
+    # Compare with expected
+    assert rRes == ba2int(CQCSR_WWORD_EXP), "Value read from CQCSR does not match with expected"
+
+    await Timer(2, units='ns')
+
+    

@@ -125,11 +125,14 @@ package axi_pkg;
     //    (Number_Bytes × Burst_Length)`
     // Whereas the aligned address is defined as:
     // `Aligned_Address = (INT(Start_Address / Number_Bytes)) × Number_Bytes`
-    // This leads to the wrap boundary using the same calculation as the aligned address, difference
-    // being the additional dependency on the burst length. The addition in the case statement
+    // This leads e
+    // being the additional dependency to the wrap boundary using the same calculation as the aligned address, differencon the burst length. The addition in the case statement
     // is equal to the multiplication with `Burst_Length` as a shift (used by `aligned_addr`) is
     // equivalent with multiplication and division by a power of two, which conveniently are the
     // only allowed values for `len` of a `BURST_WRAP`.
+
+    //* Added lint off tag to avoid warnings
+    /* verilator lint_off WIDTH */
     unique case (len)
       4'b1    : wrap_addr = (addr >> (unsigned'(size) + 1)) << (unsigned'(size) + 1); // multiply `Number_Bytes` by `2`
       4'b11   : wrap_addr = (addr >> (unsigned'(size) + 2)) << (unsigned'(size) + 2); // multiply `Number_Bytes` by `4`
@@ -137,6 +140,7 @@ package axi_pkg;
       4'b1111 : wrap_addr = (addr >> (unsigned'(size) + 4)) << (unsigned'(size) + 4); // multiply `Number_Bytes` by `16`
       default : wrap_addr = '0;
     endcase
+    /* verilator lint_on WIDTH */
     return wrap_addr;
   endfunction
 
@@ -166,23 +170,32 @@ package axi_pkg;
       // over the wrap threshold, the address wraps around by subtracting the accessed address
       // space from the normal `BURST_INCR` address. The lower wrap boundary is equivalent to
       // The wrap trigger condition minus the container size (`num_bytes(size) * (len + 1)`).
+
+      //* Added lint off tag to avoid verilator warnings
+      /* verilator lint_off WIDTH */
       if (burst == BURST_WRAP && ret_addr >= wrp_bond + (num_bytes(size) * (len + 1))) begin
         ret_addr = ret_addr - (num_bytes(size) * (len + 1));
       end
+      /* verilator lint_on WIDTH */
     end
     return ret_addr;
   endfunction
 
   /// Index of lowest byte in beat (see A3-51).
   function automatic shortint unsigned
+  //* Added lint off tag to avoid verilator warnings
+  /* verilator lint_off WIDTH */
   beat_lower_byte(largest_addr_t addr, size_t size, len_t len, burst_t burst,
       shortint unsigned strobe_width, shortint unsigned i_beat);
     largest_addr_t _addr = beat_addr(addr, size, len, burst, i_beat);
     return _addr - (_addr / strobe_width) * strobe_width;
+    /* verilator lint_on WIDTH */
   endfunction
 
   /// Index of highest byte in beat (see A3-51).
   function automatic shortint unsigned
+  //* Added lint off tag to avoid verilator warnings
+  /* verilator lint_off WIDTH */
   beat_upper_byte(largest_addr_t addr, size_t size, len_t len, burst_t burst,
       shortint unsigned strobe_width, shortint unsigned i_beat);
     if (i_beat == 0) begin
@@ -190,6 +203,7 @@ package axi_pkg;
     end else begin
       return beat_lower_byte(addr, size, len, burst, strobe_width, i_beat) + num_bytes(size) - 1;
     end
+    /* verilator lint_on WIDTH */
   endfunction
 
   /// Is the bufferable bit set?
@@ -220,6 +234,8 @@ package axi_pkg;
 
   /// Create an `AR_CACHE` field from a `mem_type_t` type.
   function automatic logic [3:0] get_arcache(mem_type_t mtype);
+    //* Added case incomplete tag to avoid verilator warnings
+    /* verilator lint_off CASEINCOMPLETE */
     unique case (mtype)
       DEVICE_NONBUFFERABLE              : return 4'b0000;
       DEVICE_BUFFERABLE                 : return 4'b0001;
@@ -234,10 +250,13 @@ package axi_pkg;
       WBACK_WALLOCATE                   : return 4'b1011;
       WBACK_RWALLOCATE                  : return 4'b1111;
     endcase // mtype
+    /* verilator lint_on CASEINCOMPLETE */
   endfunction
 
   /// Create an `AW_CACHE` field from a `mem_type_t` type.
   function automatic logic [3:0] get_awcache(mem_type_t mtype);
+    //* Added case incomplete tag to avoid verilator warnings
+    /* verilator lint_off CASEINCOMPLETE */
     unique case (mtype)
       DEVICE_NONBUFFERABLE              : return 4'b0000;
       DEVICE_BUFFERABLE                 : return 4'b0001;
@@ -252,6 +271,7 @@ package axi_pkg;
       WBACK_WALLOCATE                   : return 4'b1111;
       WBACK_RWALLOCATE                  : return 4'b1111;
     endcase // mtype
+    /* verilator lint_on CASEINCOMPLETE */
   endfunction
 
   /// RESP precedence: DECERR > SLVERR > OKAY > EXOKAY.  This is not defined in the AXI standard but

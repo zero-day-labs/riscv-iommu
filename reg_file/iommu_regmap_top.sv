@@ -21,7 +21,7 @@
 `include "include/typedef_reg.svh"
 `include "include/typedef_global.svh"
 
-module iommu_reg_top 
+module iommu_regmap_top 
   #(
       // parameter type reg_req_t = logic,
       // parameter type reg_rsp_t = logic,
@@ -85,8 +85,8 @@ module iommu_reg_top
   assign reg_be = reg_intf_req.wstrb;
   assign reg_intf_rsp.rdata = reg_rdata;
   assign reg_intf_rsp.error = reg_error;
-  assign reg_intf_rsp.ready = reg_we | reg_re;
-  // assign reg_intf_rsp.ready = 1'b1;
+  // assign reg_intf_rsp.ready = reg_we | reg_re;
+  assign reg_intf_rsp.ready = 1'b1;
 
   assign reg_rdata = reg_re ? reg_rdata_next : '0;
   assign reg_error = (devmode_i & addrmiss) | wr_err;   // when in development mode, address misses are not silent
