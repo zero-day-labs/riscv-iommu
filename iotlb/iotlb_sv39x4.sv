@@ -58,6 +58,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     input  logic [PSCID_WIDTH-1:0]  lu_pscid_i,               // PSCID to look for
     input  logic [GSCID_WIDTH-1:0]  lu_gscid_i,               // GSCID to look for
     output logic [riscv::GPLEN-1:0] lu_gpaddr_o,              // GPA to return in case of an exception
+    // TODO: Check if we actually need both PTE output ports, or only the required PTE
     output riscv::pte_t             lu_content_o,             // S/VS-stage PTE (GPA PPN)
     output riscv::pte_t             lu_g_content_o,           // G-stage PTE (SPA PPN)
     // External logic needs to know the size of the 
@@ -84,13 +85,13 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
         logic                  is_s_1G;       // S/VS superpage: VPN[0,1] makes part of the offset
         logic                  is_g_2M;       // G superpage: VPN[0] makes part of the offset
         logic                  is_g_1G;       // G superpage: VPN[0,1] makes part of the offset
-        logic                  s_stg_en;     // s-stage translation enable
-        logic                  g_stg_en;     // g-stage translation enable
+        logic                  s_stg_en;      // s-stage translation enable
+        logic                  g_stg_en;      // g-stage translation enable
         logic                  valid;         // valid bit //? Why two V bits? tag and PTE
     } [IOTLB_ENTRIES-1:0] tags_q, tags_n;
 
-    //* IOTLB entries: One entry for each stage (S/VS and G)
-    // TODO: For now, adopt the same PTE format for the IOTLB. Then, consider to ignore/save some bits
+    //* IOTLB entries: Same entry for both stages (S/VS and G)
+    // TODO: For now, adopt the same PTE format for the IOTLB. Then, consider to ignore/save some unnecessary bits
     // For G-stage address translation, all memory accesses are considered to be user-level accesses
     // R, W and X permissions are checked in both stages
     // G bit in G-stage PTEs should be cleared by SW and ignored by HW
@@ -178,7 +179,8 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
 
                 // Construct a GPA with input GVA, according to the size of the page (bypassed offset field is different in each case)
                 // All 44 bits of the S/VS PTE's PPN are not used. Only 11 bits of PPN[2] are used, in order to match GPA's length
-                lu_gpaddr_o = make_gpaddr(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
+                // Does not make sense when translating GPAs (S-stage disabled)
+                lu_gpaddr_o = make_gpaddr_sv39x4(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
                 
                 // 1G match | 2M match | 4k match, modified condition to simplify
                 if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
@@ -233,7 +235,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             vaddr_1G_match[i] = (vaddr_vpn2_match[i] && tags_q[i].is_s_1G);
 
             // construct GPA's PPN according to VS page table entry data
-            gppn[i] = make_gppn(tags_q[i].s_stg_en, tags_q[i].is_s_1G, tags_q[i].is_s_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte);
+            gppn[i] = make_gppn_sv39x4(tags_q[i].s_stg_en, tags_q[i].is_s_1G, tags_q[i].is_s_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte);
             
             // check if given GPA matches with any tag
             // Since the IOVA may be a GVA or a GPA, i think the input port may be the same...
@@ -330,7 +332,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             end
 
             //* IOTINVAL.GVMA:
-            // Ensures that all previous stores made to the G PTs by the harts, 
+            // Ensures that all previous stores made to the G PTs by the harts 
             // are observed by the IOMMU before all subsequent implicit reads from the IOMMU.
             //
             // S/VS entries whose GPA matches the ADDR field and GSCID field must be invalidated by these operations
