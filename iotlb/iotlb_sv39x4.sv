@@ -58,6 +58,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     input  logic [PSCID_WIDTH-1:0]  lu_pscid_i,               // PSCID to look for
     input  logic [GSCID_WIDTH-1:0]  lu_gscid_i,               // GSCID to look for
     output logic [riscv::GPLEN-1:0] lu_gpaddr_o,              // GPA to return in case of an exception
+    // TODO: Check if we actually need both PTE output ports, or only the required PTE
     output riscv::pte_t             lu_content_o,             // S/VS-stage PTE (GPA PPN)
     output riscv::pte_t             lu_g_content_o,           // G-stage PTE (SPA PPN)
     // External logic needs to know the size of the 
@@ -90,7 +91,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     } [IOTLB_ENTRIES-1:0] tags_q, tags_n;
 
     //* IOTLB entries: One entry for each stage (S/VS and G)
-    // TODO: For now, adopt the same PTE format for the IOTLB. Then, consider to ignore/save some bits
+    // TODO: For now, adopt the same PTE format for the IOTLB. Then, consider to ignore/save some unnecessary bits
     // For G-stage address translation, all memory accesses are considered to be user-level accesses
     // R, W and X permissions are checked in both stages
     // G bit in G-stage PTEs should be cleared by SW and ignored by HW
@@ -330,7 +331,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             end
 
             //* IOTINVAL.GVMA:
-            // Ensures that all previous stores made to the G PTs by the harts, 
+            // Ensures that all previous stores made to the G PTs by the harts 
             // are observed by the IOMMU before all subsequent implicit reads from the IOMMU.
             //
             // S/VS entries whose GPA matches the ADDR field and GSCID field must be invalidated by these operations
