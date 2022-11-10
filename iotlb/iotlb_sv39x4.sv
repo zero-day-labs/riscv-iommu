@@ -1,12 +1,14 @@
-// Copyright (c) 2022 University of Minho.
-// Copyright and related rights are licensed under the Solderpad Hardware
-// License, Version 0.51 (the "License"); you may not use this file except in
-// compliance with the License.  You may obtain a copy of the License at
-// http://solderpad.org/licenses/SHL-0.51. Unless required by applicable law
-// or agreed to in writing, software, hardware and materials distributed under
-// this License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-// CONDITIONS OF ANY KIND, either express or implied. See the License for the
-// specific language governing permissions and limitations under the License.
+// Copyright (c) 2022 University of Minho
+// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+
+// Licensed under the Solderpad Hardware License v 2.1 (the “License”); 
+// you may not use this file except in compliance with the License, 
+// or, at your option, the Apache License version 2.0. 
+// You may obtain a copy of the License at https://solderpad.org/licenses/SHL-2.1/.
+// Unless required by applicable law or agreed to in writing, 
+// any work distributed under the License is distributed on an “AS IS” BASIS, 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+// See the License for the specific language governing permissions and limitations under the License.
 /*
     Author: Manuel Rodríguez, University of Minho
     Date:    04/11/2022
@@ -19,7 +21,7 @@
                 -   Bruno Sá, University of Minho.
 */
 
-module cva6_tlb_sv39x4 import ariane_pkg::*; #(
+module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4,
     parameter int unsigned PSCID_WIDTH  = 1,
     parameter int unsigned GSCID_WIDTH  = 1
@@ -397,7 +399,6 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     //* PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
-    // Actually not understanding this.. Only pseudocode
     //? Is it necessary to update LRU on updates?
     logic[2*(IOTLB_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement
