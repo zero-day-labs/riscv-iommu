@@ -19,7 +19,7 @@
 //              This module is an adaptation of the Sv39 TLB developed
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
 
-module cva6_tlb_sv39x4 import ariane_pkg::*; #(
+module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4,
     parameter int unsigned PSCID_WIDTH  = 1,
     parameter int unsigned GSCID_WIDTH  = 1
@@ -53,18 +53,20 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     riscv::pte_t                    up_g_content_i,
 
     // Lookup signals
-    input  logic                    lookup_i,              // lookup flag
+    input  logic                    lookup_i,                 // lookup flag
     input  logic [riscv::VLEN-1:0]  lu_iova_i,                // IOVA to look for 
     input  logic [PSCID_WIDTH-1:0]  lu_pscid_i,               // PSCID to look for
     input  logic [GSCID_WIDTH-1:0]  lu_gscid_i,               // GSCID to look for
     output logic [riscv::GPLEN-1:0] lu_gpaddr_o,              // GPA to return in case of an exception
-    // TODO: Check if we actually need both PTE output ports, or only the required PTE
+    // Yes, i need both PTE ports. Different PPNs are needed according to the size of the page
     output riscv::pte_t             lu_content_o,             // S/VS-stage PTE (GPA PPN)
     output riscv::pte_t             lu_g_content_o,           // G-stage PTE (SPA PPN)
     // External logic needs to know the size of the 
     //final page, in order to construct the final PA
-    output logic                    lu_is_2M_o,               // flags to indicate if superpage
-    output logic                    lu_is_1G_o,
+    output logic                    lu_is_s_2M_o,               
+    output logic                    lu_is_s_1G_o,
+    output logic                    lu_is_g_2M_o,               
+    output logic                    lu_is_g_1G_o,
     input  logic                    s_stg_en_i,               // s-stage enabled
     input  logic                    g_stg_en_i,               // g-stage enabled
     output logic                    lu_hit_o                  // hit flag
@@ -126,8 +128,10 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
         lu_hit_o       = 1'b0;
         lu_content_o   = '{default: 0};
         lu_g_content_o = '{default: 0};
-        lu_is_1G_o     = 1'b0;
-        lu_is_2M_o     = 1'b0;
+        lu_is_s_2M_o    = 1'b0;        
+        lu_is_s_1G_o    = 1'b0;
+        lu_is_g_2M_o    = 1'b0;               
+        lu_is_g_1G_o    = 1'b0;
         match_pscid     = '{default: 0};
         match_gscid     = '{default: 0};
         match_stage    = '{default: 0};
@@ -147,8 +151,6 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             // If G stage is active, only GSCID matches will indicate entry match
             match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && g_stg_en_i) || !g_stg_en_i;
 
-            //? Is it necessary to consider the case when no stage is enabled? I think not...
-
             // returns true if S/VS and G stages are both disabled. Otherwise, return true if enabled stages have 1G pages
             is_1G[i] = is_trans_1G(s_stg_en_i,
                                     g_stg_en_i,
@@ -156,9 +158,7 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
                                     tags_q[i].is_g_1G
                                 );
 
-            // checks if final translation page size is 2M when H-extension is enabled
-            // If both stages are enabled, and VS page size is 2M and G page size is 1G, 2M flag is set and 1G flag is clear
-            //? Is this correct? Shouldn't it be opposite?
+            // checks if final translation page size is 2M when H-extension is enabled 
             is_2M[i] = is_trans_2M(s_stg_en_i,
                                     g_stg_en_i,
                                     tags_q[i].is_s_1G,
@@ -170,7 +170,6 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             // check if translation is a: S-Stage and G-Stage, S-Stage only or G-Stage only translation
             // A stage match occurs if enabled translation stages are equal to the input ones
             // This means that a TLB entry may be associated to only one translation stage, or both
-            //? Could put here condition to guarantee that at least one stage is active
             match_stage[i] = (tags_q[i].g_stg_en == g_stg_en_i) && (tags_q[i].s_stg_en == s_stg_en_i);
             
             // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
@@ -184,8 +183,11 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
                 
                 // 1G match | 2M match | 4k match, modified condition to simplify
                 if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
-                    lu_is_1G_o      = is_1G[i];
-                    lu_is_2M_o      = is_2M[i];
+                    // TODO: Should output the size of each page in order to construct the final Physical Address outside the IOTLB
+                    lu_is_s_2M_o    = tags_q[i].is_s_2M;        
+                    lu_is_s_1G_o    = tags_q[i].is_s_1G;
+                    lu_is_g_2M_o    = tags_q[i].is_g_2M;               
+                    lu_is_g_1G_o    = tags_q[i].is_g_1G;
                     lu_content_o    = content_q[i].pte;
                     lu_g_content_o  = content_q[i].gpte;
                     lu_hit_o        = 1'b1;
@@ -370,7 +372,8 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
             end
             // normal replacement
             // replace_en[i] identifies the LRU entry
-            else if (update_i & replace_en[i]) begin
+            // only valid entries can be cached
+            else if (update_i && replace_en[i] && ((s_stg_en_i && up_content_i.v) || (g_stg_en_i && up_g_content_i.v))) begin
                 // update tags
                 tags_n[i] = '{
                     pscid:  up_pscid_i,
@@ -397,7 +400,6 @@ module cva6_tlb_sv39x4 import ariane_pkg::*; #(
     //* PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
-    // Actually not understanding this.. Only pseudocode
     //? Is it necessary to update LRU on updates?
     logic[2*(IOTLB_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement

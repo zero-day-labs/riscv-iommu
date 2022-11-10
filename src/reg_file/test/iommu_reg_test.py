@@ -30,6 +30,7 @@
 #           All members are stored with the declared edianness.
 #       3.  A reset MUST be performed handling the AXI interface, otherwise it won't work well
 #       4.  bready and rready are "hardwired" to 1 when reset is active.
+#       5.  cocotb-bus must be version 0.1.1. Otherwise the reset signal never gets asserted and simulation gets stuck.
 
 import os
 import re

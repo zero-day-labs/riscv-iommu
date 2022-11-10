@@ -318,6 +318,7 @@ package riscv;
     // Virtual Memory
     // ----------------------
     // memory management, pte for sv39
+    // TODO: Include Svnapot and Svpbmt support in subsequent iterations
     typedef struct packed {
         logic [9:0]  reserved;
         logic [44-1:0] ppn; // PPN length for
