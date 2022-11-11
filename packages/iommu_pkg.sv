@@ -48,12 +48,22 @@ package iommu_pkg;
         logic [43:0] ppn;
     } fsc_t;
 
-    // Translation Attributes
+    // Translation Attributes for Device Context
     typedef struct packed {
         logic [31:0] reserved_1;
         logic [19:0] pscid;
         logic [11:0] reserved_2;
-    } ta_t;
+    } dc_ta_t;
+
+    // Translation Attributes for Process Context
+    typedef struct packed {
+        logic [31:0] reserved_1;
+        logic [19:0] pscid;
+        logic [8:0] reserved_2;
+        logic sum;
+        logic ens;
+        logic v
+    } pc_ta_t;
 
     // IO Hypervisor Guest Address Translation and Protection
     typedef struct packed {
@@ -87,7 +97,7 @@ package iommu_pkg;
     // Base format Device Context
     typedef struct packed {
         fsc_t fsc;
-        ta_t ta;
+        dc_ta_t ta;
         iohgatp_t iohgatp;
         tc_t tc;
     } dc_base_t;
@@ -99,9 +109,19 @@ package iommu_pkg;
         msi_addr_mask_t msi_addr_mask;
         msiptp_t msiptp;
         fsc_t fsc;
-        ta_t ta;
+        dc_ta_t ta;
         iohgatp_t iohgatp;
         tc_t tc;
     } dc_ext_t;
+
+    //--------------------------
+    //  Process Context Structs
+    //--------------------------
+
+    // Process Context
+    typedef struct packed {
+        fsc_t fsc;
+        pc_ta_t ta;
+    } pc_t;
 
 endpackage
