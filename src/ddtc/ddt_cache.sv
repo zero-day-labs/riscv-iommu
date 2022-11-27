@@ -114,7 +114,8 @@ module iommu_ddtc import ariane_pkg::*; #(
             end
 
             // normal replacement
-            else if (update_i & replace_en[i]) begin
+            // only valid entries can be cached
+            else if (update_i && replace_en[i] && up_content_i.tc.v) begin
                 
                 // update tags
                 tags_n[i] = '{

@@ -133,7 +133,7 @@ module iommu_pdtc import ariane_pkg::*; #(
             end
 
             // normal replacement
-            else if (update_i & replace_en[i]) begin
+            else if (update_i && replace_en[i] && up_content_i.ta.v) begin
                 
                 // update tags
                 tags_n[i] = '{

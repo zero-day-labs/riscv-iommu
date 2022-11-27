@@ -346,7 +346,7 @@ module iommu_iotlb_sv32x4 import ariane_pkg::*; #(
             end
             // normal replacement
             // replace_en[i] identifies the LRU entry
-            else if (update_i & replace_en[i]) begin
+            else if (update_i & replace_en[i] && ((s_stg_en_i && up_content_i.v) || (g_stg_en_i && up_g_content_i.v))) begin
                 // update tags
                 tags_n[i] = '{
                     pscid:  up_pscid_i,

@@ -62,7 +62,7 @@ package iommu_pkg;
         logic [8:0] reserved_2;
         logic sum;
         logic ens;
-        logic v
+        logic v;
     } pc_ta_t;
 
     // IO Hypervisor Guest Address Translation and Protection
@@ -115,7 +115,7 @@ package iommu_pkg;
     } dc_ext_t;
 
     //--------------------------
-    //  Process Context Structs
+    //  Process Context Struct
     //--------------------------
 
     // Process Context

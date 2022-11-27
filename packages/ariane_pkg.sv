@@ -900,7 +900,7 @@ package ariane_pkg;
 
     // checks if final translation page size is 1G when H-extension is enabled
     // Returns true if both stages are disabled, or if a stage is enabled and its corresponding flag is set
-    // If both stages are enabled, the size MUST be 1G for both, for the function to return true. //? Can't VS-stage be 4K and G-stage be 1G ?
+    // If both stages are enabled, the size MUST be 1G for both, for the function to return true
     function logic is_trans_1G(input logic s_st_enbl, input logic g_st_enbl, input logic is_s_1G, input logic is_g_1G);
       return (((is_s_1G && s_st_enbl) || !s_st_enbl) && ((is_g_1G && g_st_enbl) || !g_st_enbl));
     endfunction : is_trans_1G
@@ -915,10 +915,10 @@ package ariane_pkg;
     endfunction : is_trans_2M
 
     // Checks if final translation page size is 4M when H-extension is enabled
-    // Whenever G-stage is enabled and has 4M flag set, the final page size is 4M. If only S/VS-stage is enabled and
-    // has 4M flag set, the final page size is also 4M
+    // Returns true if both stages are disabled, or if a stage is enabled and its corresponding flag is set
+    // If both stages are enabled, the size MUST be 4M for both, for the function to return true
     function logic is_trans_4M(input logic s_st_enbl, input logic g_st_enbl, input logic is_s_4M, input logic is_g_4M);
-      return ((g_st_enbl && is_g_4M) || (s_st_enbl && is_s_4M && !g_st_enbl));
+      return (((is_s_4M && s_st_enbl) || !s_st_enbl) && ((is_g_4M && g_st_enbl) || !g_st_enbl));
     endfunction : is_trans_4M
 
     // computes the GPA based on the page size, given S/VS PTE and offset for Sv32x4 translation scheme
