@@ -49,8 +49,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic [riscv::GPPNW-1:0] up_vpn_i,
     input  logic [PSCID_WIDTH-1:0]  up_pscid_i,
     input  logic [GSCID_WIDTH-1:0]  up_gscid_i,
-    riscv::pte_t                    up_content_i,
-    riscv::pte_t                    up_g_content_i,
+    input riscv::pte_t              up_content_i,
+    input riscv::pte_t              up_g_content_i,
 
     // Lookup signals
     input  logic                    lookup_i,                 // lookup flag
