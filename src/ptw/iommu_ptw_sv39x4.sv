@@ -18,7 +18,7 @@
 //              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB 
 //              developed by Bruno Sá.
 
-//* Disabled verilator_lint_off WIDTH
+//# Disabled verilator_lint_off WIDTH
 
 module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         parameter int PSCID_WIDTH = 1,
@@ -29,12 +29,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
+    // TODO: integrate DTF bit functionality
     output logic                    ptw_active_o,           // Set when PTW is walking memory
     output logic                    ptw_error_o,            // set when an error occurred (excluding access errors)
     output logic                    ptw_error_stage2_o,     // set when the fault occurred in stage 2
     output logic                    ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
     output logic                    ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
-    // TODO: Integrate IOPMP developed by ETH
+    // TODO: Integrate functional IOPMP
 
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
@@ -65,10 +66,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // from DC/PC
     input  logic [PSCID_WIDTH-1:0]   pscid_i,
     input  logic [GSCID_WIDTH-1:0]   gscid_i,
-    input  logic                     sum_i,     // Supervisor Memory Access for User pages
+    
+    // permission checks (//? I think should be performed outside the PTW)
+    // input  logic                     sum_i,         // Supervisor Memory Access for User pages
+    // input  logic [1:0]               priv_mode_i,   // transaction privilege mode
     //? I think ENS bit checking should be performed by external translation logic since it has nothing to do with PTEs
 
-    // from IOTLBs, to monitor misses
+    // from IOTLB, to monitor misses
     input  logic                    iotlb_access_i,
     input  logic                    iotlb_hit_i,
     input  logic [riscv::VLEN-1:0]  req_iova_i,
@@ -96,9 +100,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // output logic                    dtlb_miss_o,
 
     // (IO)PMP
-    input  riscv::pmpcfg_t [15:0]   pmpcfg_i,
-    input  logic [15:0][riscv::PLEN-3:0] pmpaddr_i,
-    output logic [riscv::GPLEN-1:0] bad_gpaddr_o
+    input  riscv::pmpcfg_t [15:0]           conf_reg_i,
+    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
+    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of access error
 );
 
     // input registers to receive data from memory i guess
@@ -115,7 +119,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
       IDLE,
       WAIT_GRANT,
       PTE_LOOKUP,
-      WAIT_RVALID,
       PROPAGATE_ERROR,
       PROPAGATE_ACCESS_ERROR
     } state_q, state_d;
@@ -123,16 +126,16 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // Page levels: 3 for Sv39x4
     enum logic [1:0] {
         LVL1, LVL2, LVL3
-    } ptw_lvl_q, ptw_lvl_n, gptw_lvl_n, gptw_lvl_q;     // GPTW_LVL is VS-stage, PTW_LVL is G-stage
+    } ptw_lvl_q, ptw_lvl_n, gptw_lvl_n, gptw_lvl_q;     // GPTW_LVL is stage-1, PTW_LVL is stage-2
 
     // define 3 PTW stages
-    // S_STAGE -> S/VS-stage normal translation controlled by the satp/vsatp CSRs (iosatp/iovsatp)
-    // G_INTERMED_STAGE -> Converts the S/VS-stage non-leaf GPA pointers to HPA (controlled by hgatp) (GPA Lvlx to SPA Lvlx)
-    // G_FINAL_STAGE -> Converts the S/VS-stage final GPA to HPA (controlled by hgatp) (LAST COLUMN)
+    // STAGE_1 -> Stage-1 normal translation controlled by iosatp
+    // STAGE_2_INTERMED -> Converts the stage-1 non-leaf GPA pointers to SPA (controlled by iohgatp)
+    // STAGE_2_FINAL -> Converts the stage-1 leaf GPA to SPA (controlled by iohgatp)
     enum logic [1:0] {
-        S_STAGE,
-        G_INTERMED_STAGE,
-        G_FINAL_STAGE
+        STAGE_1,
+        STAGE_2_INTERMED,
+        STAGE_2_FINAL
     } ptw_stage_q, ptw_stage_d;
 
     // global mapping aux signal
@@ -155,7 +158,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     assign iotlb_update_iova_o  = iova_q;
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
-    assign walking_instr_o = is_instr_ptw_q;
     // directly output the correct physical address
     assign mem_req_o.address_index = ptw_pptr_q[DCACHE_INDEX_WIDTH-1:0];
     assign mem_req_o.address_tag   = ptw_pptr_q[DCACHE_INDEX_WIDTH+DCACHE_TAG_WIDTH-1:DCACHE_INDEX_WIDTH];
@@ -164,9 +166,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // we are never going to write with the HPTW
     assign mem_req_o.data_wdata    = 64'b0;
 
-    // -----------
-    //* IOTLB Update
-    // -----------
+    //# IOTLB Update combinational logic
     always_comb begin : iotlb_update
         
         // vpn to be updated in the IOTLB
@@ -215,50 +215,25 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     logic allow_access;
 
-    // G stage error occurs whenever ptw_stage_q != S_STAGE in the PROP_ERR state
-    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == G_INTERMED_STAGE) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
+    // G stage error occurs whenever ptw_stage_q != STAGE_1 in the PROP_ERR state
+    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
 
-    // TODO: Insert ETH IOPMP
+    // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
     pmp #(
         .PLEN       ( riscv::PLEN            ),
         .PMP_LEN    ( riscv::PLEN - 2        ),
-        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )
+        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )  // 8 entries by default
     ) i_pmp_ptw (
-        .addr_i        ( ptw_pptr_q         ),
-        // PTW access are always checked as if in S-Mode...
-        .priv_lvl_i    ( riscv::PRIV_LVL_S  ),
-        // ...and they are always loads
-        .access_type_i ( riscv::ACCESS_READ ),
+        .addr_i         ( ptw_pptr_q         ),
+        .priv_lvl_i     ( riscv::PRIV_LVL_S  ), // PTW access are always checked as if in S-Mode
+        .access_type_i  ( riscv::ACCESS_READ ), // PTW only reads
         // Configuration
-        .conf_addr_i   ( pmpaddr_i          ),
-        .conf_i        ( pmpcfg_i           ),
-        .allow_o       ( allow_access       )
+        .addr_reg_i     ( addr_reg_i         ), // address register
+        .conf_reg_i     ( conf_reg_i         ), // config register
+        .allow_o        ( allow_access       )
     );
 
-    //-------------------
-    // Page table walker
-    //-------------------
-    // A virtual address va is translated into a physical address pa as follows:
-    // 1. Let a be sptbr.ppn × PAGESIZE, and let i = LEVELS-1. (For Sv39,
-    //    PAGESIZE=2^12 and LEVELS=3.)
-    // 2. Let pte be the value of the PTE at address a+va.vpn[i]×PTESIZE. (For
-    //    Sv32, PTESIZE=4.)
-    // 3. If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings 
-    //    that are reserved for future standard use are set within pte, stop and raise 
-    //    a page-fault exception corresponding to the original access type.
-    // 4. Otherwise, the PTE is valid. If pte.r = 1 or pte.x = 1, go to step 5.
-    //    Otherwise, this PTE is a pointer to the next level of the page table.
-    //    Let i=i-1. If i < 0, stop and raise an access exception. Otherwise, let
-    //    a = pte.ppn × PAGESIZE and go to step 2.
-    // 5. A leaf PTE has been found. Determine if the requested memory access
-    //    is allowed by the pte.r, pte.w, and pte.x bits. If not, stop and
-    //    raise an access exception. Otherwise, the translation is successful.
-    //    Set pte.a to 1, and, if the memory access is a store, set pte.d to 1.
-    //    The translated physical address is given as follows:
-    //      - pa.pgoff = va.pgoff.
-    //      - If i > 0, then this is a superpage translation and
-    //        pa.ppn[i-1:0] = va.vpn[i-1:0].
-    //      - pa.ppn[LEVELS-1:i] = pte.ppn[LEVELS-1:i].
+    //# Page table walker
     always_comb begin : ptw
         automatic logic [riscv::PLEN-1:0] pptr;
         automatic logic [riscv::GPLEN-1:0] gpaddr;
@@ -309,7 +284,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 if ((en_stage1_i | en_stage2_i) & iotlb_access_i & ~iotlb_hit_i) begin
                     if (en_stage1_i && en_stage2_i) begin   // VS && G
                         // Start in G-L1
-                        ptw_stage_d = G_INTERMED_STAGE;
+                        ptw_stage_d = STAGE_2_INTERMED;
                         // Store GPA to be segmented for all three levels of G-stage translation
                         pptr = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};   //* VS-L1
                         gptw_pptr_n = pptr;
@@ -318,12 +293,12 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                     end else if (!en_stage1_i && en_stage2_i) begin     // G only
                         // Start in final G-L1 stage
-                        ptw_stage_d = G_FINAL_STAGE;
+                        ptw_stage_d = STAGE_2_FINAL;
                         gpaddr_n = req_iova_i[riscv::SVX-1:0]; // virtual address is a valid GPA
                         ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
 
                     end else begin                      // S/VS only
-                        ptw_stage_d = S_STAGE;
+                        ptw_stage_d = STAGE_1;
                         ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
                     end
                     // register PSCID, GSCID and IOVA
@@ -353,31 +328,29 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 if (data_rvalid_q) begin
 
                     // check if the global mapping bit is set
-                    if (pte.g && ptw_stage_q == S_STAGE)
+                    if (pte.g && ptw_stage_q == STAGE_1)
                         global_mapping_n = 1'b1;
 
-                    // -------------
-                    //* Invalid PTE
-                    // -------------
+                    //# Invalid PTE
                     // If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception.
                     if (!pte.v || (!pte.r && pte.w))
                         state_d = PROPAGATE_ERROR;
-                    // -----------
-                    //* Valid PTE
-                    // -----------
+                        
+
+                    //# Valid PTE
                     else begin
                         state_d = IDLE;
 
-                        //* leaf PTE
+                        //# Leaf PTE
                         if (pte.r || pte.x) begin
                             case (ptw_stage_q)
                                 
-                                //* GPA
-                                S_STAGE: begin
+                                //# S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
+                                STAGE_1: begin
                                     // If corresponding G stage translation is enabled
                                     if (en_stage2_i) begin
                                         state_d = WAIT_GRANT;
-                                        ptw_stage_d = G_FINAL_STAGE;    // final G-stage walk
+                                        ptw_stage_d = STAGE_2_FINAL;    // final stage-2 walk
                                         gpte_d = pte;                   // save GPA to update in TLB
                                         gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
                                         gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};    // construct FINAL GPA
@@ -395,10 +368,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 end
 
                                 // triggered when valid G-stage PTE is found, without being the last level of VS
-                                //* Gx-L1 for 1G superpages, Gx-L2 for 2M superpages and Gx-L3 for 4K pages
-                                G_INTERMED_STAGE: begin
+                                //# S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages
+                                STAGE_2_INTERMED: begin
                                     state_d = WAIT_GRANT;
-                                    ptw_stage_d = S_STAGE;
+                                    ptw_stage_d = STAGE_1;
                                     ptw_lvl_n = gptw_lvl_q;     // equalized to avoid comparing two types of level
                                     pptr = {pte.ppn[riscv::GPPNW-1:0], gptw_pptr_q[11:0]};  // join lvlx PPN with lvlx GPA's offset
                                     // Consider case of superpages
@@ -411,65 +384,68 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 default:;
                             endcase
 
-                            // Valid translation found (either 1G, 2M or 4K entry)
-                            // ------------
-                            //* Update DTLB
-                            // ------------
-                            // TODO: For now we let SW handle the update of A and D bits. Later, hardware support will be implemented
-                            /*
-                                A fault is generated if:
-                                    - Access flag is not set;
-                                    - Page is not readable;
-                                    - S-mode transaction. PTE has U=1 and SUM=0;
-                                    - S-mode transaction. PTE has U=1 and x=1;
-                            */
-                            if (pte.a && ((pte.r && !hlvx_inst_i) || (pte.x && (mxr_i || hlvx_inst_i || (ptw_stage_q == S_STAGE && vmxr_i && ld_st_v_i))))) begin
-                                if((ptw_stage_q == G_FINAL_STAGE) || !en_stage2_i)
+                            //# Valid translation found (either 1G, 2M or 4K entry)
+
+                            //# Update IOTLB
+                            //? I think the HW PTW should be only responsible of locating the missing SPA (PTE) associated with the IOVA that caused the miss in the IOTLB.
+                            // IOTLB is updated only if found a leaf PTE in the final stage-2, or if stage 2 is disabled and a leaf PTE was found
+
+                            // "If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
+                            // "Stop and raise a page-fault exception corresponding to the original access type."
+                            if (ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) begin         // 1G
+                                state_d             = PROPAGATE_ERROR;
+                                ptw_stage_d         = ptw_stage_q;
+                                update_o = 1'b0;
+                            end 
+                            else begin
+                                if (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0) begin      // 2M
+                                state_d             = PROPAGATE_ERROR;
+                                ptw_stage_d         = ptw_stage_q;
+                                update_o = 1'b0;
+                                end
+                                else if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) begin
                                     update_o = 1'b1;
-                            end else begin
-                                state_d   = PROPAGATE_ERROR;
-                                ptw_stage_d = ptw_stage_q;
-                            end
-                            // Request is a store: perform some additional checks
-                            // If the request was a store and the page is not write-able, raise an error
-                            // the same applies if the dirty flag is not set (for now...)
-                            if (is_store && (!pte.w || !pte.d)) begin
-                                dtlb_update_o.valid = 1'b0;
-                                state_d   = PROPAGATE_ERROR;
-                                ptw_stage_d = ptw_stage_q;
-                            end
-                            
-                            // check if the ppn is correctly aligned:
-                            // 6. If i > 0 and pa.ppn[i − 1 : 0] != 0, this is a misaligned superpage; stop and raise a page-fault
-                            // exception.
-                            if (ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) begin
-                                state_d             = PROPAGATE_ERROR;
-                                ptw_stage_d         = ptw_stage_q;
-                                update_o = 1'b0;
-                            end else if (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0) begin
-                                state_d             = PROPAGATE_ERROR;
-                                ptw_stage_d         = ptw_stage_q;
-                                update_o = 1'b0;
+                                end
                             end
 
-                            // check if 63:41 are all zeros
-                            if (((v_i && is_instr_ptw_q) || (ld_st_v_i && !is_instr_ptw_q)) && ptw_stage_q == S_STAGE && !((|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) == 1'b0)) begin
-                                state_d = PROPAGATE_ERROR;
-                                ptw_stage_d = G_FINAL_STAGE;
-                            end
-                        end 
+                        // TODO: For now we let SW handle the update of A and D bits. Later, hardware support will be implemented
+                        // TODO: When implemented, bits SADE and GADE enable the update of A and D bits atomically in Stage-1 and Stage-2, respectively.
+                        //     /*
+                        //         A fault is generated if:
+                        //             - Access flag is not set;
+                        //             - Page is not readable;
+                        //             - S-mode transaction. PTE has U=1 and SUM=0;
+                        //             - S-mode transaction. PTE has U=1 and x=1;
+                        //     */
+                        //     if (!pte.a || !pte.r || (priv_mode_i == riscv::PRIV_LVL_S && pte.u && (!sum_i || pte.x))) begin
+                        //         state_d   = PROPAGATE_ERROR;
+                        //         ptw_stage_d = ptw_stage_q;
+                        //     end else begin
+                        //         if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i)
+                        //             update_o = 1'b1;
+                        //     end
+                        //     // Request is a store: perform some additional checks
+                        //     // If the request was a store and the page is not write-able, raise an error
+                        //     // the same applies if the dirty flag is not set (for now...)
+                        //     if (is_store && (!pte.w || !pte.d)) begin
+                        //         dtlb_update_o.valid = 1'b0;
+                        //         state_d   = PROPAGATE_ERROR;
+                        //         ptw_stage_d = ptw_stage_q;
+                        //     end
+
+                        end
                         
-                        //* non-leaf PTE
+                        //# non-leaf PTE
                         else begin
                             if (ptw_lvl_q == LVL1) begin
                                 // we are in the second level now
                                 ptw_lvl_n = LVL2;
                                 case (ptw_stage_q)
 
-                                    //* VS-L2
-                                    S_STAGE: begin
-                                        if ((is_instr_ptw_q && en_stage2_i) || (!is_instr_ptw_q && en_stage2_i)) begin
-                                            ptw_stage_d = G_INTERMED_STAGE;
+                                    //# S1-L1
+                                    STAGE_1: begin
+                                        if (en_stage2_i) begin
+                                            ptw_stage_d = STAGE_2_INTERMED;
                                             gpte_d = pte;   // PTE representing the GPA base pointer
                                             gptw_lvl_n = LVL2;  // update VS level
                                             pptr = {pte.ppn, iova_q[29:21], 3'b0};     // join GPA base pointer with VPN[1] => GPA lvl2
@@ -481,13 +457,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         end
                                     end
 
-                                    //* Gx-L1
-                                    G_INTERMED_STAGE: begin
+                                    //# S2-L1 (GPA_n)
+                                    STAGE_2_INTERMED: begin
                                             ptw_pptr_n = {pte.ppn, gptw_pptr_q[29:21], 3'b0};   // pointer received from G-L1, to be used with GPPN[1]
                                     end
 
-                                    //* G4-L1
-                                    G_FINAL_STAGE: begin
+                                    //# S2-L1 (final GPA)
+                                    STAGE_2_FINAL: begin
                                             ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
                                     end
                                 endcase
@@ -498,10 +474,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 ptw_lvl_n  = LVL3;
                                 unique case (ptw_stage_q)
 
-                                    //* VS-L3
-                                    S_STAGE: begin
-                                        if ((is_instr_ptw_q && en_stage2_i) || (!is_instr_ptw_q && en_stage2_i)) begin
-                                            ptw_stage_d = G_INTERMED_STAGE;
+                                    //# S1-L2
+                                    STAGE_1: begin
+                                        if (en_stage2_i) begin
+                                            ptw_stage_d = STAGE_2_INTERMED;
                                             gpte_d = pte;
                                             gptw_lvl_n = LVL3;
                                             pptr = {pte.ppn, iova_q[20:12], 3'b0};
@@ -513,13 +489,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         end
                                     end
 
-                                    //* Gx-L2
-                                    G_INTERMED_STAGE: begin
+                                    //# S2-L2 (GPA_n)
+                                    STAGE_2_INTERMED: begin
                                             ptw_pptr_n = {pte.ppn, gptw_pptr_q[20:12], 3'b0};   // pointer received from G-L2, to be used with GPPN[1]
                                     end
 
-                                    //* G4-L2
-                                    G_FINAL_STAGE: begin
+                                    //# S2-L2 (final GPA)
+                                    STAGE_2_FINAL: begin
                                             ptw_pptr_n = {pte.ppn, gpaddr_q[20:12], 3'b0};
                                     end
                                     default:;
@@ -527,82 +503,67 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             end
 
                             state_d = WAIT_GRANT;
-                            // check if reserved bits are cleared for non-leaf entries
+
+                            // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
+                            // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
                             if(pte.a || pte.d || pte.u) begin
                                 state_d = PROPAGATE_ERROR;
                                 ptw_stage_d = ptw_stage_q;
                             end
+
+                            //  "Otherwise, this PTE is a pointer to the next level of the page table."
+                            //  "Let i = i − 1. If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                             if (ptw_lvl_q == LVL3) begin
                               // Should already be the last level page table => Error
                               ptw_lvl_n   = LVL3;
                               state_d = PROPAGATE_ERROR;
                               ptw_stage_d = ptw_stage_q;
                             end
-                            // check if 63:41 are all zeros
-                            if (((v_i && is_instr_ptw_q) || (ld_st_v_i && !is_instr_ptw_q)) && ptw_stage_q == S_STAGE && !((|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) == 1'b0)) begin
-                                state_d = PROPAGATE_ERROR;
-                                ptw_stage_d = ptw_stage_q;
-                            end
-
-                            // netx level of the current GPA (G-Lx)
                         end
+                    end
+
+                    // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
+                    if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
+                        state_d = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                        ptw_stage_d = ptw_stage_q;
+                        update_o = 1'b0;
                     end
 
                     // Check if this access was actually allowed from a PMP perspective
                     if (!allow_access) begin
-                        itlb_update_o.valid = 1'b0;
-                        dtlb_update_o.valid = 1'b0;
+                        update_o = 1'b0;
                         // we have to return the failed address in bad_addr
                         ptw_pptr_n = ptw_pptr_q;
                         ptw_stage_d = ptw_stage_q;
                         state_d = PROPAGATE_ACCESS_ERROR;
                     end
                 end
-                // we've got a data WAIT_GRANT so tell the cache that the tag is valid
             end
+
             // Propagate error to MMU/LSU
             PROPAGATE_ERROR: begin
                 state_d     = IDLE;
                 ptw_error_o = 1'b1;
-                ptw_error_stage2_o   = (ptw_stage_q != S_STAGE) ? 1'b1 : 1'b0;
-                ptw_error_stage2_int_o = (ptw_stage_q == G_INTERMED_STAGE) ? 1'b1 : 1'b0;
+                ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
+                ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
             end
+
             PROPAGATE_ACCESS_ERROR: begin
                 state_d     = IDLE;
                 ptw_iopmp_excep_o = 1'b1;
             end
-            // wait for the rvalid before going back to IDLE
-            WAIT_RVALID: begin
-                if (data_rvalid_q)
-                    state_d = IDLE;
-            end
+
             default: begin
                 state_d = IDLE;
             end
         endcase
-
-        // -------
-        // Flush
-        // -------
-        // should we have flushed before we got an rvalid, wait for it until going back to IDLE
-        if (flush_i) begin
-            // on a flush check whether we are
-            // 1. in the PTE Lookup check whether we still need to wait for an rvalid
-            // 2. waiting for a grant, if so: wait for it
-            // if not, go back to idle
-            if ((state_q == PTE_LOOKUP && !data_rvalid_q) || ((state_q == WAIT_GRANT) && mem_resp_i.data_gnt))
-                state_d = WAIT_RVALID;
-            else
-                state_d = IDLE;
-        end
     end
 
     // sequential process
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (~rst_ni) begin
             state_q            <= IDLE;
-            ptw_stage_q        <= S_STAGE;
-            is_instr_ptw_q     <= 1'b0;
+            ptw_stage_q        <= STAGE_1;
             ptw_lvl_q          <= LVL1;
             gptw_lvl_q         <= LVL1;
             tag_valid_q        <= 1'b0;
@@ -616,12 +577,12 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             data_rdata_q       <= '0;
             gpte_q             <= '0;
             data_rvalid_q      <= 1'b0;
+
         end else begin
             state_q            <= state_d;
             ptw_stage_q        <= ptw_stage_d;
             ptw_pptr_q         <= ptw_pptr_n;
             gptw_pptr_q        <= gptw_pptr_n;
-            is_instr_ptw_q     <= is_instr_ptw_n;
             ptw_lvl_q          <= ptw_lvl_n;
             gptw_lvl_q         <= gptw_lvl_n;
             tag_valid_q        <= tag_valid_n;
@@ -637,4 +598,4 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     end
 
 endmodule
-/* verilator lint_on WIDTH */
+//# Disabled verilator_lint_on WIDTH
