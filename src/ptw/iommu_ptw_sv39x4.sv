@@ -1,4 +1,4 @@
-// Copyright (c) 2022 University of Minho
+// Copyright (c) 2023 University of Minho
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 
 // Licensed under the Solderpad Hardware License v 2.1 (the “License”); 
@@ -34,12 +34,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
+    // TODO: integrate DTF bit functionality
     output logic                    ptw_active_o,           // Set when PTW is walking memory
     output logic                    ptw_error_o,            // set when an error occurred (excluding access errors)
     output logic                    ptw_error_stage2_o,     // set when the fault occurred in stage 2
     output logic                    ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
     output logic                    ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
-    // TODO: Integrate IOPMP developed by ETH
+    // TODO: Integrate functional IOPMP
 
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
@@ -104,9 +105,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // output logic                    dtlb_miss_o,
 
     // (IO)PMP
-    input  riscv::pmpcfg_t [15:0]   pmpcfg_i,
-    input  logic [15:0][riscv::PLEN-3:0] pmpaddr_i,
-    output logic [riscv::GPLEN-1:0] bad_gpaddr_o
+    input  riscv::pmpcfg_t [15:0]           conf_reg_i,
+    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
+    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of access error
 );
 
     // input registers to receive data from memory i guess
@@ -222,21 +223,19 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // G stage error occurs whenever ptw_stage_q != STAGE_1 in the PROP_ERR state
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
 
-    // TODO: Insert ETH IOPMP
+    // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
     pmp #(
         .PLEN       ( riscv::PLEN            ),
         .PMP_LEN    ( riscv::PLEN - 2        ),
-        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )
+        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )  // 8 entries by default
     ) i_pmp_ptw (
-        .addr_i        ( ptw_pptr_q         ),
-        // PTW access are always checked as if in S-Mode...
-        .priv_lvl_i    ( riscv::PRIV_LVL_S  ),
-        // ...and they are always loads
-        .access_type_i ( riscv::ACCESS_READ ),
+        .addr_i         ( ptw_pptr_q         ),
+        .priv_lvl_i     ( riscv::PRIV_LVL_S  ), // PTW access are always checked as if in S-Mode
+        .access_type_i  ( riscv::ACCESS_READ ), // PTW only reads
         // Configuration
-        .conf_addr_i   ( pmpaddr_i          ),
-        .conf_i        ( pmpcfg_i           ),
-        .allow_o       ( allow_access       )
+        .addr_reg_i     ( addr_reg_i         ), // address register
+        .conf_reg_i     ( conf_reg_i         ), // config register
+        .allow_o        ( allow_access       )
     );
 
     //# Page table walker
@@ -414,7 +413,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 end
                             end
 
-                        //     // TODO: For now we let SW handle the update of A and D bits. Later, hardware support will be implemented
+                        // TODO: For now we let SW handle the update of A and D bits. Later, hardware support will be implemented
+                        // TODO: When implemented, bits SADE and GADE enable the update of A and D bits atomically in Stage-1 and Stage-2, respectively.
                         //     /*
                         //         A fault is generated if:
                         //             - Access flag is not set;
