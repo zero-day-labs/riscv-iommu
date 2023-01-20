@@ -895,7 +895,7 @@ package ariane_pkg;
     endfunction
 
     // ----------------------
-    // IOMMU Functions
+    //# MMU/IOMMU Functions
     // ----------------------
 
     // checks if final translation page size is 1G when H-extension is enabled
@@ -934,7 +934,7 @@ package ariane_pkg;
             gpaddr = vaddr[(riscv::GPLEN-1):0];
         end
         return gpaddr;
-    endfunction : make_gpaddr
+    endfunction : make_gpaddr_sv32x4
 
     // computes the GPA based on the page size, given S/VS PTE and offset for Sv39x4 translation scheme
     function logic [(riscv::GPLEN-1):0] make_gpaddr_sv39x4(input logic s_st_enbl, input logic is_1G, input logic is_2M, input logic [(riscv::VLEN-1):0] vaddr, input riscv::pte_t pte);
@@ -951,7 +951,7 @@ package ariane_pkg;
             gpaddr = vaddr[(riscv::GPLEN-1):0];
         end
         return gpaddr;
-    endfunction : make_gpaddr
+    endfunction : make_gpaddr_sv39x4
 
     // computes the final GPA's PPN based on the given V/VS PTE and page size for Sv32x4 translation scheme
     function logic [(riscv::GPPNW-1):0] make_gppn_sv32x4(input logic s_st_enbl, input logic is_4M, input logic [21:0] vpn, input riscv::pte_sv32_t pte);
@@ -964,7 +964,7 @@ package ariane_pkg;
             gppn = vpn;
         end
         return gppn;
-    endfunction : make_gppn
+    endfunction : make_gppn_sv32x4
 
     // computes the final GPA's PPN based on the given V/VS PTE and page size for Sv39x4 translation scheme
     function logic [(riscv::GPPNW-1):0] make_gppn_sv39x4(input logic s_st_enbl, input logic is_2M, input logic is_1G, input logic [28:0] vpn, input riscv::pte_t pte);
@@ -979,6 +979,6 @@ package ariane_pkg;
             gppn = vpn;
         end
         return gppn;
-    endfunction : make_gppn
+    endfunction : make_gppn_sv39x4
 
 endpackage

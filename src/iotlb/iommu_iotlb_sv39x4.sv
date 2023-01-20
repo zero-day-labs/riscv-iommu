@@ -46,6 +46,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    up_is_s_1G_i,
     input  logic                    up_is_g_2M_i,
     input  logic                    up_is_g_1G_i,
+    input  logic                    up_is_msi_i,
     input  logic [riscv::GPPNW-1:0] up_vpn_i,
     input  logic [PSCID_WIDTH-1:0]  up_pscid_i,
     input  logic [GSCID_WIDTH-1:0]  up_gscid_i,
@@ -67,6 +68,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     output logic                    lu_is_s_1G_o,
     output logic                    lu_is_g_2M_o,               
     output logic                    lu_is_g_1G_o,
+    output logic                    lu_is_msi_o,              // IOTLB entry contains a GPA associated with a guest vIMSIC
     input  logic                    s_stg_en_i,               // s-stage enabled
     input  logic                    g_stg_en_i,               // g-stage enabled
     output logic                    lu_hit_o                  // hit flag
@@ -87,6 +89,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         logic                  is_s_1G;       // S/VS superpage: VPN[0,1] makes part of the offset
         logic                  is_g_2M;       // G superpage: VPN[0] makes part of the offset
         logic                  is_g_1G;       // G superpage: VPN[0,1] makes part of the offset
+        logic                  is_msi;        // IOTLB entry contains a GPA associated with a guest vIMSIC
         logic                  s_stg_en;      // s-stage translation enable
         logic                  g_stg_en;      // g-stage translation enable
         logic                  valid;         // valid bit //? Why two V bits? tag and PTE
@@ -132,6 +135,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         lu_is_s_1G_o    = 1'b0;
         lu_is_g_2M_o    = 1'b0;               
         lu_is_g_1G_o    = 1'b0;
+        lu_is_msi_o     = 1'b0;
         match_pscid     = '{default: 0};
         match_gscid     = '{default: 0};
         match_stage    = '{default: 0};
@@ -183,11 +187,11 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                 
                 // 1G match | 2M match | 4k match, modified condition to simplify
                 if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
-                    // TODO: Should output the size of each page in order to construct the final Physical Address outside the IOTLB
                     lu_is_s_2M_o    = tags_q[i].is_s_2M;        
                     lu_is_s_1G_o    = tags_q[i].is_s_1G;
                     lu_is_g_2M_o    = tags_q[i].is_g_2M;               
                     lu_is_g_1G_o    = tags_q[i].is_g_1G;
+                    lu_is_msi_o     = tags_q[i].is_msi;
                     lu_content_o    = content_q[i].pte;
                     lu_g_content_o  = content_q[i].gpte;
                     lu_hit_o        = 1'b1;
@@ -376,18 +380,19 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             else if (update_i && replace_en[i] && ((s_stg_en_i && up_content_i.v) || (g_stg_en_i && up_g_content_i.v))) begin
                 // update tags
                 tags_n[i] = '{
-                    pscid:  up_pscid_i,
-                    gscid:  up_gscid_i,
-                    vpn2:  up_vpn_i[18+riscv::GPPN2:18],
-                    vpn1:  up_vpn_i[17:9],
-                    vpn0:  up_vpn_i[8:0],
-                    s_stg_en:  s_stg_en_i,
-                    g_stg_en:  g_stg_en_i,
-                    is_s_1G: up_is_s_1G_i,
-                    is_s_2M: up_is_s_2M_i,
-                    is_g_1G: up_is_g_1G_i,
-                    is_g_2M: up_is_g_2M_i,
-                    valid: 1'b1
+                    pscid:      up_pscid_i,
+                    gscid:      up_gscid_i,
+                    vpn2:       up_vpn_i[18+riscv::GPPN2:18],
+                    vpn1:       up_vpn_i[17:9],
+                    vpn0:       up_vpn_i[8:0],
+                    s_stg_en:   s_stg_en_i,
+                    g_stg_en:   g_stg_en_i,
+                    is_s_1G:    up_is_s_1G_i,
+                    is_s_2M:    up_is_s_2M_i,
+                    is_g_1G:    up_is_g_1G_i,
+                    is_g_2M:    up_is_g_2M_i,
+                    is_msi:     up_is_msi_i,
+                    valid:      1'b1
                 };
                 // and content as well
                 content_n[i].pte = up_content_i;
