@@ -19,19 +19,23 @@
 package iommu_pkg;
 
     //------------------------
-    //  Device Context Fields
+    //#  Device Context Fields
     //------------------------
+
+    // to identify memory accesses to virtual guest interrupt files
+    localparam MSI_MASK_LEN     = 52;
+    localparam MSI_PATTERN_LEN  = 52;
 
     // MSI Address Pattern
     typedef struct packed {
         logic [11:0] reserved;
-        logic [51:0] pattern;
+        logic [(MSI_PATTERN_LEN-1):0] pattern;
     } msi_addr_pattern_t;
 
     // MSI Address Mask
     typedef struct packed {
         logic [11:0] reserved;
-        logic [51:0] mask;
+        logic [(MSI_MASK_LEN-1):0] mask;
     } msi_addr_mask_t;
 
     // MSI Page Table Pointer
@@ -91,7 +95,7 @@ package iommu_pkg;
    } tc_t;
 
     //--------------------------
-    //  Device Context Structs
+    //#  Device Context Structs
     //--------------------------
 
     // Base format Device Context
@@ -115,7 +119,7 @@ package iommu_pkg;
     } dc_ext_t;
 
     //--------------------------
-    //  Process Context Struct
+    //#  Process Context Struct
     //--------------------------
 
     // Process Context
@@ -123,5 +127,56 @@ package iommu_pkg;
         fsc_t fsc;
         pc_ta_t ta;
     } pc_t;
+
+    //--------------------------
+    //#  MSI Address Translation
+    //--------------------------
+
+    // MSI PTE (Write-through mode)
+    typedef struct packed {
+        logic           c;
+        logic [8:0]     reserved_2;
+        logic [44-1:0]  ppn;
+        logic [6:0]     reserved_1;
+        logic [1:0]     m;
+        logic           v;
+    } msi_wt_pte_t;
+
+    // MSI PTE (MRIF mode)
+    typedef struct packed {
+        logic [2:0]     reserved_4;
+        logic           nid_10;
+        logic [5:0]     reserved_3;
+        logic [44-1:0]  nppn;
+        logic [9:0]     nid_9_0;
+        logic           c;
+        logic [8:0]     reserved_2;
+        logic [47-1:0]  ppn;
+        logic [3:0]     reserved_1;
+        logic [1:0]     m;
+        logic           v;
+    } msi_mrif_pte_t;
+
+    //--------------------------
+    //#  IOMMU functions
+    //--------------------------
+
+    // Extract vIMSIC number from valid GPA
+    function logic [(MSI_MASK_LEN-1):0] extract_imsic_num(input logic [(MSI_MASK_LEN-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
+        logic [(MSI_MASK_LEN-1):0] masked_gpaddr, imsic_num;
+        int unsigned i;
+
+        masked_gpaddr = gpaddr & mask;
+        imsic_num = '0;
+        i = 0;
+        for (int unsigned k = 0 ; k < MSI_MASK_LEN; k++) begin
+            if (masked_gpaddr[k]) begin
+                imsic_num[i] = 1'b1;
+                i++;
+            end
+        end
+
+        return imsic_num;
+    endfunction : extract_imsic_num
 
 endpackage
