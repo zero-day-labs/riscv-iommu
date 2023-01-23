@@ -31,11 +31,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // Error signaling
     // TODO: integrate DTF bit functionality
     // TODO: Add cause encoding signal
-    output logic                    ptw_active_o,           // Set when PTW is walking memory
-    output logic                    ptw_error_o,            // set when an error occurred (excluding access errors)
-    output logic                    ptw_error_stage2_o,     // set when the fault occurred in stage 2
-    output logic                    ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
-    output logic                    ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
+    input  logic                                dtf_i,                  // DTF bit from DC. Disables reporting of translation process faults
+    output logic                                ptw_active_o,           // Set when PTW is walking memory
+    output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
+    output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
+    output logic                                ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
+    output logic                                ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
+    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
     // TODO: Integrate functional IOPMP
 
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
@@ -111,7 +113,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     riscv::pte_t pte;
     // register to perform context switch between stages
-    riscv::pte_t gpte_q, gpte_d;    // gpte is only used to store GPA to be updated in the IOTLB
+    riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store GPA to be updated in the IOTLB
     assign pte = riscv::pte_t'(data_rdata_q);
 
     iommu_pkg::msi_wt_pte_t msi_pte;
@@ -124,7 +126,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
       PTE_LOOKUP,
       PROPAGATE_ERROR,
       PROPAGATE_ACCESS_ERROR
-    } state_q, state_d;
+    } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
     enum logic [1:0] {
@@ -139,7 +141,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         STAGE_1,
         STAGE_2_INTERMED,
         STAGE_2_FINAL
-    } ptw_stage_q, ptw_stage_d;
+    } ptw_stage_q, ptw_stage_n;
 
     // global mapping aux signal
     logic global_mapping_q, global_mapping_n;
@@ -221,10 +223,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             up_is_msi_o  = 1'b0;
         end
 
-        // Originally two ASIDs were considered: asid and vs_asid
         up_pscid_o = iotlb_update_pscid_q;
-
-        // GSCID to be updated
         up_gscid_o = iotlb_update_gscid_q;
 
         // set the global mapping bit
@@ -284,15 +283,16 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         ptw_error_stage2_o     = 1'b0;
         ptw_error_stage2_int_o = 1'b0;
         ptw_iopmp_excep_o      = 1'b0;
+        cause_code_o           = '0;
         update_o               = 1'b0;
         msi_content_valid_o    = 1'b0;
         ptw_lvl_n              = ptw_lvl_q;
         gptw_lvl_n             = gptw_lvl_q;
         ptw_pptr_n             = ptw_pptr_q;
         gptw_pptr_n            = gptw_pptr_q;
-        state_d                = state_q;
-        ptw_stage_d            = ptw_stage_q;
-        gpte_d                 = gpte_q;
+        state_n                = state_q;
+        ptw_stage_n            = ptw_stage_q;
+        gpte_n                 = gpte_q;
         global_mapping_n       = global_mapping_q;
         msi_translation_n      = msi_translation_q;
 
@@ -317,7 +317,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 global_mapping_n    = 1'b0;
                 msi_translation_n   = 1'b0;
                 gpaddr_n            = '0;
-                gpte_d              = '0;
+                gpte_n              = '0;
 
                 // check for possible IOTLB miss
                 if ((en_stage1_i | en_stage2_i) & iotlb_access_i & ~iotlb_hit_i) begin
@@ -325,7 +325,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     // Two-stage
                     if (en_stage1_i && en_stage2_i) begin
                         // Start in G-L1
-                        ptw_stage_d = STAGE_2_INTERMED;
+                        ptw_stage_n = STAGE_2_INTERMED;
                         // Store GPA to be segmented for all three levels of G-stage translation
                         pptr = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};   //* VS-L1
                         gptw_pptr_n = pptr;
@@ -347,7 +347,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                         // normal second-stage translation
                         else begin
-                            ptw_stage_d = STAGE_2_FINAL;
+                            ptw_stage_n = STAGE_2_FINAL;
                             ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
                         end
 
@@ -355,7 +355,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     
                     // Stage 1 only
                     else begin
-                        ptw_stage_d = STAGE_1;
+                        ptw_stage_n = STAGE_1;
                         ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
                     end
 
@@ -363,7 +363,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     iotlb_update_pscid_n   = pscid_i;
                     iotlb_update_gscid_n   = gscid_i;
                     iova_n                 = req_iova_i;
-                    state_d                = WAIT_GRANT;
+                    state_n                = WAIT_GRANT;
                     // iotlb_miss_o        = 1'b1;     // to HPM
                 end
             end
@@ -376,7 +376,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 if (mem_resp_i.data_gnt) begin
                     // send the tag valid signal to request bus, one cycle later
                     tag_valid_n = 1'b1;
-                    state_d     = PTE_LOOKUP;
+                    state_n     = PTE_LOOKUP;
                 end
             end
 
@@ -387,30 +387,41 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                     //# MSI address translation
                     if (msi_translation_q) begin
-                        state_d = IDLE;
+                        state_n = IDLE;
                         
                         // Invalid MSI PTE
                         // "If msipte.V == 0, then stop and report "MSI PTE not valid" (cause = 262)"
                         // This implementation will only support standard MSI PTE formats (msi_pte.c = 0)
-                        if (!msi_pte.v || msi_pte.c)
-                            state_d = PROPAGATE_ERROR;
+                        if (!msi_pte.v || msi_pte.c) begin
+                            cause_code_o = iommu_pkg::MSI_PTE_INVALID;
+                            state_n = PROPAGATE_ERROR;
+
+                            if (dtf_i) state_n = IDLE;
+                        end
 
                         else begin
-                            // MSI translation successful
                             msi_content_valid_o = 1'b1;
 
                             // TODO: For now, only write-through mode for MSI translation is supported. In the future, implement MRIF mode.
-                            if (msi_pte.m != 2'b11) begin
+                            if (msi_pte.m != iommu_pkg::WRITE_THROUGH) begin
                                 msi_content_valid_o = 1'b0;
-                                state_d = PROPAGATE_ERROR;
+                                cause_code_o = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                                state_n = PROPAGATE_ERROR;
+
+                                if (dtf_i) state_n = IDLE;
                             end
 
                             // "If any bits or encoding that are reserved for future standard use are set within msipte," 
                             // "stop and report "MSI PTE misconfigured" (cause = 263)."
                             if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2))begin
                                 msi_content_valid_o = 1'b0;
-                                state_d = PROPAGATE_ERROR;
+                                cause_code_o = iommu_pkg::MSI_PTE_MISCONFIGURED;
+                                state_n = PROPAGATE_ERROR;
+
+                                if (dtf_i) state_n = IDLE;
                             end
+
+                            // MSI translation successful
                         end
                     end
 
@@ -422,14 +433,18 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             global_mapping_n = 1'b1;
 
                         // Invalid PTE
-                        // If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception.
-                        if (!pte.v || (!pte.r && pte.w))
-                            state_d = PROPAGATE_ERROR;
+                        // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
+                        if (!pte.v || (!pte.r && pte.w)) begin
+                            if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                            else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                            state_n = PROPAGATE_ERROR;
                             
+                            if (dtf_i) state_n = IDLE;
+                        end
 
                         //# Valid PTE
                         else begin
-                            state_d = IDLE;
+                            state_n = IDLE;
 
                             //# Leaf PTE
                             if (pte.r || pte.x) begin
@@ -439,8 +454,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     STAGE_1: begin
                                         // If second-stage translation is enabled
                                         if (en_stage2_i) begin
-                                            state_d = WAIT_GRANT;
-                                            gpte_d = pte;                   // save GPA to update in TLB
+                                            state_n = WAIT_GRANT;
+                                            gpte_n = pte;                   // save GPA to update in TLB
                                             gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
                                             gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};    // construct FINAL GPA
 
@@ -459,7 +474,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                                             // Proceed with normal second-stage translation
                                             else begin
-                                                ptw_stage_d = STAGE_2_FINAL;
+                                                ptw_stage_n = STAGE_2_FINAL;
                                                 ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpaddr[riscv::SVX-1:30], 3'b0};
                                                 ptw_lvl_n = LVL1;
                                             end
@@ -469,8 +484,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     // triggered when valid G-stage PTE is found, without being the last level of VS
                                     //# S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages
                                     STAGE_2_INTERMED: begin
-                                        state_d = WAIT_GRANT;
-                                        ptw_stage_d = STAGE_1;
+                                        state_n = WAIT_GRANT;
+                                        ptw_stage_n = STAGE_1;
                                         ptw_lvl_n = gptw_lvl_q;     // equalized to avoid comparing two types of level
                                         pptr = {pte.ppn[riscv::GPPNW-1:0], gptw_pptr_q[11:0]};  // join lvlx PPN with lvlx GPA's offset
                                         // Consider case of superpages
@@ -492,16 +507,26 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 // "If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
                                 // "Stop and raise a page-fault exception corresponding to the original access type."
                                 if (ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) begin         // 1G
-                                    state_d             = PROPAGATE_ERROR;
-                                    ptw_stage_d         = ptw_stage_q;
+                                    
+                                    if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                                    else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                                    state_n             = PROPAGATE_ERROR;
+                                    ptw_stage_n         = ptw_stage_q;
+                                    
+                                    if (dtf_i) state_n = IDLE;
                                     update_o = 1'b0;
-                                end 
+                                end
                                 else begin
                                     if (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0) begin      // 2M
-                                    state_d             = PROPAGATE_ERROR;
-                                    ptw_stage_d         = ptw_stage_q;
-                                    update_o = 1'b0;
+                                        if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                                        else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                                        state_n             = PROPAGATE_ERROR;
+                                        ptw_stage_n         = ptw_stage_q;
+
+                                        if (dtf_i) state_n = IDLE;
+                                        update_o = 1'b0;
                                     end
+
                                     else if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) begin
                                         update_o = 1'b1;
                                     end
@@ -517,8 +542,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             //             - S-mode transaction. PTE has U=1 and x=1;
                             //     */
                             //     if (!pte.a || !pte.r || (priv_mode_i == riscv::PRIV_LVL_S && pte.u && (!sum_i || pte.x))) begin
-                            //         state_d   = PROPAGATE_ERROR;
-                            //         ptw_stage_d = ptw_stage_q;
+                            //         state_n   = PROPAGATE_ERROR;
+                            //         ptw_stage_n = ptw_stage_q;
                             //     end else begin
                             //         if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i)
                             //             update_o = 1'b1;
@@ -528,8 +553,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             //     // the same applies if the dirty flag is not set (for now...)
                             //     if (is_store && (!pte.w || !pte.d)) begin
                             //         dtlb_update_o.valid = 1'b0;
-                            //         state_d   = PROPAGATE_ERROR;
-                            //         ptw_stage_d = ptw_stage_q;
+                            //         state_n   = PROPAGATE_ERROR;
+                            //         ptw_stage_n = ptw_stage_q;
                             //     end
 
                             end
@@ -544,8 +569,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         //# S1-L1
                                         STAGE_1: begin
                                             if (en_stage2_i) begin
-                                                ptw_stage_d = STAGE_2_INTERMED;
-                                                gpte_d = pte;   // PTE representing the GPA base pointer
+                                                ptw_stage_n = STAGE_2_INTERMED;
+                                                gpte_n = pte;   // PTE representing the GPA base pointer
                                                 gptw_lvl_n = LVL2;  // update VS level
                                                 pptr = {pte.ppn, iova_q[29:21], 3'b0};     // join GPA base pointer with VPN[1] => GPA lvl2
                                                 gptw_pptr_n = pptr;     // update GPA for new level
@@ -576,8 +601,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         //# S1-L2
                                         STAGE_1: begin
                                             if (en_stage2_i) begin
-                                                ptw_stage_d = STAGE_2_INTERMED;
-                                                gpte_d = pte;
+                                                ptw_stage_n = STAGE_2_INTERMED;
+                                                gpte_n = pte;
                                                 gptw_lvl_n = LVL3;
                                                 pptr = {pte.ppn, iova_q[20:12], 3'b0};
                                                 gptw_pptr_n = pptr;
@@ -601,22 +626,29 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     endcase
                                 end
 
-                                state_d = WAIT_GRANT;
+                                state_n = WAIT_GRANT;
 
                                 // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
                                 // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
                                 if(pte.a || pte.d || pte.u) begin
-                                    state_d = PROPAGATE_ERROR;
-                                    ptw_stage_d = ptw_stage_q;
+                                    if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                                    else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                                    state_n = PROPAGATE_ERROR;
+                                    ptw_stage_n = ptw_stage_q;
+                                    
+                                    if (dtf_i) state_n = IDLE;
                                 end
 
-                                //  "Otherwise, this PTE is a pointer to the next level of the page table."
-                                //  "Let i = i − 1. If i < 0, stop and raise a page-fault exception corresponding to the original access type."
+                                //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
+                                //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                                 if (ptw_lvl_q == LVL3) begin
-                                // Should already be the last level page table => Error
-                                ptw_lvl_n   = LVL3;
-                                state_d = PROPAGATE_ERROR;
-                                ptw_stage_d = ptw_stage_q;
+                                    if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                                    else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                                    ptw_lvl_n   = LVL3;
+                                    state_n = PROPAGATE_ERROR;
+                                    ptw_stage_n = ptw_stage_q;
+                                    
+                                    if (dtf_i) state_n = IDLE;
                                 end
                             end
                         end
@@ -624,49 +656,67 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
                         // Svnapot and Svpbmt are not implemented
                         if ((|pte.reserved) != 1'b0) begin
-                            state_d = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_d = ptw_stage_q;
+                            if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                            else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                            state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                            ptw_stage_n = ptw_stage_q;
+
+                            if (dtf_i) state_n = IDLE;
                             update_o = 1'b0;
                         end
 
                         // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                         if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                            state_d = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_d = ptw_stage_q;
+                            if (is_store_i) cause_code_o = iommu_pkg::STORE_GUEST_PAGE_FAULT;
+                            else            cause_code_o = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
+                            state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                            ptw_stage_n = ptw_stage_q;
+
+                            if (dtf_i) state_n = IDLE;
                             update_o = 1'b0;
                         end
                     end
                     
                     // Check if this access was actually allowed from a PMP perspective
                     if (!allow_access) begin
-
+                        
+                        // Normal address translation
                         if(!msi_translation_q) begin
+                            // "If accessing pte violates a PMA or PMP check, raise an access-fault exception corresponding to the original access type."
+                            if (is_store_i) cause_code_o = iommu_pkg::ST_ACCESS_FAULT;
+                            else            cause_code_o = iommu_pkg::LD_ACCESS_FAULT;
                             update_o = 1'b0;
-                            ptw_stage_d = ptw_stage_q;
+                            ptw_stage_n = ptw_stage_q;
                         end
 
+                        // MSI address translation
+                        else cause_code_o = iommu_pkg::MSI_PTE_LD_ACCESS_FAULT;
                         // we have to return the failed address in bad_addr
                         ptw_pptr_n = ptw_pptr_q;
-                        state_d = PROPAGATE_ACCESS_ERROR;
+                        state_n = PROPAGATE_ACCESS_ERROR;
+
+                        if (dtf_i) state_n = IDLE;
                     end
                 end
             end
 
-            // Propagate error to MMU/LSU
+            // Propagate error to IOMMU
+            // TODO: Maybe we won't need these states as we are encoding and propagating the fault cause.
+            // We do need to propagate the bad GPA
             PROPAGATE_ERROR: begin
-                state_d     = IDLE;
+                state_n     = IDLE;
                 ptw_error_o = 1'b1;
                 ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
                 ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
             end
 
             PROPAGATE_ACCESS_ERROR: begin
-                state_d     = IDLE;
+                state_n     = IDLE;
                 ptw_iopmp_excep_o = 1'b1;
             end
 
             default: begin
-                state_d = IDLE;
+                state_n = IDLE;
             end
         endcase
     end
@@ -692,8 +742,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             data_rvalid_q           <= 1'b0;
 
         end else begin
-            state_q                 <= state_d;
-            ptw_stage_q             <= ptw_stage_d;
+            state_q                 <= state_n;
+            ptw_stage_q             <= ptw_stage_n;
             ptw_pptr_q              <= ptw_pptr_n;
             gptw_pptr_q             <= gptw_pptr_n;
             ptw_lvl_q               <= ptw_lvl_n;
@@ -706,7 +756,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             global_mapping_q        <= global_mapping_n;
             msi_translation_q       <= msi_translation_n;
             data_rdata_q            <= mem_resp_i.data_rdata;
-            gpte_q                  <= gpte_d;
+            gpte_q                  <= gpte_n;
             data_rvalid_q           <= mem_resp_i.data_rvalid;
         end
     end

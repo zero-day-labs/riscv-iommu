@@ -131,13 +131,20 @@ package iommu_pkg;
     //#  MSI Address Translation
     //--------------------------
 
+    typedef enum logic [1:0] {
+        RSV_1           = 2'b00;
+        MRIF            = 2'b01;
+        RSV_2           = 2'b10;
+        WRITE_THROUGH   = 2'b11;
+    } msi_pte_mode_e;
+
     // MSI PTE (Write-through mode)
     typedef struct packed {
         logic           c;
         logic [8:0]     reserved_2;
         logic [44-1:0]  ppn;
         logic [6:0]     reserved_1;
-        logic [1:0]     m;
+        msi_pte_mode_e  m;
         logic           v;
     } msi_wt_pte_t;
 
@@ -152,9 +159,54 @@ package iommu_pkg;
         logic [8:0]     reserved_2;
         logic [47-1:0]  ppn;
         logic [3:0]     reserved_1;
-        logic [1:0]     m;
+        msi_pte_mode_e  m;
         logic           v;
     } msi_mrif_pte_t;
+
+    //-----------------------------
+    //#  IOMMU fault CAUSE encoding
+    //-----------------------------
+
+    // max 12 bits to encode CAUSE
+    // cause encondings 275 to 2047 are reserved. Encodings 2048 through 4095 are for custom use.
+    localparam CAUSE_LEN = 12;
+
+    // Fault/event cases
+    localparam logic [CAUSE_LEN-1:0] INSTR_ACCESS_FAULT     = 1;  // Illegal access as governed by PMPs and PMAs
+    localparam logic [CAUSE_LEN-1:0] LD_ADDR_MISALIGNED     = 4;  // Read address misaligned
+    localparam logic [CAUSE_LEN-1:0] LD_ACCESS_FAULT        = 5;  // Illegal access as governed by PMPs and PMAs
+    localparam logic [CAUSE_LEN-1:0] ST_ADDR_MISALIGNED     = 6;  // Write/AMO address misaligned
+    localparam logic [CAUSE_LEN-1:0] ST_ACCESS_FAULT        = 7;  // Illegal write/AMO access as governed by PMPs and PMAs
+    localparam logic [CAUSE_LEN-1:0] INSTR_PAGE_FAULT       = 12; // Instruction page fault
+    localparam logic [CAUSE_LEN-1:0] LOAD_PAGE_FAULT        = 13; // Load/read page fault
+    localparam logic [CAUSE_LEN-1:0] STORE_PAGE_FAULT       = 15; // Store/write/AMO page fault
+    localparam logic [CAUSE_LEN-1:0] INSTR_GUEST_PAGE_FAULT = 20; // Instruction guest page fault
+    localparam logic [CAUSE_LEN-1:0] LOAD_GUEST_PAGE_FAULT  = 21; // Load/read guest-page fault
+    localparam logic [CAUSE_LEN-1:0] STORE_GUEST_PAGE_FAULT = 23; // Store/write/AMO guest-page fault
+
+    // Extended IOMMU fault cases (include in riscv_pkg ???)
+    localparam logic [CAUSE_LEN-1:0] ALL_INB_TRANSACTIONS_DISALLOWED    = 256;  // IOMMU off / ATS requested and not supported
+    localparam logic [CAUSE_LEN-1:0] DDT_ENTRY_LD_ACCESS_FAULT          = 257;  // PMP/PMA fault when accessing 'ddtp' or 'DC' 
+    localparam logic [CAUSE_LEN-1:0] DDT_ENTRY_INVALID                  = 258;  // When either 'ddtp' or 'DC' are not valid
+    localparam logic [CAUSE_LEN-1:0] DDT_ENTRY_MISCONFIGURED            = 259;  // Configuration checks failed (See section 2.1.4)
+    localparam logic [CAUSE_LEN-1:0] TRANS_TYPE_DISALLOWED              = 260;
+    localparam logic [CAUSE_LEN-1:0] MSI_PTE_LD_ACCESS_FAULT            = 261;  // PMP/PMA checkn fault when accessing MSI PTE
+    localparam logic [CAUSE_LEN-1:0] MSI_PTE_INVALID                    = 262;
+    localparam logic [CAUSE_LEN-1:0] MSI_PTE_MISCONFIGURED              = 263;
+    localparam logic [CAUSE_LEN-1:0] MRIF_ACCESS_FAULT                  = 264;
+    localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_LD_ACCESS_FAULT          = 265;
+    localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_INVALID                  = 266;
+    localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_MISCONFIGURED            = 267;
+    localparam logic [CAUSE_LEN-1:0] DDT_DATA_CORRUPTION                = 268;  //? What is the difference between data corruption and misconfigured ?
+    localparam logic [CAUSE_LEN-1:0] PDT_DATA_CORRUPTION                = 269;
+    localparam logic [CAUSE_LEN-1:0] MSI_PT_DATA_CORRUPTION             = 270;
+    localparam logic [CAUSE_LEN-1:0] MSI_MRIF_DATA_CORRUPTION           = 271;
+    localparam logic [CAUSE_LEN-1:0] INTERN_DATAPATH_FAULT              = 272;
+    localparam logic [CAUSE_LEN-1:0] MSI_ST_ACCESS_FAULT                = 273;
+    localparam logic [CAUSE_LEN-1:0] PT_DATA_CORRUPTION                 = 274;
+
+    // TODO: Transaction type encoding
+
 
     //--------------------------
     //#  IOMMU functions
