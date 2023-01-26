@@ -18,81 +18,94 @@
 
 package iommu_pkg;
 
-    //------------------------
-    //#  Device Context Fields
-    //------------------------
+    // Device Context max length
+    localparam DEV_ID_MAX_LEN   = 24;
+    localparam PROC_ID_MAX_LEN  = 20;
 
     // to identify memory accesses to virtual guest interrupt files
     localparam MSI_MASK_LEN     = 52;
     localparam MSI_PATTERN_LEN  = 52;
 
+    //------------------------
+    //#  Context Fields
+    //------------------------
+
     // MSI Address Pattern
     typedef struct packed {
-        logic [11:0] reserved;
-        logic [(MSI_PATTERN_LEN-1):0] pattern;
+        logic [11:0]                    reserved;
+        logic [(MSI_PATTERN_LEN-1):0]   pattern;
     } msi_addr_pattern_t;
 
     // MSI Address Mask
     typedef struct packed {
-        logic [11:0] reserved;
-        logic [(MSI_MASK_LEN-1):0] mask;
+        logic [11:0]                reserved;
+        logic [(MSI_MASK_LEN-1):0]  mask;
     } msi_addr_mask_t;
 
     // MSI Page Table Pointer
     typedef struct packed {
-        logic [3:0] mode;
-        logic [15:0] reserved;
-        logic [43:0] ppn;
+        logic [3:0]     mode;
+        logic [15:0]    reserved;
+        logic [43:0]    ppn;
     } msiptp_t;
 
     // First Stage Context
     typedef struct packed {
-        logic [3:0] mode;
-        logic [15:0] reserved;
-        logic [43:0] ppn;
+        logic [3:0]     mode;
+        logic [15:0]    reserved;
+        logic [43:0]    ppn;
     } fsc_t;
 
     // Translation Attributes for Device Context
     typedef struct packed {
-        logic [31:0] reserved_1;
+        logic [31:0] reserved_2;
         logic [19:0] pscid;
-        logic [11:0] reserved_2;
+        logic [11:0] reserved_1;
     } dc_ta_t;
 
     // Translation Attributes for Process Context
     typedef struct packed {
-        logic [31:0] reserved_1;
-        logic [19:0] pscid;
-        logic [8:0] reserved_2;
-        logic sum;
-        logic ens;
-        logic v;
+        logic [31:0]    reserved_2;
+        logic [19:0]    pscid;
+        logic [8:0]     reserved_1;
+        logic           sum;
+        logic           ens;
+        logic           v;
     } pc_ta_t;
 
     // IO Hypervisor Guest Address Translation and Protection
     typedef struct packed {
-        logic [3:0] mode;
-        logic [15:0] gscid;
-        logic [43:0] ppn;
+        logic [3:0]     mode;
+        logic [15:0]    gscid;
+        logic [43:0]    ppn;
     } iohgatp_t;
 
     // Translation Control
    typedef struct packed {
-        logic [31:0] custom;
-        logic [19:0] reserved;
-        logic sxl;
-        logic sbe;
-        logic dpe;
-        logic sade;
-        logic gade;
-        logic prpr;
-        logic pdtv;
-        logic dtf;
-        logic t2gpa;
-        logic en_pri;
-        logic en_ats;
-        logic v;
+        logic [31:0]    reserved_2;
+        logic [7:0]     custom;
+        logic [11:0]    reserved_1;
+        logic           sxl;
+        logic           sbe;
+        logic           dpe;
+        logic           sade;
+        logic           gade;
+        logic           prpr;
+        logic           pdtv;
+        logic           dtf;
+        logic           t2gpa;
+        logic           en_pri;
+        logic           en_ats;
+        logic           v;
    } tc_t;
+
+   // Non-leaf DDT/PDT entry (64-bits)
+    typedef struct packed {
+        logic [9:0]     reserved_2;
+        logic [43:0]    ppn;
+        logic [8:0]     reserved_1;
+        logic           v;
+    } nl_entry_t;
 
     //--------------------------
     //#  Device Context Structs
@@ -100,22 +113,22 @@ package iommu_pkg;
 
     // Base format Device Context
     typedef struct packed {
-        fsc_t fsc;
-        dc_ta_t ta;
-        iohgatp_t iohgatp;
-        tc_t tc;
+        fsc_t       fsc;
+        dc_ta_t     ta;
+        iohgatp_t   iohgatp;
+        tc_t        tc;
     } dc_base_t;
     
     // Extended format Device Context
     typedef struct packed {
-        logic [63:0] rsvd;
-        msi_addr_pattern_t msi_addr_pattern;
-        msi_addr_mask_t msi_addr_mask;
-        msiptp_t msiptp;
-        fsc_t fsc;
-        dc_ta_t ta;
-        iohgatp_t iohgatp;
-        tc_t tc;
+        logic [63:0]        reserved;
+        msi_addr_pattern_t  msi_addr_pattern;
+        msi_addr_mask_t     msi_addr_mask;
+        msiptp_t            msiptp;
+        fsc_t               fsc;
+        dc_ta_t             ta;
+        iohgatp_t           iohgatp;
+        tc_t                tc;
     } dc_ext_t;
 
     //--------------------------
@@ -124,7 +137,7 @@ package iommu_pkg;
 
     // Process Context
     typedef struct packed {
-        fsc_t fsc;
+        fsc_t   fsc;
         pc_ta_t ta;
     } pc_t;
 

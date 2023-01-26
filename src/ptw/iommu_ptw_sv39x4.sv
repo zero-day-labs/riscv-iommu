@@ -34,8 +34,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
-    // TODO: integrate DTF bit functionality
-    // TODO: Add cause encoding signal
     input  logic                                dtf_i,                  // DTF bit from DC. Disables reporting of translation process faults
     output logic                                ptw_active_o,           // Set when PTW is walking memory
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
@@ -45,6 +43,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
     // TODO: Integrate functional IOPMP
 
+    //! External logic should check if associated DC defines Sv39/Sv39x4 as translation scheme
+    //! Otherwise, the PTW should not be even triggered
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
     input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
@@ -325,6 +325,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 gpte_n              = '0;
 
                 // check for possible IOTLB miss
+                //! If translation scheme defined by DC/PC is not Sv39/Sv39x4, PTW should not be triggered
+                //! IOMMU (external logic) should respond with corresponding fault code
                 if ((en_stage1_i | en_stage2_i) & iotlb_access_i & ~iotlb_hit_i) begin
 
                     // Two-stage
