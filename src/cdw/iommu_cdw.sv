@@ -18,78 +18,70 @@
 
 //# Disabled verilator_lint_off WIDTH
 
-module iommu_ptw_sv39x4 import ariane_pkg::*; #(
-        parameter int PSCID_WIDTH = 1,
-        parameter int GSCID_WIDTH = 1,
+module iommu_cdw import ariane_pkg::*; #(
+        parameter int unsigned DEVICE_ID_WIDTH = 24,
+        parameter int unsigned PROCESS_ID_WIDTH  = 20,
         parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
-    output logic                    ptw_active_o,           // Set when PTW is walking memory
-    output logic                    ptw_error_o,            // set when an error occurred (excluding access errors)
-    output logic                    ptw_error_stage2_o,     // set when the fault occurred in stage 2
-    output logic                    ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
-    output logic                    ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
-    // TODO: Integrate IOPMP developed by ETH
+    input  logic                                dtf_i,                  // DTF bit from DC. Disables reporting of translation process faults
+    output logic                                cdw_active_o,           // Set when PTW is walking memory
+    output logic                                cdw_error_o,            // set when an error occurred
+    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,           // Fault code as defined by IOMMU and Priv Spec
+    // TODO: Integrate functional IOPMP
 
-    input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
-    input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
-    input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
+    // Leaf checks
+    // DC checks
+    input  logic        caps_ats_i,
+    input  logic        caps_t2gpa_i,
+    input  logic        caps_pd20_i, caps_pd17_i, caps_pd8_i,
+    input  logic        caps_sv32_i, caps_sv39_i, caps_sv48_i, caps_sv57_i,
+    input  logic        fctl_glx, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
+    input  logic        caps_msi_flat_i,
+    input  logic        caps_amo_i,
+    input  logic        caps_end_i, fctl_be_i,
+
+    // PC checks
+    input  logic        dc_sxl,
+
+    // Indicate whether this translation was triggered by a store or a load
+    input  logic                    is_store_i,
 
     // PTW memory interface
     input  dcache_req_o_t           mem_resp_i,             // Response port from memory
     output dcache_req_i_t           mem_req_o,              // Request port to memory
 
-    // to IOTLB, update logic
-    // TODO: Update signals will be grouped in a packed struct after validation with cocotb
-    output  logic                    update_o,
-    output  logic                    up_is_s_2M_o,
-    output  logic                    up_is_s_1G_o,
-    output  logic                    up_is_g_2M_o,
-    output  logic                    up_is_g_1G_o,
-    output  logic [riscv::GPPNW-1:0] up_vpn_o,
-    output  logic [PSCID_WIDTH-1:0]  up_pscid_o,
-    output  logic [GSCID_WIDTH-1:0]  up_gscid_o,
-    output riscv::pte_t              up_content_o,
-    output riscv::pte_t              up_g_content_o,
+    // Update logic
+    output  logic                           update_dc_o,
+    output  logic [DEVICE_ID_WIDTH-1:0]     up_did_o,
+    output  iommu_pkg::dc_ext_t             up_dc_content_o,
 
-    // output tlb_update_sv39x4_t      itlb_update_o,
-    // output tlb_update_sv39x4_t      dtlb_update_o,
+    output logic                            update_pc_o,
+    output  logic [PROCESS_ID_WIDTH-1:0]    up_pid_o,
+    output iommu_pkg::pc_t                  up_pc_content_o,
 
-    output logic [riscv::VLEN-1:0]  iotlb_update_iova_o,
+    // CDC tags
+    input  logic [iommu_pkg::DEV_ID_MAX_LEN-1:0]  req_cid_i,    // device/process ID associated with request
 
-    // from DC/PC
-    input  logic [PSCID_WIDTH-1:0]   pscid_i,
-    input  logic [GSCID_WIDTH-1:0]   gscid_i,
-    
-    // permission checks (//? I think should be performed outside the PTW)
-    // input  logic                     sum_i,         // Supervisor Memory Access for User pages
-    // input  logic [1:0]               priv_mode_i,   // transaction privilege mode
-    //? I think ENS bit checking should be performed by external translation logic since it has nothing to do with PTEs
+    // from DDTC / PDTC, to monitor misses
+    input  logic                        ddtc_access_i,
+    input  logic                        ddtc_hit_i,
 
-    // from IOTLB, to monitor misses
-    input  logic                    iotlb_access_i,
-    input  logic                    iotlb_hit_i,
-    input  logic [riscv::VLEN-1:0]  req_iova_i,
+    input  logic                        pdtc_access_i,
+    input  logic                        pdtc_hit_i,
 
-    // from DC/PC file
-    input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
-    input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp
+    // from regmap
+    input  logic [riscv::PPNW-1:0]  ddtp_ppn_i,     // PPN from ddtp register
+    input  logic [3:0]              ddtp_mode_i,    // DDT levels and IOMMU mode
 
-    /*
-    The MXR (Make eXecutable Readable) bit modifies the privilege with which loads access virtual memory. 
-    When MXR=0, only loads from pages marked readable will succeed. When MXR=1, loads from pages marked 
-    either readable or executable (R=1 or X=1) will succeed.
-
-    The SUM (permit Supervisor User Memory access) bit modifies the privilege with which S-mode
-    loads and stores access virtual memory. When SUM=0, S-mode memory accesses to pages that are
-    accessible by U-mode will fault. When SUM=1, these accesses are permitted.
-    Note that S-mode can never execute instructions from user pages, regardless of the state of SUM.
-    */
-    input  logic                    mxr_i,
-    input  logic                    vmxr_i,
+    // from DC (for PC walks)
+    //! Similarly to the PTW, we only want to know if second stage is enabled. External logic should verify the scheme...
+    input  logic                    en_stage2_i,    // Second-stage translation is enabled
+    input  logic [riscv::PPNW-1:0]  pdtp_ppn_i,     // PPN from DC.fsc.PPN
+    input  logic [3:0]              pdtp_mode_i,    // PDT levels from DC.fsc.MODE
 
     // TODO: include HPM
     // // Performance counters
@@ -99,121 +91,119 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // (IO)PMP
     input  riscv::pmpcfg_t [15:0]           conf_reg_i,
     input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
-    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of access error
+    output logic [riscv::PLEN-1:0]         bad_paddr_o    // to return the SPA in case of access error
 );
 
-    // input registers to receive data from memory i guess
+    // input registers to receive data from memory
     logic data_rvalid_q;
     logic [63:0] data_rdata_q;
 
-    riscv::pte_t pte;
-    // register to perform context switch between stages
-    riscv::pte_t gpte_q, gpte_d;    // gpte is only used to store GPA to be updated in the IOTLB
-    assign pte = riscv::pte_t'(data_rdata_q);
+    // DC/PC Update register
+    iommu_pkg::dc_ext_t dc_q, dc_n;
+    iommu_pkg::pc_t pc_q, pc_n;
+
+    // Cast read port to corresponding data structure
+    iommu_pkg::nl_entry_t nl;
+    iommu_pkg::tc_t dc_tc;
+    iommu_pkg::iohgatp_t dc_iohgatp;
+    iommu_pkg::dc_ta_t dc_ta;
+    iommu_pkg::fsc_t dc_fsc;
+    iommu_pkg::msiptp_t dc_msiptp;
+    iommu_pkg::msi_addr_mask_t dc_msi_addr_mask;
+    iommu_pkg::msi_addr_pattern_t dc_msi_addr_patt;
+    iommu_pkg::pc_ta_t pc_ta;
+    iommu_pkg::fsc_t pc_fsc;
+
+    assign dc_tc = iommu_pkg::tc_t'(data_rdata_q);
+    assign dc_iohgatp = iommu_pkg::iohgatp_t'(data_rdata_q);
+    assign dc_ta = iommu_pkg::dc_ta_t'(data_rdata_q);
+    assign dc_fsc = iommu_pkg::fsc_t'(data_rdata_q);
+    assign dc_msiptp = iommu_pkg::msiptp_t'(data_rdata_q);
+    assign dc_msi_addr_mask = iommu_pkg::msi_addr_mask_t'(data_rdata_q);
+    assign dc_msi_addr_patt = iommu_pkg::msi_addr_pattern_t'(data_rdata_q);
+    assign pc_ta = iommu_pkg::pc_ta_t'(data_rdata_q);
+    assign pc_fsc = iommu_pkg::fsc_t'(data_rdata_q);
+
+    //! Nope, DC is 8-DW wide, PC is 2-DW wide, and CVA6 read bursts are 64-bits wide. Read is performed sequentially in the FSM
+    // assign dc = iommu_pkg::dc_ext_t'(data_rdata_q);
+    // assign pc = iommu_pkg::pc_t'(data_rdata_q);
+
+    assign nl = iommu_pkg::nl_entry_t'(data_rdata_q);
+    
 
     // PTW states
-    enum logic[2:0] {
+    typedef enum logic[2:0] {
       IDLE,
-      WAIT_GRANT,
-      PTE_LOOKUP,
-      PROPAGATE_ERROR,
-      PROPAGATE_ACCESS_ERROR
-    } state_q, state_d;
+      MEM_ACCESS,
+      NON_LEAF,
+      LEAF,
+      GUEST_TR,
+      ERROR
+    } state_t;
+    
+    state_t state_q, state_n;
 
-    // Page levels: 3 for Sv39x4
-    enum logic [1:0] {
-        LVL1, LVL2, LVL3
-    } ptw_lvl_q, ptw_lvl_n, gptw_lvl_n, gptw_lvl_q;     // GPTW_LVL is stage-1, PTW_LVL is stage-2
+    // IOMMU mode and DDT/PDT levels
+    typedef enum logic [1:0] {
+        OFF, BARE, LVL1, LVL2, LVL3
+    } level_t;
+    
+    level_t cdw_lvl_q, cdw_lvl_n;
 
-    // define 3 PTW stages
-    // STAGE_1 -> Stage-1 normal translation controlled by iosatp
-    // STAGE_2_INTERMED -> Converts the stage-1 non-leaf GPA pointers to SPA (controlled by iohgatp)
-    // STAGE_2_FINAL -> Converts the stage-1 leaf GPA to SPA (controlled by iohgatp)
-    enum logic [1:0] {
-        STAGE_1,
-        STAGE_2_INTERMED,
-        STAGE_2_FINAL
-    } ptw_stage_q, ptw_stage_d;
+    // Propagate miss source to update later
+    logic is_ddt_walk_q, is_ddt_walk_n;
 
-    // global mapping aux signal
-    logic global_mapping_q, global_mapping_n;
     // latched tag signal
     logic tag_valid_n,      tag_valid_q;
-    // to register PSCID to be updated
-    logic [PSCID_WIDTH-1:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
-    // to register GSCID to be updated
-    logic [GSCID_WIDTH-1:0]  iotlb_update_gscid_q, iotlb_update_gscid_n;
-    // to register the input GVA (VPNs). SV39x4 defines a 39 bit virtual address for first stage
-    logic [riscv::VLEN-1:0] iova_q,   iova_n;
-    // to register the final leaf GPA (GPPNs). SV39x4 defines a 41 bit GPA for second stage
-    logic [riscv::GPLEN-1:0] gpaddr_q, gpaddr_n;
-    // 4 byte aligned physical pointer
-    logic [riscv::PLEN-1:0] ptw_pptr_q, ptw_pptr_n;     // address used to access (read memory)
-    logic [riscv::PLEN-1:0] gptw_pptr_q, gptw_pptr_n;   // contains GPA of non-leaf entries of VS-stage page tables (direct GPA from iovsatp in the first iteration)
 
-    // Assignments
-    assign iotlb_update_iova_o  = iova_q;
+    // Save and propagate the input device_id/process id to walk multiple levels
+    logic [iommu_pkg::DEV_ID_MAX_LEN-1:0] context_id_q, context_id_n;
+
+    // Physical pointer to access memory bus
+    logic [riscv::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
+
+    // Last DDT/PDT level
+    logic is_last_cdw_lvl;
+
+    // It's not possible to load the entire DC/PC in one request.
+    // Aux counter to know how many DWs we have loaded
+    // 3-bit wide since we are not counting the reserved DW of the DC
+    logic [2:0] entry_cnt_q, entry_cnt_n;
+    logic dc_fully_loaded, pc_fully_loaded;
+
+    // Cause propagation
+    logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
+
     // PTW walking
-    assign ptw_active_o    = (state_q != IDLE);
+    assign cdw_active_o    = (state_q != IDLE);
+    // Last CDW level
+    assign is_last_cdw_lvl = (cdw_lvl_q == LVL1);
+    // Determine whether we have loaded the entire DC/PC
+    assign dc_fully_loaded = (entry_cnt_q == 3'b111);  // extended format w/out reserved DW (64-8 = 56 bytes)
+    assign pc_fully_loaded = (entry_cnt_q == 3'b010);  // always 16-bytes
+
+    // Memory bus
     // directly output the correct physical address
-    assign mem_req_o.address_index = ptw_pptr_q[DCACHE_INDEX_WIDTH-1:0];
-    assign mem_req_o.address_tag   = ptw_pptr_q[DCACHE_INDEX_WIDTH+DCACHE_TAG_WIDTH-1:DCACHE_INDEX_WIDTH];
+    assign mem_req_o.address_index = cdw_pptr_q[DCACHE_INDEX_WIDTH-1:0];
+    assign mem_req_o.address_tag   = cdw_pptr_q[DCACHE_INDEX_WIDTH+DCACHE_TAG_WIDTH-1:DCACHE_INDEX_WIDTH];
     // we are never going to kill this request
     assign mem_req_o.kill_req      = '0;
     // we are never going to write with the HPTW
     assign mem_req_o.data_wdata    = 64'b0;
 
-    //# IOTLB Update combinational logic
-    always_comb begin : iotlb_update
-        
-        // vpn to be updated in the IOTLB
-        up_vpn_o = {{41-riscv::SVX{1'b0}}, iova_q[riscv::SVX-1:12]};
+    // -------------------
+    //# DDTC / PDTC Update
+    // -------------------
+    assign up_did_o = context_id_q;
+    assign up_dc_content_o = dc_q;
+    assign up_pid_o = context_id_q;
+    assign up_pc_content_o = pc_q;
 
-        // update page size in the IOTLB according to the level where the leaf PTE was found
-        // LVL3 is 4K, LVL2 is 2M, LVL1 is 1G
-        if(en_stage2_i && en_stage1_i) begin    // two-stage enabled
-            up_is_s_2M_o = (gptw_lvl_q == LVL2);
-            up_is_s_1G_o = (gptw_lvl_q == LVL1);
-            up_is_g_2M_o = (ptw_lvl_q == LVL2);
-            up_is_g_1G_o = (ptw_lvl_q == LVL1);
-        end
-        else if(en_stage1_i) begin              // stage 1 only
-            up_is_s_2M_o = (ptw_lvl_q == LVL2);
-            up_is_s_1G_o = (ptw_lvl_q == LVL1);
-            up_is_g_2M_o = 1'b0;
-            up_is_g_1G_o = 1'b0;
-        end 
-        else begin                              // stage 2 only
-            up_is_s_2M_o = 1'b0;
-            up_is_s_1G_o = 1'b0;
-            up_is_g_2M_o = (ptw_lvl_q == LVL2);
-            up_is_g_1G_o = (ptw_lvl_q == LVL1);
-        end
+    assign req_port_o.tag_valid      = tag_valid_q;
 
-        // Originally two ASIDs were considered: asid and vs_asid
-        up_pscid_o = iotlb_update_pscid_q;
-
-        // GSCID to be updated
-        up_gscid_o = iotlb_update_gscid_q;
-
-        // set the global mapping bit
-        //? Why set the global bit again?
-        if(en_stage2_i) begin   // if stage 2 is enabled
-            up_content_o = gpte_q | (global_mapping_q << 5);
-            up_g_content_o = pte;
-        end else begin          // stage 2 disabled
-            up_content_o = pte | (global_mapping_q << 5);
-            up_g_content_o = '0;
-        end
-    end
-
-    // data memory request port
-    assign mem_req_o.tag_valid      = tag_valid_q;
-
+    // # IOPMP
     logic allow_access;
-
-    // G stage error occurs whenever ptw_stage_q != STAGE_1 in the PROP_ERR state
-    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
+    logic is_access_err_q, is_access_err_n;
 
     // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
     pmp #(
@@ -221,7 +211,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         .PMP_LEN    ( riscv::PLEN - 2        ),
         .NR_ENTRIES ( ArianeCfg.NrPMPEntries )  // 8 entries by default
     ) i_pmp_ptw (
-        .addr_i         ( ptw_pptr_q         ),
+        .addr_i         ( cdw_pptr_q         ),
         .priv_lvl_i     ( riscv::PRIV_LVL_S  ), // PTW access are always checked as if in S-Mode
         .access_type_i  ( riscv::ACCESS_READ ), // PTW only reads
         // Configuration
@@ -241,356 +231,344 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         mem_req_o.data_be      = 8'hFF;
         mem_req_o.data_size    = 2'b11;
         mem_req_o.data_we      = 1'b0;
-        ptw_error_o            = 1'b0;
-        ptw_error_stage2_o     = 1'b0;
-        ptw_error_stage2_int_o = 1'b0;
-        ptw_iopmp_excep_o      = 1'b0;
-        update_o               = 1'b0;
-        ptw_lvl_n              = ptw_lvl_q;
-        gptw_lvl_n             = gptw_lvl_q;
-        ptw_pptr_n             = ptw_pptr_q;
-        gptw_pptr_n            = gptw_pptr_q;
-        state_d                = state_q;
-        ptw_stage_d            = ptw_stage_q;
-        gpte_d                 = gpte_q;
-        global_mapping_n       = global_mapping_q;
+        cdw_error_o            = 1'b0;
+        cause_code_o           = '0;
+        bad_paddr_o            = '0;
+        update_dc_o            = 1'b0;
+        update_pc_o            = 1'b0;
 
-        // input registers
-        iotlb_update_pscid_n   = iotlb_update_pscid_q;
-        iotlb_update_gscid_n   = iotlb_update_gscid_q;
-        iova_n                 = iova_q;
-        gpaddr_n               = gpaddr_q;
-        pptr                   = ptw_pptr_q;
-        gpaddr                 = gpaddr_q;
+        cdw_lvl_n              = cdw_lvl_q;
+        cdw_pptr_n             = cdw_pptr_q;
+        state_n                = state_q;
+        is_ddt_walk_n          = is_ddt_walk_q;
+        entry_cnt_n            = entry_cnt_q;
+        is_access_err_n        = is_access_err_q;
+        cause_n                = cause_q;
+        context_id_n           = context_id_q;
+        dc_n                   = dc_q;
+        pc_n                   = pc_q;
 
         // itlb_miss_o           = 1'b0;
         // dtlb_miss_o           = 1'b0;
 
         case (state_q)
 
-            // check for possible misses to trigger PTW
+            // check for possible misses in Context Directory Caches
             IDLE: begin
-                // by default we start with the top-most page table
-                ptw_lvl_n        = LVL1;
-                gptw_lvl_n       = LVL1;
-                global_mapping_n = 1'b0;
-                gpaddr_n         = '0;
-                gpte_d           = '0;
+                // start with the level indicated by ddtp.MODE
+                cdw_lvl_n       = level_t'(ddtp_mode_i);
+                is_ddt_walk_n   = 1'b0;
+                context_id_n    = req_cid_i;
+                entry_cnt_n     = '0;
 
-                // check for possible IOTLB miss
-                if ((en_stage1_i | en_stage2_i) & iotlb_access_i & ~iotlb_hit_i) begin
-                    if (en_stage1_i && en_stage2_i) begin   // VS && G
-                        // Start in G-L1
-                        ptw_stage_d = STAGE_2_INTERMED;
-                        // Store GPA to be segmented for all three levels of G-stage translation
-                        pptr = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};   //* VS-L1
-                        gptw_pptr_n = pptr;
-                        // Load memory pointer with hgatp and GPPN[2] to access physical memory
-                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
+                // check for DDTC misses
+                //! Simultaneous accesses may occur in the DDTC and PDTC. We need DC to find PC, so first walk DDT.
+                if (ddtc_access_i && ~ddtc_hit_i) begin
+                    
+                    is_ddt_walk_n = 1'b1;
+                    state_n = MEM_ACCESS;
+                    // ddtc_miss_o        = 1'b1;     // to HPM
 
-                    end else if (!en_stage1_i && en_stage2_i) begin     // G only
-                        // Start in final G-L1 stage
-                        ptw_stage_d = STAGE_2_FINAL;
-                        gpaddr_n = req_iova_i[riscv::SVX-1:0]; // virtual address is a valid GPA
-                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
+                    // load pptr according to ddtp.MODE
+                    // 3LVL
+                    if (ddtp_mode_i == 4'b0100)
+                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[23:15], 3'b0};
+                    // 2LVL
+                    else if (ddtp_mode_i == 4'b0011)
+                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[14:6], 3'b0};
+                    // 1LVL
+                    else if (ddtp_mode_i == 4'b0010)
+                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[5:0], 6'b0};
+                end
 
-                    end else begin                      // S/VS only
-                        ptw_stage_d = STAGE_1;
-                        ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
-                    end
-                    // register PSCID, GSCID and IOVA
-                    iotlb_update_pscid_n   = pscid_i;
-                    iotlb_update_gscid_n   = gscid_i;
-                    iova_n                 = req_iova_i;
-                    state_d                = WAIT_GRANT;
-                    // iotlb_miss_o        = 1'b1;     // to HPM
+                // check for PDTC misses
+                else if (pdtc_access_i && ~pdtc_hit_i && ~ddtc_access_i) begin
+                    
+                    state_n = MEM_ACCESS;
+                    cdw_lvl_n       = level_t'(pdtp_mode_i + 1);    // level enconding is different for PDT
+                    // pdtc_miss_o        = 1'b1;     // to HPM
+
+                    // load pptr according to pdtp.MODE
+                    // PD20
+                    if (pdtp_mode_i == 4'b0011)
+                        cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_cid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
+                    // PD17
+                    else if (pdtp_mode_i == 4'b0010)
+                        cdw_pptr_n = {pdtp_ppn_i, req_cid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
+                    // PD8
+                    else if (pdtp_mode_i == 4'b0001)
+                        cdw_pptr_n = {pdtp_ppn_i,req_cid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
                 end
             end
 
-            // perform memory access with address hold in ptw_pptr_q
-            WAIT_GRANT: begin
+            // perform memory access with address hold in cdw_pptr_q
+            MEM_ACCESS: begin
                 // send request to memory
                 mem_req_o.data_req = 1'b1;
-                // wait for the WAIT_GRANT
+                // wait for the MEM_ACCESS
                 if (mem_resp_i.data_gnt) begin
                     // send the tag valid signal to request bus, one cycle later
                     tag_valid_n = 1'b1;
-                    state_d     = PTE_LOOKUP;
+
+                    // decode next state
+                    /*
+                        Control signals:
+                        - Is a DDT lookup?
+                        - Is Stage-2 enabled?
+                        - Is the last level of the DDT/PDT?
+                        - Is the DC/PC fully loaded?
+                    */
+                    case ({en_stage2_i, is_ddt_walk_q, is_last_cdw_lvl})
+                        // rdata will hold the PPN of a non-leaf PDT/DDT entry
+                        // Stage-2 is don't care for DC walks since iohgatp always provides a PPN
+                        3'b000, 3'b010, 3'b110: begin
+                            state_n = NON_LEAF;
+                        end
+
+                        // rdata will hold one of the doublewords of the PC/DC
+                        // Since Stage-2 is disabled, there's no need to translate fsc.PPN
+                        // We can go to LEAF to update DDTC/PDTC
+                        3'b001, 3'b011: begin 
+                            state_n = LEAF;
+                        end
+
+                        // rdata will hold the GPPN of a non-leaf PDT entry
+                        // Must be first translated with second-stage translation
+                        3'b100: begin
+                            state_n = GUEST_TR;
+                        end
+
+                        // rdata will hold one of the doublewords of the DC/PC.
+                        // Stage-2 is enabled, so only after loading all DC/PC DWs we have to translate fsc.ppn
+                        3'b101, 3'b111: begin
+                            state_n = LEAF;
+                        end
+
+                        default: begin
+                            state_n = IDLE;
+                        end
+                    endcase
                 end
             end
 
-            // process the incoming memory data (hold in pte)
-            PTE_LOOKUP: begin
+            // Set pptr with the ppn of a non-leaf entry and the corresponding dev/proc ID segment
+            // Always triggers a CDW memory access
+            NON_LEAF: begin
                 // we wait for the valid signal
                 if (data_rvalid_q) begin
 
-                    // check if the global mapping bit is set
-                    if (pte.g && ptw_stage_q == STAGE_1)
-                        global_mapping_n = 1'b1;
+                    // "If ddte/pdte.V == 0, stop and report "DDT entry not valid" (cause = 258/266)"
+                    if (!nl.v) begin
+                        state_n = ERROR;
+                        if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_ENTRY_INVALID;
+                        else cause_n = iommu_pkg::PDT_ENTRY_INVALID;
+                    end
 
-                    //# Invalid PTE
-                    // If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception.
-                    if (!pte.v || (!pte.r && pte.w))
-                        state_d = PROPAGATE_ERROR;
-                        
-
-                    //# Valid PTE
+                    //# Valid non-leaf entry
                     else begin
-                        state_d = IDLE;
-
-                        //# Leaf PTE
-                        if (pte.r || pte.x) begin
-                            case (ptw_stage_q)
-                                
-                                //# S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
-                                STAGE_1: begin
-                                    // If corresponding G stage translation is enabled
-                                    if (en_stage2_i) begin
-                                        state_d = WAIT_GRANT;
-                                        ptw_stage_d = STAGE_2_FINAL;    // final stage-2 walk
-                                        gpte_d = pte;                   // save GPA to update in TLB
-                                        gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
-                                        gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};    // construct FINAL GPA
-                                        // update according to the size of the page (LVL3 = 4K page)
-                                        if (ptw_lvl_q == LVL2)
-                                            gpaddr[20:0] = iova_q[20:0];
-                                        if(ptw_lvl_q == LVL1)
-                                            gpaddr[29:0] = iova_q[29:0];
-                                        gpaddr_n = gpaddr;              // register FINAL GPA
-
-                                        // Set memory address ptr for last G-stage walk
-                                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpaddr[riscv::SVX-1:30], 3'b0};     // 
-                                        ptw_lvl_n = LVL1;       // register PTW level
-                                    end
-                                end
-
-                                // triggered when valid G-stage PTE is found, without being the last level of VS
-                                //# S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages
-                                STAGE_2_INTERMED: begin
-                                    state_d = WAIT_GRANT;
-                                    ptw_stage_d = STAGE_1;
-                                    ptw_lvl_n = gptw_lvl_q;     // equalized to avoid comparing two types of level
-                                    pptr = {pte.ppn[riscv::GPPNW-1:0], gptw_pptr_q[11:0]};  // join lvlx PPN with lvlx GPA's offset
-                                    // Consider case of superpages
-                                    if (ptw_lvl_q == LVL2)
-                                        pptr[20:0] = gptw_pptr_q[20:0];
-                                    if(ptw_lvl_q == LVL1)
-                                        pptr[29:0] = gptw_pptr_q[29:0];
-                                    ptw_pptr_n = pptr;
-                                end
-                                default:;
-                            endcase
-
-                            //# Valid translation found (either 1G, 2M or 4K entry)
-
-                            //# Update IOTLB
-                            //? I think the HW PTW should be only responsible of locating the missing SPA (PTE) associated with the IOVA that caused the miss in the IOTLB.
-                            // IOTLB is updated only if found a leaf PTE in the final stage-2, or if stage 2 is disabled and a leaf PTE was found
-
-                            // "If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
-                            // "Stop and raise a page-fault exception corresponding to the original access type."
-                            if (ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) begin         // 1G
-                                state_d             = PROPAGATE_ERROR;
-                                ptw_stage_d         = ptw_stage_q;
-                                update_o = 1'b0;
-                            end 
-                            else begin
-                                if (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0) begin      // 2M
-                                state_d             = PROPAGATE_ERROR;
-                                ptw_stage_d         = ptw_stage_q;
-                                update_o = 1'b0;
-                                end
-                                else if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) begin
-                                    update_o = 1'b1;
-                                end
+                        // Set pptr and next level
+                        // Different configs for DC and PC
+                        case (cdw_lvl_q)
+                            LVL3: begin
+                                cdw_lvl_n = LVL2;
+                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, context_id_q[14:6], 3'b0};
+                                else cdw_pptr_n = {nl.ppn, context_id_q[16:8], 3'b0};
                             end
 
-                        // TODO: For now we let SW handle the update of A and D bits. Later, hardware support will be implemented.
-                         
-                        //     /*
-                        //         A fault is generated if:
-                        //             - Access flag is not set;
-                        //             - Page is not readable;
-                        //             - S-mode transaction. PTE has U=1 and SUM=0;
-                        //             - S-mode transaction. PTE has U=1 and x=1;
-                        //     */
-                        //     if (!pte.a || !pte.r || (priv_mode_i == riscv::PRIV_LVL_S && pte.u && (!sum_i || pte.x))) begin
-                        //         state_d   = PROPAGATE_ERROR;
-                        //         ptw_stage_d = ptw_stage_q;
-                        //     end else begin
-                        //         if((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i)
-                        //             update_o = 1'b1;
-                        //     end
-                        //     // Request is a store: perform some additional checks
-                        //     // If the request was a store and the page is not write-able, raise an error
-                        //     // the same applies if the dirty flag is not set (for now...)
-                        //     if (is_store && (!pte.w || !pte.d)) begin
-                        //         dtlb_update_o.valid = 1'b0;
-                        //         state_d   = PROPAGATE_ERROR;
-                        //         ptw_stage_d = ptw_stage_q;
-                        //     end
-
-                        end
-                        
-                        //# non-leaf PTE
-                        else begin
-                            if (ptw_lvl_q == LVL1) begin
-                                // we are in the second level now
-                                ptw_lvl_n = LVL2;
-                                case (ptw_stage_q)
-
-                                    //# S1-L1
-                                    STAGE_1: begin
-                                        if (en_stage2_i) begin
-                                            ptw_stage_d = STAGE_2_INTERMED;
-                                            gpte_d = pte;   // PTE representing the GPA base pointer
-                                            gptw_lvl_n = LVL2;  // update VS level
-                                            pptr = {pte.ppn, iova_q[29:21], 3'b0};     // join GPA base pointer with VPN[1] => GPA lvl2
-                                            gptw_pptr_n = pptr;     // update GPA for new level
-                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
-                                            ptw_lvl_n = LVL1;       // restart G-stage level
-                                        end else begin
-                                            ptw_pptr_n = {pte.ppn, iova_q[29:21], 3'b0};
-                                        end
-                                    end
-
-                                    //# S2-L1 (GPA_n)
-                                    STAGE_2_INTERMED: begin
-                                            ptw_pptr_n = {pte.ppn, gptw_pptr_q[29:21], 3'b0};   // pointer received from G-L1, to be used with GPPN[1]
-                                    end
-
-                                    //# S2-L1 (final GPA)
-                                    STAGE_2_FINAL: begin
-                                            ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
-                                    end
-                                endcase
+                            LVL2: begin
+                                cdw_lvl_n = LVL1;
+                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, context_id_q[5:0], 6'b0};
+                                else cdw_pptr_n = {nl.ppn, context_id_q[7:0], 4'b0};
                             end
 
-                            if (ptw_lvl_q == LVL2) begin
-                                // here we received a pointer to the third level
-                                ptw_lvl_n  = LVL3;
-                                unique case (ptw_stage_q)
+                            default:
+                        endcase
 
-                                    //# S1-L2
-                                    STAGE_1: begin
-                                        if (en_stage2_i) begin
-                                            ptw_stage_d = STAGE_2_INTERMED;
-                                            gpte_d = pte;
-                                            gptw_lvl_n = LVL3;
-                                            pptr = {pte.ppn, iova_q[20:12], 3'b0};
-                                            gptw_pptr_n = pptr;
-                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
-                                            ptw_lvl_n = LVL1;
-                                        end else begin
-                                            ptw_pptr_n = {pte.ppn, iova_q[20:12], 3'b0};
-                                        end
-                                    end
-
-                                    //# S2-L2 (GPA_n)
-                                    STAGE_2_INTERMED: begin
-                                            ptw_pptr_n = {pte.ppn, gptw_pptr_q[20:12], 3'b0};   // pointer received from G-L2, to be used with GPPN[1]
-                                    end
-
-                                    //# S2-L2 (final GPA)
-                                    STAGE_2_FINAL: begin
-                                            ptw_pptr_n = {pte.ppn, gpaddr_q[20:12], 3'b0};
-                                    end
-                                    default:;
-                                endcase
-                            end
-
-                            state_d = WAIT_GRANT;
-
-                            // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
-                            // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
-                            if(pte.a || pte.d || pte.u) begin
-                                state_d = PROPAGATE_ERROR;
-                                ptw_stage_d = ptw_stage_q;
-                            end
-
-                            //  "Otherwise, this PTE is a pointer to the next level of the page table."
-                            //  "Let i = i − 1. If i < 0, stop and raise a page-fault exception corresponding to the original access type."
-                            if (ptw_lvl_q == LVL3) begin
-                              // Should already be the last level page table => Error
-                              ptw_lvl_n   = LVL3;
-                              state_d = PROPAGATE_ERROR;
-                              ptw_stage_d = ptw_stage_q;
-                            end
-                        end
+                        state_n = MEM_ACCESS;
                     end
 
-                    // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
-                    if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                        state_d = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                        ptw_stage_d = ptw_stage_q;
-                        update_o = 1'b0;
-                    end
-
-                    // Check if this access was actually allowed from a PMP perspective
-                    if (!allow_access) begin
-                        update_o = 1'b0;
-                        // we have to return the failed address in bad_addr
-                        ptw_pptr_n = ptw_pptr_q;
-                        ptw_stage_d = ptw_stage_q;
-                        state_d = PROPAGATE_ACCESS_ERROR;
+                    // "If if any bits or encoding that are reserved for future standard use are set within ddte,"
+                    // "stop and report "DDT entry misconfigured" (cause = 259)"
+                    if (nl.reserved_1 || nl.reserved_2) begin
+                        state_n = ERROR;
+                        cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
                     end
                 end
             end
 
-            // Propagate error to MMU/LSU
-            PROPAGATE_ERROR: begin
-                state_d     = IDLE;
-                ptw_error_o = 1'b1;
-                ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
-                ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
+            // rdata holds one of the doublewords of the DC/PC.
+            // Here we check whether DC/PC has been fully loaded, if not, go back to MEM_ACCESS.
+            // After having the DC/PC ready, check if second-stage translation is enabled to determine next state
+            LEAF: begin
+
+                // Last DW
+                //! When coming from GUEST_TR, these conditions should be fulfilled
+                if ((is_ddt_walk_q && dc_fully_loaded) || (!is_ddt_walk_q && pc_fully_loaded)) begin
+                    
+                    state_n = IDLE;
+                    // At this point we MUST have the entire DC/PC stored
+                    // If Stage-2 is disabled or fsc.PPN has already been translated, update DDTC/PDTC
+                    //! Guarantee that translated PPN is already in DC/PC register when coming from GUEST_TR
+                    if (is_ddt_walk_q) update_dc_o = 1'b1;
+                    else update_pc_o = 1'b1;
+                end
+
+                // Not last DW. Update counter and pptr, save DW
+                else if (data_rvalid_q ) begin
+
+                    entry_cnt_n = entry_cnt_q + 1;
+
+                    // Set pptr with address for next DW
+                    cdw_pptr_n = cdw_pptr_q + 8;
+                    state_n = MEM_ACCESS;
+
+                    case ({is_ddt_walk_q, entry_cnt_q})
+
+                        //PC.ta
+                        4'b0000: begin
+                            pc_n.ta = pc_ta;
+
+                            // "If pdte.V == 0, stop and report "PDT entry not valid" (cause = 266)"
+                            if (!pc_ta.v) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::PDT_ENTRY_INVALID;
+                            end
+                        end
+
+                        //PC.fsc (last DW)
+                        4'b0001: begin
+                            pc_n.fsc = pc_fsc;
+                            cdw_pptr_n = cdw_pptr_q;
+                            if (en_stage2_i) state_n = GUEST_TR;
+                            else state_n = LEAF;
+                        end
+
+                        /*---------------------------------------------*/
+
+                        //DC.tc
+                        4'b1000: begin
+                            dc_n.tc = dc_tc;
+
+                            // "If ddte.V == 0, stop and report "DDT entry not valid" (cause = 258)"
+                            if (!dc_tc.v) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_INVALID;
+                            end
+                        end
+
+                        //DC.iohgatp
+                        4'b1001: begin
+                            dc_n.iohgatp = dc_iohgatp;
+                        end
+
+                        //DC.ta
+                        4'b1010: begin
+                            dc_n.ta = dc_ta;
+                        end
+
+                        //DC.fsc
+                        4'b1011: begin
+                            dc_n.fsc = dc_fsc;
+                        end
+
+                        //DC.msiptp
+                        4'b1100: begin
+                            dc_n.msiptp = dc_msiptp;
+                        end
+
+                        //DC.msi_addr_mask
+                        4'b1101: begin
+                            dc_n.msi_addr_mask = dc_msi_addr_mask;
+                        end
+
+                        //DC.msi_addr_pattern (last DW)
+                        4'b1110: begin
+                            dc_n.msi_addr_pattern = dc_msi_addr_patt;
+                            cdw_pptr_n = cdw_pptr_q;
+                            if (en_stage2_i) state_n = GUEST_TR;
+                            else state_n = LEAF;
+                        end
+
+                        default:
+                    endcase
+                end
             end
 
-            PROPAGATE_ACCESS_ERROR: begin
-                state_d     = IDLE;
-                ptw_iopmp_excep_o = 1'b1;
+            // If Stage-2 is enabled, this state triggers the PTW to perform second-stage translation for fsc.PPN or a non-leaf PDT GPPN
+            // In the former case, we go to LEAF to update the corresponding CDTC entry
+            // In the latter case, we go to NON-LEAF to set the CDW pptr with the non-leaf PPN.
+            GUEST_TR: begin
+                // we wait for the valid signal
+                if (data_rvalid_q) begin
+                    
+                end
+            end
+
+            // Permission/access errors detected. Propagate fault signal with error code
+            ERROR: begin
+                cdw_error_o = 1'b1;
+
+                // Return SPA for access errors
+                if (is_access_err_q) bad_paddr_o = cdw_pptr_q;
+
+                // Set cause code
+                cause_code_o = cause_q;
+                state_n = IDLE;
             end
 
             default: begin
-                state_d = IDLE;
+                state_n = IDLE;
             end
         endcase
+
+        // Check if mem access was actually allowed from a PMP perspective
+        //! Access errors caused by second-stage implicit translations are signaled by the PTW.
+        //! PTW and CDW must sync in these cases.
+        if (!allow_access && (state_q == NON_LEAF || state_q == LEAF || state_q == GUEST_TR)) begin
+            update_dc_o = 1'b0;
+            update_pc_o = 1'b0;
+            is_access_err_n'= 1'b1;
+
+            // set cause code
+            if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_ENTRY_LD_ACCESS_FAULT;
+            else cause_n = iommu_pkg::PDT_ENTRY_LD_ACCESS_FAULT;
+
+            // return faulting address in bad_addr
+            cdw_pptr_n = cdw_pptr_q;
+            state_q = ERROR;
+        end
     end
 
     // sequential process
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (~rst_ni) begin
-            state_q            <= IDLE;
-            ptw_stage_q        <= STAGE_1;
-            ptw_lvl_q          <= LVL1;
-            gptw_lvl_q         <= LVL1;
-            tag_valid_q        <= 1'b0;
-            iotlb_update_pscid_q  <= '0;
-            iotlb_update_gscid_q  <= '0;
-            iova_q            <= '0;
-            gpaddr_q           <= '0;
-            ptw_pptr_q         <= '0;
-            gptw_pptr_q        <= '0;
-            global_mapping_q   <= 1'b0;
-            data_rdata_q       <= '0;
-            gpte_q             <= '0;
-            data_rvalid_q      <= 1'b0;
+            state_q                 <= IDLE;
+            cdw_lvl_q               <= LVL1;
+            tag_valid_q             <= 1'b0;
+            cdw_pptr_q              <= '0;
+            data_rdata_q            <= '0;
+            data_rvalid_q           <= 1'b0;
+            entry_cnt_q             <= '0;
+            context_id_q            <= '0;
+            cause_q                 <= '0;
+            is_ddt_walk_q           <= 1'b0;
+            dc_q                    <= '0;
+            pc_q                    <= '0;
 
         end else begin
-            state_q            <= state_d;
-            ptw_stage_q        <= ptw_stage_d;
-            ptw_pptr_q         <= ptw_pptr_n;
-            gptw_pptr_q        <= gptw_pptr_n;
-            ptw_lvl_q          <= ptw_lvl_n;
-            gptw_lvl_q         <= gptw_lvl_n;
-            tag_valid_q        <= tag_valid_n;
-            iotlb_update_pscid_q  <= iotlb_update_pscid_n;
-            iotlb_update_gscid_q  <= iotlb_update_gscid_n;
-            iova_q            <= iova_n;
-            gpaddr_q           <= gpaddr_n;
-            global_mapping_q   <= global_mapping_n;
-            data_rdata_q       <= mem_resp_i.data_rdata;
-            gpte_q             <= gpte_d;
-            data_rvalid_q      <= mem_resp_i.data_rvalid;
+            state_q                 <= state_n;
+            cdw_pptr_q              <= cdw_pptr_n;
+            cdw_lvl_q               <= cdw_lvl_n;
+            tag_valid_q             <= tag_valid_n;
+            data_rdata_q            <= mem_resp_i.data_rdata;
+            data_rvalid_q           <= mem_resp_i.data_rvalid;
+            entry_cnt_q             <= entry_cnt_n;
+            context_id_q            <= context_id_n;
+            cause_q                 <= cause_n;
+            is_access_err_q         <= is_access_err_n;
+            is_ddt_walk_q           <= is_ddt_walk_n;
+            dc_q                    <= dc_n;
+            pc_q                    <= pc_n;
         end
     end
 

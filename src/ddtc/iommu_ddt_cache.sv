@@ -58,9 +58,9 @@ module iommu_ddtc import ariane_pkg::*; #(
     logic [DDTC_ENTRIES-1:0] replace_en; // replace the following entry, set by replacement strategy
 
     //---------
-    //* Lookup
+    //# Lookup
     //---------
-    always_comb begin : translation
+    always_comb begin : lookup
 
         // default assignment
         lu_hit         = '{default: 0};
@@ -80,7 +80,7 @@ module iommu_ddtc import ariane_pkg::*; #(
     end
 
     // ------------------
-    //* Update and Flush
+    //# Update and Flush
     // ------------------
 
     /*
@@ -128,7 +128,7 @@ module iommu_ddtc import ariane_pkg::*; #(
     end
 
     // -----------------------------------------------
-    //* PLRU - Pseudo Least Recently Used Replacement
+    //# PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
     //? Is it necessary to update LRU on updates?

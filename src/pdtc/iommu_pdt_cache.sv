@@ -49,7 +49,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     output logic                        lu_hit_o        // hit flag
 );
 
-    //* Tags to identify DDTC entries
+    //# Tags to identify DDTC entries
     // 24-bits device_id may be divided into up to three levels.
     // 20-bits process_id may be divided into up to three levels.
     struct packed {
@@ -58,7 +58,7 @@ module iommu_pdtc import ariane_pkg::*; #(
         logic                           valid;      // valid bit //? Why two V bits? tag and PC
     } [PDTC_ENTRIES-1:0] tags_q, tags_n;
 
-    //* DDTC entries: Device Contexts
+    //# DDTC entries: Device Contexts
     struct packed {
         iommu_pkg::pc_t pc;     // process context
     } [PDTC_ENTRIES-1:0] content_q, content_n;
@@ -67,7 +67,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     logic [PDTC_ENTRIES-1:0] replace_en; // replace the following entry, set by replacement strategy
 
     //---------
-    //* Lookup
+    //# Lookup
     //---------
     always_comb begin : translation
 
@@ -89,7 +89,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     end
 
     // ------------------
-    //* Update and Flush
+    //# Update and Flush
     // ------------------
 
     /*
@@ -149,7 +149,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     end
 
     // -----------------------------------------------
-    //* PLRU - Pseudo Least Recently Used Replacement
+    //# PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
     //? Is it necessary to update LRU on updates?
