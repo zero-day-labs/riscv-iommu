@@ -40,13 +40,13 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic        caps_t2gpa_i,
     input  logic        caps_pd20_i, caps_pd17_i, caps_pd8_i,
     input  logic        caps_sv32_i, caps_sv39_i, caps_sv48_i, caps_sv57_i,
-    input  logic        fctl_glx, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
+    input  logic        fctl_glx_i, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
     input  logic        caps_msi_flat_i,
     input  logic        caps_amo_i,
     input  logic        caps_end_i, fctl_be_i,
 
     // PC checks
-    input  logic        dc_sxl,
+    input  logic        dc_sxl_i,
 
     // Indicate whether this translation was triggered by a store or a load
     input  logic                    is_store_i,
@@ -130,7 +130,6 @@ module iommu_cdw import ariane_pkg::*; #(
     // assign pc = iommu_pkg::pc_t'(data_rdata_q);
 
     assign nl = iommu_pkg::nl_entry_t'(data_rdata_q);
-    
 
     // PTW states
     typedef enum logic[2:0] {
@@ -340,7 +339,7 @@ module iommu_cdw import ariane_pkg::*; #(
                         end
 
                         // rdata will hold one of the doublewords of the DC/PC.
-                        // Stage-2 is enabled, so only after loading all DC/PC DWs we have to translate fsc.ppn
+                        // Stage-2 is enabled, so only after loading all DC/PC DWs we have to translate pdtp.PPN if needed
                         3'b101, 3'b111: begin
                             state_n = LEAF;
                         end
@@ -434,17 +433,33 @@ module iommu_cdw import ariane_pkg::*; #(
                                 state_n = ERROR;
                                 cause_n = iommu_pkg::PDT_ENTRY_INVALID;
                             end
+
+                            // Config checks
+                            if ((|pc_ta.reserved_1) || (|pc_ta.reserved_2)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //PC.fsc (last DW)
                         4'b0001: begin
                             pc_n.fsc = pc_fsc;
                             cdw_pptr_n = cdw_pptr_q;
-                            if (en_stage2_i) state_n = GUEST_TR;
-                            else state_n = LEAF;
+                            state_n = LEAF;
+
+                            // Config checks
+                            if ((|pc_fsc.reserved) ||
+                                (!(pc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
+                                (!dc_sxl_i && ((!caps_sv39_i && pc_fsc.mode == 4'd8) ||
+                                                 (!caps_sv48_i && pc_fsc.mode == 4'd9) ||
+                                                 (!caps_sv57_i && pc_fsc.mode == 4'd10))) ||
+                                (dc_sxl_i && (!caps_sv32_i && pc_fsc.mode == 4'd8))) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
-                        /*---------------------------------------------*/
+                        /*---------------------------------------------------------------*/
 
                         //DC.tc
                         4'b1000: begin
@@ -455,39 +470,104 @@ module iommu_cdw import ariane_pkg::*; #(
                                 state_n = ERROR;
                                 cause_n = iommu_pkg::DDT_ENTRY_INVALID;
                             end
+
+                            // Config checks
+                            if ((|dc_tc.reserved_1) || (|dc_tc.reserved_2) || 
+                                (!dc_tc.en_ats && (dc_tc.t2gpa || dc_tc.en_pri || dc_tc.prpr)) ||
+                                (!caps_t2gpa_i && dc_tc.t2gpa) ||
+                                (!dc_tc.pdtv && dc_tc.dpe) ||
+                                (!caps_amo_i && (dc_tc.sade || dc_tc.gade)) ||
+                                (fctl_be_i != dc_tc.sbe) ||
+                                (dc_tc.sxl != fctl_glx_i)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.iohgatp
                         4'b1001: begin
                             dc_n.iohgatp = dc_iohgatp;
+
+                            // Config checks
+                            if ((dc_q.t2gpa && !(|dc_iohgatp.mode)) ||
+                                (!(dc_iohgatp.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
+                                (!fctl_glx_i && ((!caps_sv39x4_i && dc_iohgatp.mode == 4'd8) ||
+                                                 (!caps_sv48x4_i && dc_iohgatp.mode == 4'd9) ||
+                                                 (!caps_sv57x4_i && dc_iohgatp.mode == 4'd10))) ||
+                                (fctl_glx_i && (!caps_sv32x4_i && dc_iohgatp.mode == 4'd8)) ||
+                                (|dc_iohgatp.mode && |dc_iohgatp.ppn[13:0])) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.ta
                         4'b1010: begin
                             dc_n.ta = dc_ta;
+
+                            // Config checks
+                            if ((|dc_ta.reserved_1) || (|dc_ta.reserved_2)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.fsc
                         4'b1011: begin
                             dc_n.fsc = dc_fsc;
+
+                            // Config checks
+                            if ((dc_q.tc.pdtv && ((!caps_pd20_i && dc_fsc.mode == 4'b0011) ||
+                                                  (!caps_pd17_i && dc_fsc.mode == 4'b0010) ||
+                                                  (!caps_pd8_i && dc_fsc.mode == 4'b0001))) ||
+                                (!dc_q.tc.pdtv && !(dc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
+                                (!dc_q.tc.pdtv && !dc_q.tc.sxl && ((!caps_sv39_i && dc_fsc.mode == 4'd8) ||
+                                                                   (!caps_sv48_i && dc_fsc.mode == 4'd9) ||
+                                                                   (!caps_sv57_i && dc_fsc.mode == 4'd10))) ||
+                                (!dc_q.tc.pdtv && dc_q.tc.sxl && (!caps_sv32_i && dc_fsc.mode == 4'd8)) ||
+                                (|dc_fsc.reserved)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.msiptp
                         4'b1100: begin
                             dc_n.msiptp = dc_msiptp;
+
+                            // Config checks
+                            if ((caps_msi_flat_i && !(dc_msiptp.mode inside {4'd0, 4'd1})) ||
+                                (|dc_msiptp.reserved)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.msi_addr_mask
                         4'b1101: begin
                             dc_n.msi_addr_mask = dc_msi_addr_mask;
+
+                            // Config checks
+                            if ((|dc_msi_addr_mask.reserved)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         //DC.msi_addr_pattern (last DW)
                         4'b1110: begin
                             dc_n.msi_addr_pattern = dc_msi_addr_patt;
                             cdw_pptr_n = cdw_pptr_q;
-                            if (en_stage2_i) state_n = GUEST_TR;
+                            // only if DC have an associated PC and Stage-2 is enabled, pdtp.PPN must be translated before being stored
+                            // otherwise, fsc.PPN holds iosatp field, which must be saved as a GPA
+                            if (en_stage2_i && dc_q.tc.pdtv) state_n = GUEST_TR;
                             else state_n = LEAF;
+
+                            // Config checks
+                            if ((|dc_msi_addr_patt.reserved)) begin
+                                state_n = ERROR;
+                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            end
                         end
 
                         default:
@@ -495,12 +575,13 @@ module iommu_cdw import ariane_pkg::*; #(
                 end
             end
 
-            // If Stage-2 is enabled, this state triggers the PTW to perform second-stage translation for fsc.PPN or a non-leaf PDT GPPN
+            // If Stage-2 is enabled, this state triggers the PTW to perform second-stage translation for pdtp.PPN or a non-leaf PDT GPPN
             // In the former case, we go to LEAF to update the corresponding CDTC entry
             // In the latter case, we go to NON-LEAF to set the CDW pptr with the non-leaf PPN.
             GUEST_TR: begin
                 // we wait for the valid signal
                 if (data_rvalid_q) begin
+
                     
                 end
             end
