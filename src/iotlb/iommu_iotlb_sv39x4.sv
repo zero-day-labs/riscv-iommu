@@ -19,6 +19,10 @@
 //              This module is an adaptation of the Sv39 TLB developed
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
 
+//! The output address of the IOTLB should only be considered valid if GSCID and PSCID are valid.
+//! This means that lookup_i = iotlb_access & ddtc_hit & (pdtc_hit ^ DC.tc.pdtv).
+//! The same condition applies for triggering the PTW.
+
 module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4,
     parameter int unsigned PSCID_WIDTH  = 1,
