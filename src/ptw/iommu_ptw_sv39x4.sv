@@ -72,7 +72,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]                  req_iova_i,
-    //? Necessary? Or can we simply connect the CDTC outputs with the IOTLB update bus?
+    //? Necessary to propagate? Or can we simply connect the CDTC outputs with the IOTLB update bus?
     input  logic [PSCID_WIDTH-1:0]                  pscid_i,
     input  logic [GSCID_WIDTH-1:0]                  gscid_i,
 
@@ -86,17 +86,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // CDW implicit translations (Second-stage only)
     input  logic                        cdw_implicit_access_i,
-    input  logic [(riscv::PPNW-1):0]    pdtp_gppn_i,
-    
-    // permission checks (//? I think should be performed outside the PTW)
-    /*
-        The SUM (permit Supervisor User Memory access) bit modifies the privilege with which S-mode
-        loads and stores access virtual memory. When SUM=0, S-mode memory accesses to pages that are
-        accessible by U-mode will fault. When SUM=1, these accesses are permitted.
-        Note that S-mode can never execute instructions from user pages, regardless of the state of SUM.
-    */
-    // input  logic                     sum_i,         // Supervisor Memory Access for User pages
-    // input  logic [1:0]               priv_mode_i,   // transaction privilege mode
+    input  logic [(riscv::GPPNW-1):0]   pdt_gppn_i,
+    output logic                        cdw_done_o,
+    output logic                        flush_cdw_o,
 
     // from IOTLB, to monitor misses
     input  logic                    iotlb_access_i,     //! Remember the external logic to avoid looking up before CDTC hit
@@ -104,7 +96,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // from DC/PC
     input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
-    input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp
+    input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp (may be forwarded by the CDW)
 
     // TODO: include HPM
     // // Performance counters
@@ -301,6 +293,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         cause_code_o           = '0;
         update_o               = 1'b0;
         msi_content_valid_o    = 1'b0;
+        cdw_done_o             = 1'b0;
+        flush_cdw_o            = 1'b0;
+        
         ptw_lvl_n              = ptw_lvl_q;
         gptw_lvl_n             = gptw_lvl_q;
         ptw_pptr_n             = ptw_pptr_q;
@@ -356,7 +351,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         
                         // IOVA is a valid GPA
                         if (!cdw_implicit_access_i) gpaddr_n = req_iova_i[riscv::SVX-1:0];
-                        else gpaddr_n = {pdtp_gppn_i[riscv::GPPNW-1:0], 12'b0};
+                        else gpaddr_n = {pdt_gppn_i[riscv::GPPNW-1:0], 12'b0};
 
                         // MSI Address translation
                         if (iova_is_imsic_addr) begin
@@ -368,7 +363,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         else begin
                             ptw_stage_n = STAGE_2_FINAL;
                             if (!cdw_implicit_access_i) ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
-                            else ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pdtp_gppn_i[riscv::GPPNW-1:18], 3'b0};
+                            else ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pdt_gppn_i[riscv::GPPNW-1:18], 3'b0};
                         end
                     end
                     
@@ -384,7 +379,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     if (!cdw_implicit_access_i )
                         iova_n             = req_iova_i;
                     else
-                        iova_n             = {pdtp_gppn_i, 12'b0};
+                        iova_n             = {pdt_gppn_i, 12'b0};
                     cdw_implicit_access_n = cdw_implicit_access_i;
                     state_n                = WAIT_GRANT;
                     // iotlb_miss_o        = 1'b1;     // to HPM
@@ -522,7 +517,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 endcase
 
                                 //# Valid translation found (either 1G, 2M or 4K entry)
-
                                 //# Update IOTLB
                                 //? I think the HW PTW should be only responsible of locating the missing SPA (PTE) associated with the IOVA that caused the miss in the IOTLB.
                                 // IOTLB is updated only if found a leaf PTE in the final stage-2, or if stage 2 is disabled and a leaf PTE was found
@@ -551,8 +545,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     end
 
                                     // Do not update IOTLB for CDW implicit accesses
-                                    else if(((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) && !cdw_implicit_access_q) begin
-                                        update_o = 1'b1;
+                                    else if ((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) begin
+                                        if (!cdw_implicit_access_q) update_o = 1'b1;
+                                        else                        cdw_done_o = 1'b1;
                                     end
                                 end
 
@@ -725,7 +720,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             end
 
             // Propagate error to IOMMU
-            // TODO: Maybe we won't need these states as we are encoding and propagating the fault cause.
+            // TODO: Maybe we only need one error state as we are encoding and propagating the fault cause.
             // We do need to propagate the bad GPA
             PROPAGATE_ERROR: begin
                 state_n     = IDLE;
@@ -733,12 +728,14 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 cause_code_o = cause_q;
                 ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
                 ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
+                flush_cdw_o = (cdw_implicit_access_q) ? 1'b1 : 1'b0;
             end
 
             PROPAGATE_ACCESS_ERROR: begin
                 state_n     = IDLE;
                 ptw_iopmp_excep_o = 1'b1;
                 cause_code_o = cause_q;
+                flush_cdw_o = (cdw_implicit_access_q) ? 1'b1 : 1'b0;
             end
 
             default: begin
