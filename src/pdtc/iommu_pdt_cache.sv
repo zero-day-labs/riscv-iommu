@@ -18,7 +18,6 @@
 */
 
 module iommu_pdtc import ariane_pkg::*; #(
-    parameter int unsigned DDTC_ENTRIES = 4,
     parameter int unsigned PDTC_ENTRIES = 4,
     parameter int unsigned DEVICE_ID_WIDTH = 24,
     parameter int unsigned PROCESS_ID_WIDTH  = 20
@@ -69,21 +68,23 @@ module iommu_pdtc import ariane_pkg::*; #(
     //---------
     //# Lookup
     //---------
-    always_comb begin : translation
+    always_comb begin : lookup
 
         // default assignment
         lu_hit         = '{default: 0};
         lu_hit_o       = 1'b0;
         lu_content_o   = '{default: 0};
 
-        for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
-            
-            // An entry match occurs if the entry is valid and if a device_id and process_id match occurs
-            if (tags_q[i].valid && tags_q[i].device_id == lu_did_i && tags_q[i].process_id == lu_pid_i) begin
-            
-                lu_content_o    = content_q[i].pc;
-                lu_hit_o        = 1'b1;
-                lu_hit[i]       = 1'b1;
+        if (lookup_i) begin
+            for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
+                
+                // An entry match occurs if the entry is valid and if a device_id and process_id match occurs
+                if (tags_q[i].valid && tags_q[i].device_id == lu_did_i && tags_q[i].process_id == lu_pid_i) begin
+                
+                    lu_content_o    = content_q[i].pc;
+                    lu_hit_o        = 1'b1;
+                    lu_hit[i]       = 1'b1;
+                end
             end
         end
     end

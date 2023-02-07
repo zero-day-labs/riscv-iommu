@@ -47,8 +47,8 @@ module iommu_ddtc import ariane_pkg::*; #(
     //* Tags to identify DDTC entries
     // 24-bits device_id may be divided into up to three levels
     struct packed {
-        logic [DEVICE_ID_WIDTH-1:0] device_id;  // device_id //? Would it be necessary to divide the DID into levels? If yes, info about N of levels is necessary
-        logic                       valid;      // valid bit //? Why two V bits? tag and DC
+        logic [DEVICE_ID_WIDTH-1:0] device_id;  // device_id 
+        logic                       valid;      // valid bit
     } [DDTC_ENTRIES-1:0] tags_q, tags_n;
 
     //* DDTC entries: Device Contexts
@@ -69,14 +69,18 @@ module iommu_ddtc import ariane_pkg::*; #(
         lu_hit_o       = 1'b0;
         lu_content_o   = '{default: 0};
 
-        for (int unsigned i = 0; i < DDTC_ENTRIES; i++) begin
-            
-            // An entry match occurs if the entry is valid and if a device_id match occurs
-            if (tags_q[i].valid && tags_q[i].device_id == lu_did_i) begin
-            
-                lu_content_o    = content_q[i].dc;
-                lu_hit_o        = 1'b1;
-                lu_hit[i]       = 1'b1;
+        // To guarantee that hit signal is only set when we want to access the cache
+        if (lookup_i) begin
+
+            for (int unsigned i = 0; i < DDTC_ENTRIES; i++) begin
+                
+                // An entry match occurs if the entry is valid and if a device_id match occurs
+                if (tags_q[i].valid && tags_q[i].device_id == lu_did_i) begin
+                
+                    lu_content_o    = content_q[i].dc;
+                    lu_hit_o        = 1'b1;
+                    lu_hit[i]       = 1'b1;
+                end
             end
         end
     end
