@@ -148,58 +148,61 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         g_content      = '{default: 0};
         lu_gpaddr_o    = '{default: 0};
 
+        // Hit flag may be set only when we want to access the IOTLB
+        if (lookup_i) begin
 
-        for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
-        
-            // A PSCID match is signaled for lookups with S/VS stage disabled
-            // If S/VS stage is enabled, only PSCID matches and global entries match
-            match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte.g) && s_stg_en_i) || !s_stg_en_i;
-
-            // A GSCID match is signaled for lookups with G stage disabled
-            // If G stage is active, only GSCID matches will indicate entry match
-            match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && g_stg_en_i) || !g_stg_en_i;
-
-            // returns true if S/VS and G stages are both disabled. Otherwise, return true if enabled stages have 1G pages
-            is_1G[i] = is_trans_1G(s_stg_en_i,
-                                    g_stg_en_i,
-                                    tags_q[i].is_s_1G,
-                                    tags_q[i].is_g_1G
-                                );
-
-            // checks if final translation page size is 2M when H-extension is enabled 
-            is_2M[i] = is_trans_2M(s_stg_en_i,
-                                    g_stg_en_i,
-                                    tags_q[i].is_s_1G,
-                                    tags_q[i].is_s_2M,
-                                    tags_q[i].is_g_1G,
-                                    tags_q[i].is_g_2M
-                                );
-
-            // check if translation is a: S-Stage and G-Stage, S-Stage only or G-Stage only translation
-            // A stage match occurs if enabled translation stages are equal to the input ones
-            // This means that a TLB entry may be associated to only one translation stage, or both
-            match_stage[i] = (tags_q[i].g_stg_en == g_stg_en_i) && (tags_q[i].s_stg_en == s_stg_en_i);
+            for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
             
-            // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
-            // For now only VPN[2] is verified for the case of gigapages, where VPN[1] and VPN[0] make part of the offset
-            if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
+                // A PSCID match is signaled for lookups with S/VS stage disabled
+                // If S/VS stage is enabled, only PSCID matches and global entries match
+                match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte.g) && s_stg_en_i) || !s_stg_en_i;
 
-                // Construct a GPA with input GVA, according to the size of the page (bypassed offset field is different in each case)
-                // All 44 bits of the S/VS PTE's PPN are not used. Only 11 bits of PPN[2] are used, in order to match GPA's length
-                // Does not make sense when translating GPAs (S-stage disabled)
-                lu_gpaddr_o = make_gpaddr_sv39x4(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
+                // A GSCID match is signaled for lookups with G stage disabled
+                // If G stage is active, only GSCID matches will indicate entry match
+                match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && g_stg_en_i) || !g_stg_en_i;
+
+                // returns true if S/VS and G stages are both disabled. Otherwise, return true if enabled stages have 1G pages
+                is_1G[i] = is_trans_1G(s_stg_en_i,
+                                        g_stg_en_i,
+                                        tags_q[i].is_s_1G,
+                                        tags_q[i].is_g_1G
+                                    );
+
+                // checks if final translation page size is 2M when H-extension is enabled 
+                is_2M[i] = is_trans_2M(s_stg_en_i,
+                                        g_stg_en_i,
+                                        tags_q[i].is_s_1G,
+                                        tags_q[i].is_s_2M,
+                                        tags_q[i].is_g_1G,
+                                        tags_q[i].is_g_2M
+                                    );
+
+                // check if translation is a: S-Stage and G-Stage, S-Stage only or G-Stage only translation
+                // A stage match occurs if enabled translation stages are equal to the input ones
+                // This means that a TLB entry may be associated to only one translation stage, or both
+                match_stage[i] = (tags_q[i].g_stg_en == g_stg_en_i) && (tags_q[i].s_stg_en == s_stg_en_i);
                 
-                // 1G match | 2M match | 4k match, modified condition to simplify
-                if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
-                    lu_is_s_2M_o    = tags_q[i].is_s_2M;        
-                    lu_is_s_1G_o    = tags_q[i].is_s_1G;
-                    lu_is_g_2M_o    = tags_q[i].is_g_2M;               
-                    lu_is_g_1G_o    = tags_q[i].is_g_1G;
-                    lu_is_msi_o     = tags_q[i].is_msi;
-                    lu_content_o    = content_q[i].pte;
-                    lu_g_content_o  = content_q[i].gpte;
-                    lu_hit_o        = 1'b1;
-                    lu_hit[i]       = 1'b1;
+                // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
+                // For now only VPN[2] is verified for the case of gigapages, where VPN[1] and VPN[0] make part of the offset
+                if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
+
+                    // Construct a GPA with input GVA, according to the size of the page (bypassed offset field is different in each case)
+                    // All 44 bits of the S/VS PTE's PPN are not used. Only 11 bits of PPN[2] are used, in order to match GPA's length
+                    // Does not make sense when translating GPAs (S-stage disabled)
+                    lu_gpaddr_o = make_gpaddr_sv39x4(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
+                    
+                    // 1G match | 2M match | 4k match, modified condition to simplify
+                    if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
+                        lu_is_s_2M_o    = tags_q[i].is_s_2M;        
+                        lu_is_s_1G_o    = tags_q[i].is_s_1G;
+                        lu_is_g_2M_o    = tags_q[i].is_g_2M;               
+                        lu_is_g_1G_o    = tags_q[i].is_g_1G;
+                        lu_is_msi_o     = tags_q[i].is_msi;
+                        lu_content_o    = content_q[i].pte;
+                        lu_g_content_o  = content_q[i].gpte;
+                        lu_hit_o        = 1'b1;
+                        lu_hit[i]       = 1'b1;
+                    end
                 end
             end
         end
