@@ -81,8 +81,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic [(riscv::PPNW-1):0]                msiptp_ppn_i,
     input  logic [(iommu_pkg::MSI_MASK_LEN-1):0]    msi_addr_mask_i,
     input  logic [(iommu_pkg::MSI_PATTERN_LEN-1):0] msi_addr_pattern_i,
-    output logic                                    msi_content_valid_o,
-    output iommu_pkg::msi_wt_pte_t                  msi_content_o,
+    output logic                                    bare_translation_o,
 
     // CDW implicit translations (Second-stage only)
     input  logic                        cdw_implicit_access_i,
@@ -234,9 +233,18 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         if(en_stage2_i) begin   // if stage 2 is enabled
             up_content_o = gpte_q | (global_mapping_q << 5);
             up_g_content_o = pte;
-        end else begin          // stage 2 disabled
-            up_content_o = pte | (global_mapping_q << 5);
-            up_g_content_o = '0;
+        end 
+        
+        else begin          // stage 2 disabled
+            // If stage 2 is disabled and GPA (SPA) is an MSI address, first-stage PTE is stored in gpte
+            if (msi_translation_q) begin
+                up_content_o = gpte_q | (global_mapping_q << 5);
+                up_g_content_o = pte;
+            end
+            else begin
+                up_content_o = pte | (global_mapping_q << 5);
+                up_g_content_o = '0;
+            end
         end
     end
 
@@ -248,8 +256,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // G stage error occurs whenever ptw_stage_q != STAGE_1 in the PROP_ERR state
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
-
-    assign msi_content_o = msi_pte.ppn;
 
     // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
     pmp #(
@@ -282,9 +288,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         ptw_iopmp_excep_o      = 1'b0;
         cause_code_o           = '0;
         update_o               = 1'b0;
-        msi_content_valid_o    = 1'b0;
         cdw_done_o             = 1'b0;
         flush_cdw_o            = 1'b0;
+        bare_translation_o     = 1'b0;
         
         ptw_lvl_n              = ptw_lvl_q;
         gptw_lvl_n             = gptw_lvl_q;
@@ -320,9 +326,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 gpte_n              = '0;
 
                 // check for possible IOTLB miss
-                //! If translation scheme defined by DC/PC is not Sv39/Sv39x4, PTW should not be triggered
-                //! IOMMU (external logic) should respond with corresponding fault code
-                if (((en_stage1_i | en_stage2_i) & iotlb_access_i & ~iotlb_hit_i) || cdw_implicit_access_i) begin
+                if ((iotlb_access_i & ~iotlb_hit_i) || cdw_implicit_access_i) begin
 
                     // Two-stage
                     if (en_stage1_i && en_stage2_i) begin
@@ -333,7 +337,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         gptw_pptr_n = pptr;
                         // Load memory pointer with hgatp and GPPN[2] to access physical memory
                         ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
-
                     end
 
                     // Stage 2 only
@@ -358,21 +361,35 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     end
                     
                     // Stage 1 only
-                    else begin
+                    else if (en_stage1_i) begin
                         ptw_stage_n = STAGE_1;
                         ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
                     end
 
-                    // register PSCID, GSCID and IOVA
-                    iotlb_update_pscid_n   = pscid_i;
-                    iotlb_update_gscid_n   = gscid_i;
-                    if (!cdw_implicit_access_i )
-                        iova_n             = req_iova_i;
-                    else
-                        iova_n             = {pdt_gppn_i, 12'b0};
-                    cdw_implicit_access_n = cdw_implicit_access_i;
-                    state_n                = WAIT_GRANT;
-                    // iotlb_miss_o        = 1'b1;     // to HPM
+                    // MSI Address translation may be invoked if no stage is enabled
+                    else if (iova_is_imsic_addr) begin
+                        ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
+                        msi_translation_n   = 1'b1;   // signal next cycle
+                        state_n             = WAIT_GRANT;
+                    end
+
+                    // If no stage is enabled and the input address is not associated with an IMSIC,
+                    // then signal external logic that translation is complete without updating IOTLB
+                    else bare_translation_o = 1'b1;
+
+                    if (en_stage1_i || en_stage2_i) begin
+
+                        // register PSCID, GSCID and IOVA
+                        iotlb_update_pscid_n   = pscid_i;
+                        iotlb_update_gscid_n   = gscid_i;
+                        if (!cdw_implicit_access_i)
+                            iova_n             = req_iova_i;
+                        else
+                            iova_n             = {pdt_gppn_i, 12'b0};
+                        cdw_implicit_access_n  = cdw_implicit_access_i;
+                        state_n                = WAIT_GRANT;
+                        // iotlb_miss_o        = 1'b1;     // to HPM
+                    end
                 end
             end
 
@@ -468,11 +485,11 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                             gpaddr[20:0] = iova_q[20:0];
                                         if(ptw_lvl_q == LVL1)
                                             gpaddr[29:0] = iova_q[29:0];
+                                        gpte_n = pte;                   // save GPA to update in TLB
 
                                         // If second-stage translation is enabled
                                         if (en_stage2_i) begin
                                             state_n = WAIT_GRANT;
-                                            gpte_n = pte;                   // save GPA to update in TLB
                                             gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
                                             gpaddr_n = gpaddr;              // register FINAL GPA
 
