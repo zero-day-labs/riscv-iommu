@@ -26,8 +26,8 @@
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_ptw_sv39x4 import ariane_pkg::*; #(
-        parameter int PSCID_WIDTH = 1,
-        parameter int GSCID_WIDTH = 1,
+        parameter int unsigned PSCID_WIDTH = 20,
+        parameter int unsigned GSCID_WIDTH = 16,
         parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic                    clk_i,                  // Clock
@@ -168,11 +168,14 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // CDW implicit accesses
     logic cdw_implicit_access_q, cdw_implicit_access_n;
 
+    // To save final GPA
+    logic [riscv::GPLEN-1:0] gpaddr;
+
     // input IOVA (GPA) is the address of a virtual IMSIC
-    assign iova_is_imsic_addr =   (!en_stage1_i && en_stage2_i && msi_en_i &&
+    assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i &&
                                    ((req_iova_i[(riscv::VLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
     // GPA is the address of a virtual IMSIC
-    assign gpaddr_is_imsic_addr = (en_stage1_i && en_stage2_i && msi_en_i &&
+    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i &&
                                    ((gpaddr[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
     // PTW walking
@@ -190,29 +193,17 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         
         // vpn to be updated in the IOTLB
         up_vpn_o = {{41-riscv::SVX{1'b0}}, iova_q[riscv::SVX-1:12]};
+        up_is_msi_o  = 1'b0;
 
-        // update page size in the IOTLB according to the level where the leaf PTE was found
         // Two-stage
-        if(en_stage2_i && en_stage1_i) begin
-            /*  
-                First-stage PTEs may map a GVA to a GPA associated with a guest vIMSIC.
-                In this case, we save only the first-stage contents in the IOTLB, so future references to this GVA are translated faster 
-            */
+        if(en_stage2_i && en_stage1_i) begin 
 
-            // Update two-stage entry with vIMSIC GPA
-            if(gpaddr_is_imsic_addr) begin
-                up_is_g_2M_o = 1'b0;
-                up_is_g_1G_o = 1'b0;
-                up_is_msi_o  = 1'b1;
-            end
+            // First-stage PTEs may map a GVA to a GPA associated with a guest vIMSIC.
+            // In this case, we set the MSI tag in the IOTLB 
+            if(gpaddr_is_imsic_addr)    up_is_msi_o  = 1'b1;
 
-            // Update normal two-stage entry
-            else begin
-                up_is_g_2M_o = (ptw_lvl_q == LVL2);
-                up_is_g_1G_o = (ptw_lvl_q == LVL1);
-                up_is_msi_o  = 1'b0;
-            end
-
+            up_is_g_2M_o = (ptw_lvl_q == LVL2);
+            up_is_g_1G_o = (ptw_lvl_q == LVL1);
             up_is_s_2M_o = (gptw_lvl_q == LVL2);
             up_is_s_1G_o = (gptw_lvl_q == LVL1);
         end
@@ -278,7 +269,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     //# Page table walker
     always_comb begin : ptw
         automatic logic [riscv::PLEN-1:0] pptr;
-        automatic logic [riscv::GPLEN-1:0] gpaddr;
         // default assignments
         // PTW memory interface
         tag_valid_n            = 1'b0;
@@ -418,11 +408,11 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         end
 
                         else begin
-                            msi_content_valid_o = 1'b1;
+                            update_o = 1'b1;
 
                             // TODO: For now, only write-through mode for MSI translation is supported. In the future, implement MRIF mode.
                             if (msi_pte.m != iommu_pkg::WRITE_THROUGH) begin
-                                msi_content_valid_o = 1'b0;
+                                update_o = 1'b0;
                                 cause_n = iommu_pkg::TRANS_TYPE_DISALLOWED;
                                 state_n = PROPAGATE_ERROR;
 
@@ -432,7 +422,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             // "If any bits or encoding that are reserved for future standard use are set within msipte," 
                             // "stop and report "MSI PTE misconfigured" (cause = 263)."
                             if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2))begin
-                                msi_content_valid_o = 1'b0;
+                                update_o = 1'b0;
                                 cause_n = iommu_pkg::MSI_PTE_MISCONFIGURED;
                                 state_n = PROPAGATE_ERROR;
 
@@ -470,32 +460,33 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     
                                     //# S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
                                     STAGE_1: begin
+
+                                        // construct FINAL GPA
+                                        gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};
+                                        // update according to the size of the page
+                                        if (ptw_lvl_q == LVL2)
+                                            gpaddr[20:0] = iova_q[20:0];
+                                        if(ptw_lvl_q == LVL1)
+                                            gpaddr[29:0] = iova_q[29:0];
+
                                         // If second-stage translation is enabled
                                         if (en_stage2_i) begin
                                             state_n = WAIT_GRANT;
                                             gpte_n = pte;                   // save GPA to update in TLB
                                             gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
-                                            gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};    // construct FINAL GPA
-
-                                            // update according to the size of the page
-                                            if (ptw_lvl_q == LVL2)
-                                                gpaddr[20:0] = iova_q[20:0];
-                                            if(ptw_lvl_q == LVL1)
-                                                gpaddr[29:0] = iova_q[29:0];
                                             gpaddr_n = gpaddr;              // register FINAL GPA
 
-                                            // MSI Address translation
-                                            if (gpaddr_is_imsic_addr) begin
-                                                ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i) << 4);
-                                                msi_translation_n = 1'b1;
-                                            end
+                                            // Proceed with final second-stage translation
+                                            ptw_stage_n = STAGE_2_FINAL;
+                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpaddr[riscv::SVX-1:30], 3'b0};
+                                            ptw_lvl_n = LVL1;
+                                        end
 
-                                            // Proceed with normal second-stage translation
-                                            else begin
-                                                ptw_stage_n = STAGE_2_FINAL;
-                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpaddr[riscv::SVX-1:30], 3'b0};
-                                                ptw_lvl_n = LVL1;
-                                            end
+                                        // GPA is an IMSIC address (even if Stage 2 is disabled)
+                                        if (gpaddr_is_imsic_addr) begin
+                                            ptw_stage_n = WAIT_GRANT;
+                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i) << 4);
+                                            msi_translation_n = 1'b1;
                                         end
                                     end
 
@@ -545,7 +536,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     end
 
                                     // Do not update IOTLB for CDW implicit accesses
-                                    else if ((ptw_stage_q == STAGE_2_FINAL) || !en_stage2_i) begin
+                                    // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
+                                    // MSI translation process is invoked
+                                    else if ((ptw_stage_q == STAGE_2_FINAL) || (!en_stage2_i && !gpaddr_is_imsic_addr)) begin
                                         if (!cdw_implicit_access_q) update_o = 1'b1;
                                         else                        cdw_done_o = 1'b1;
                                     end
