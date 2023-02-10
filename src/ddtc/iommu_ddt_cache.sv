@@ -88,7 +88,7 @@ module iommu_ddtc import ariane_pkg::*; #(
     // ------------------
 
     /*
-        * IODIR.INVAL_DDT
+        # IODIR.INVAL_DDT
         IODIR.INVAL_DDT guarantees that any previous stores made by a RISC-V hart to the DDT are observed
         before all subsequent implicit reads from IOMMU to DDT. If DV is 0, then the command invalidates
         all DDT and PDT entries cached for all devices. If DV is 1, then the command invalidates cached leaf

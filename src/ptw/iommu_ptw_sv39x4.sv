@@ -29,7 +29,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
-    input  logic                                dtf_i,                  // DTF bit from DC. Disables reporting of translation process faults
     output logic                                ptw_active_o,           // Set when PTW is walking memory
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
     output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
@@ -338,7 +337,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         
                         // IOVA is a valid GPA
                         if (!cdw_implicit_access_i) gpaddr_n = req_iova_i[riscv::SVX-1:0];
-                        else gpaddr_n = {pdt_gppn_i[riscv::GPPNW-1:0], 12'b0};
+                        else                        gpaddr_n = {pdt_gppn_i[riscv::GPPNW-1:0], 12'b0};
 
                         // MSI Address translation
                         if (iova_is_imsic_addr) begin
@@ -350,7 +349,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         else begin
                             ptw_stage_n = STAGE_2_FINAL;
                             if (!cdw_implicit_access_i) ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
-                            else ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pdt_gppn_i[riscv::GPPNW-1:18], 3'b0};
+                            else                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pdt_gppn_i[riscv::GPPNW-1:18], 3'b0};
                         end
                     end
                     
@@ -366,10 +365,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         msi_translation_n   = 1'b1;   // signal next cycle
                     end
 
-                    // If no stage is enabled and the input address is not associated with an IMSIC,
-                    // then signal external logic that translation is complete without updating IOTLB
-                    else bare_translation_o = 1'b1;
-
                     if (en_stage1_i || en_stage2_i || iova_is_imsic_addr) begin
 
                         // register PSCID, GSCID and IOVA
@@ -383,6 +378,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         state_n                = WAIT_GRANT;
                         // iotlb_miss_o        = 1'b1;     // to HPM
                     end
+
+                    // If no stage is enabled and the input address is not associated with an IMSIC,
+                    // then signal external logic that translation is complete without updating IOTLB
+                    else bare_translation_o = 1'b1;
                 end
             end
 
@@ -413,8 +412,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         if (!msi_pte.v || msi_pte.c) begin
                             cause_n = iommu_pkg::MSI_PTE_INVALID;
                             state_n = PROPAGATE_ERROR;
-
-                            if (dtf_i) state_n = IDLE;
                         end
 
                         else begin
@@ -425,8 +422,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 update_o = 1'b0;
                                 cause_n = iommu_pkg::TRANS_TYPE_DISALLOWED;
                                 state_n = PROPAGATE_ERROR;
-
-                                if (dtf_i) state_n = IDLE;
                             end
 
                             // "If any bits or encoding that are reserved for future standard use are set within msipte," 
@@ -435,8 +430,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 update_o = 1'b0;
                                 cause_n = iommu_pkg::MSI_PTE_MISCONFIGURED;
                                 state_n = PROPAGATE_ERROR;
-
-                                if (dtf_i) state_n = IDLE;
                             end
 
                             // MSI translation successful
@@ -456,8 +449,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
                             else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
                             state_n = PROPAGATE_ERROR;
-                            
-                            if (dtf_i) state_n = IDLE;
                         end
 
                         //# Valid PTE
@@ -533,16 +524,14 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 // "Stop and raise a page-fault exception corresponding to the original access type."
                                 // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
                                 // " a page-fault exception is raised."
-                                if ((ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) ||       // 1G
-                                    (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0 ) ||       // 2M
-                                    (!pte.a || (is_store_i && !pte.d)        )) begin   // A and D bits
+                                if ((ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0   ) ||       // 1G
+                                    (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0    ) ||       // 2M
+                                    (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
                                     
                                     if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
                                     else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
                                     state_n             = PROPAGATE_ERROR;
                                     ptw_stage_n         = ptw_stage_q;
-                                    
-                                    if (dtf_i) state_n = IDLE;
                                     update_o = 1'b0;
                                     cdw_done_o = 1'b0;
                                 end
@@ -624,8 +613,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
-                                    
-                                    if (dtf_i) state_n = IDLE;
                                 end
 
                                 //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
@@ -636,8 +623,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     ptw_lvl_n   = LVL3;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
-                                    
-                                    if (dtf_i) state_n = IDLE;
                                 end
                             end
                         end
@@ -649,8 +634,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
                             state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n = ptw_stage_q;
-
-                            if (dtf_i) state_n = IDLE;
                             update_o = 1'b0;
                         end
 
@@ -660,8 +643,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             else            cause_n = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
                             state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n = ptw_stage_q;
-
-                            if (dtf_i) state_n = IDLE;
                             update_o = 1'b0;
                         end
                     end
@@ -683,8 +664,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // we have to return the failed address in bad_addr
                         ptw_pptr_n = ptw_pptr_q;
                         state_n = PROPAGATE_ACCESS_ERROR;
-
-                        if (dtf_i) state_n = IDLE;
                     end
                 end
             end
