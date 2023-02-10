@@ -48,9 +48,6 @@ module iommu_cdw import ariane_pkg::*; #(
     // PC checks
     input  logic        dc_sxl_i,
 
-    // Indicate whether this translation was triggered by a store or a load
-    input  logic                    is_store_i,
-
     // PTW memory interface
     input  dcache_req_o_t           mem_resp_i,             // Response port from memory
     output dcache_req_i_t           mem_req_o,              // Request port to memory
@@ -65,7 +62,8 @@ module iommu_cdw import ariane_pkg::*; #(
     output iommu_pkg::pc_t                  up_pc_content_o,
 
     // CDC tags
-    input  logic [iommu_pkg::DEV_ID_MAX_LEN-1:0]  req_cid_i,    // device/process ID associated with request
+    input  logic [iommu_pkg::DEVICE_ID_WIDTH-1:0]  req_did_i,    // device_id associated with request
+    input  logic [iommu_pkg::PROCESS_ID_WIDTH-1:0] req_pid_i,    // process_id associated with request
 
     // from DDTC / PDTC, to monitor misses
     input  logic                        ddtc_access_i,
@@ -167,7 +165,8 @@ module iommu_cdw import ariane_pkg::*; #(
     logic tag_valid_n,      tag_valid_q;
 
     // Save and propagate the input device_id/process id to walk multiple levels
-    logic [iommu_pkg::DEV_ID_MAX_LEN-1:0] context_id_q, context_id_n;
+    logic [iommu_pkg::DEVICE_ID_WIDTH-1:0]  device_id_q, device_id_n;
+    logic [iommu_pkg::PROCESS_ID_WIDTH-1:0] process_id_q, process_id_n;
 
     // Physical pointer to access memory bus
     logic [riscv::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
@@ -209,9 +208,9 @@ module iommu_cdw import ariane_pkg::*; #(
     // -------------------
     //# DDTC / PDTC Update
     // -------------------
-    assign up_did_o = context_id_q;
+    assign up_did_o = device_id_q;
     assign up_dc_content_o = dc_q;
-    assign up_pid_o = context_id_q;
+    assign up_pid_o = process_id_q;
     assign up_pc_content_o = pc_q;
 
     assign req_port_o.tag_valid      = tag_valid_q;
@@ -236,9 +235,8 @@ module iommu_cdw import ariane_pkg::*; #(
     );
 
     //# Context Directory Walker
-    always_comb begin : ptw
-        automatic logic [riscv::PLEN-1:0] pptr;
-        automatic logic [riscv::GPLEN-1:0] gpaddr;
+    always_comb begin : cdw
+
         // default assignments
         // PTW memory interface
         tag_valid_n            = 1'b0;
@@ -262,7 +260,8 @@ module iommu_cdw import ariane_pkg::*; #(
         entry_cnt_n            = entry_cnt_q;
         is_access_err_n        = is_access_err_q;
         cause_n                = cause_q;
-        context_id_n           = context_id_q;
+        device_id_n            = device_id_q;
+        process_id_n           = process_id_q;
         dc_n                   = dc_q;
         pc_n                   = pc_q;
         ptw_done_n             = ptw_done_q;
@@ -277,7 +276,7 @@ module iommu_cdw import ariane_pkg::*; #(
                 // start with the level indicated by ddtp.MODE
                 cdw_lvl_n       = level_t'(ddtp_mode_i);
                 is_ddt_walk_n   = 1'b0;
-                context_id_n    = req_cid_i;
+                device_id_n     = req_did_i;
                 entry_cnt_n     = '0;
 
                 // check for DDTC misses
@@ -291,32 +290,33 @@ module iommu_cdw import ariane_pkg::*; #(
                     // load pptr according to ddtp.MODE
                     // 3LVL
                     if (ddtp_mode_i == 4'b0100)
-                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[23:15], 3'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[23:15], 3'b0};
                     // 2LVL
                     else if (ddtp_mode_i == 4'b0011)
-                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[14:6], 3'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[14:6], 3'b0};
                     // 1LVL
                     else if (ddtp_mode_i == 4'b0010)
-                        cdw_pptr_n = {ddtp_ppn_i, req_cid_i[5:0], 6'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[5:0], 6'b0};
                 end
 
                 // check for PDTC misses
                 else if (pdtc_access_i && ~pdtc_hit_i && ~ddtc_access_i) begin
                     
-                    state_n = MEM_ACCESS;
+                    process_id_n    = req_pid_i;
+                    state_n         = MEM_ACCESS;
                     cdw_lvl_n       = level_t'(pdtp_mode_i + 1);    // level enconding is different for PDT
                     // pdtc_miss_o        = 1'b1;     // to HPM
 
                     // load pptr according to pdtp.MODE
                     // PD20
                     if (pdtp_mode_i == 4'b0011)
-                        cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_cid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
+                        cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_pid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
                     // PD17
                     else if (pdtp_mode_i == 4'b0010)
-                        cdw_pptr_n = {pdtp_ppn_i, req_cid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
+                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
                     // PD8
                     else if (pdtp_mode_i == 4'b0001)
-                        cdw_pptr_n = {pdtp_ppn_i,req_cid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
+                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
                 end
             end
 
@@ -393,19 +393,19 @@ module iommu_cdw import ariane_pkg::*; #(
                         case (cdw_lvl_q)
                             LVL3: begin
                                 cdw_lvl_n = LVL2;
-                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, context_id_q[14:6], 3'b0};
+                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, device_id_q[14:6], 3'b0};
                                 else begin 
-                                    if (!en_stage2_i)   cdw_pptr_n = {nl.ppn, context_id_q[16:8], 3'b0};
-                                    else                cdw_pptr_n = {pdt_ppn_i, context_id_q[16:8], 3'b0};
+                                    if (!en_stage2_i)   cdw_pptr_n = {nl.ppn, process_id_q[16:8], 3'b0};
+                                    else                cdw_pptr_n = {pdt_ppn_i, process_id_q[16:8], 3'b0};
                                 end
                             end
 
                             LVL2: begin
                                 cdw_lvl_n = LVL1;
-                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, context_id_q[5:0], 6'b0};
+                                if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, device_id_q[5:0], 6'b0};
                                 else begin 
-                                    if (!en_stage2_i)   cdw_pptr_n = {nl.ppn, context_id_q[7:0], 4'b0};
-                                    else                cdw_pptr_n = {pdt_ppn_i, context_id_q[7:0], 4'b0};
+                                    if (!en_stage2_i)   cdw_pptr_n = {nl.ppn, process_id_q[7:0], 4'b0};
+                                    else                cdw_pptr_n = {pdt_ppn_i, process_id_q[7:0], 4'b0};
                                 end
                             end
 
@@ -705,7 +705,8 @@ module iommu_cdw import ariane_pkg::*; #(
             data_rdata_q            <= '0;
             data_rvalid_q           <= 1'b0;
             entry_cnt_q             <= '0;
-            context_id_q            <= '0;
+            device_id_q             <= '0;
+            process_id_q            <= '0;
             cause_q                 <= '0;
             is_ddt_walk_q           <= 1'b0;
             dc_q                    <= '0;
@@ -720,7 +721,8 @@ module iommu_cdw import ariane_pkg::*; #(
             data_rdata_q            <= mem_resp_i.data_rdata;
             data_rvalid_q           <= mem_resp_i.data_rvalid;
             entry_cnt_q             <= entry_cnt_n;
-            context_id_q            <= context_id_n;
+            device_id_q             <= device_id_n;
+            process_id_q            <= process_id_n;
             cause_q                 <= cause_n;
             is_access_err_q         <= is_access_err_n;
             is_ddt_walk_q           <= is_ddt_walk_n;

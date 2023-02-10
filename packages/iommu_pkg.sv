@@ -220,7 +220,73 @@ package iommu_pkg;
     localparam logic [CAUSE_LEN-1:0] PT_DATA_CORRUPTION                 = 274;
 
     // TODO: Transaction type encoding
+    localparam TTYP_LEN = 6;
 
+    localparam logic [TTYP_LEN-1:0] NONE                = 6'b000000;
+    // Untranslated (!b3 && !b2)
+    localparam logic [TTYP_LEN-1:0] UNTRANSLATED_RX     = 6'b00_0_0_01;
+    localparam logic [TTYP_LEN-1:0] UNTRANSLATED_R      = 6'b00_0_0_10;
+    localparam logic [TTYP_LEN-1:0] UNTRANSLATED_W      = 6'b00_0_0_11;      // Write/AMO
+    // Translated (!b3 && b2)
+    localparam logic [TTYP_LEN-1:0] TRANSLATED_RX       = 6'b00_0_1_01;
+    localparam logic [TTYP_LEN-1:0] TRANSLATED_R        = 6'b00_0_1_10;
+    localparam logic [TTYP_LEN-1:0] TRANSLATED_W        = 6'b00_0_1_11;      // Write/AMO
+    // PCIe (b3)
+    localparam logic [TTYP_LEN-1:0] PCIE_ATS_TRANS_REQ  = 6'b00_1_0_00;
+    localparam logic [TTYP_LEN-1:0] PCIE_MSG_REQ        = 6'b00_1_0_01;
+
+    //-----------------------------
+    //# Memory-mapped registers structs
+    //-----------------------------
+
+    // Capabilities (caps)
+    typedef struct packed {
+        logic [7:0]     custom;
+        logic [14:0]    reserved_3;
+        logic           pd20;
+        logic           pd17;
+        logic           pd8;
+        logic [5:0]     pas;
+        logic           dbg;
+        logic           hpm;
+        logic [1:0]     igs;
+        logic           endi;
+        logic           t2gpa;
+        logic           ats;
+        logic           amo;
+        logic           msi_mrif;
+        logic           msi_flat;
+        logic [1:0]     reserved_2;
+        logic           sv57x4;
+        logic           sv48x4;
+        logic           sv39x4;
+        logic           sv32x4;
+        logic           svpbmt;
+        logic [2:0]     reserved_1;
+        logic           sv57;
+        logic           sv48;
+        logic           sv39;
+        logic           sv32;
+        logic [7:0]     version;
+    } capabilities_t;
+
+    // Features control (fctl)
+    typedef struct packed {
+        logic [15:0]    custom;
+        logic [12:0]    reserved;
+        logic           gxl;
+        logic           wsi;
+        logic           be;
+    } fctl_t;
+
+    // Device Directory Table Pointer (ddtp)
+    typedef struct packed {
+        logic [9:0]             reserved_2;
+        logic [riscv::PPNW-1:0] ppn;
+        logic [4:0]             reserved_1;
+        logic                   busy;
+        logic [3:0]             iommu_mode;
+    } ddtp_t;
 
     //--------------------------
     //#  IOMMU functions

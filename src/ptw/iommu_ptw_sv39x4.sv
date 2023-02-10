@@ -371,10 +371,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         msi_translation_n   = 1'b1;   // signal next cycle
                     end
 
-                    // If no stage is enabled and the input address is not associated with an IMSIC,
-                    // then signal external logic that translation is complete without updating IOTLB
-                    else bare_translation_o = 1'b1;
-
                     if (en_stage1_i || en_stage2_i || iova_is_imsic_addr) begin
 
                         // register PSCID, GSCID and IOVA
@@ -388,6 +384,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         state_n                = WAIT_GRANT;
                         // iotlb_miss_o        = 1'b1;     // to HPM
                     end
+
+                    // If no stage is enabled and the input address is not associated with an IMSIC,
+                    // then signal external logic that translation is complete without updating IOTLB
+                    else bare_translation_o = 1'b1;
                 end
             end
 
@@ -538,9 +538,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 // "Stop and raise a page-fault exception corresponding to the original access type."
                                 // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
                                 // " a page-fault exception is raised."
-                                if ((ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0) ||       // 1G
-                                    (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0 ) ||       // 2M
-                                    (!pte.a || (is_store_i && !pte.d)        )) begin   // A and D bits
+                                if ((ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0   ) ||       // 1G
+                                    (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0    ) ||       // 2M
+                                    (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
                                     
                                     if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
                                     else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
