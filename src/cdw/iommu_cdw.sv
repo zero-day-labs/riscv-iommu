@@ -28,7 +28,6 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
     // Error signaling
-    input  logic                                dtf_i,                  // DTF bit from DC. Disables reporting of translation process faults
     output logic                                cdw_active_o,           // Set when PTW is walking memory
     output logic                                cdw_error_o,            // set when an error occurred
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,           // Fault code as defined by IOMMU and Priv Spec
@@ -175,7 +174,7 @@ module iommu_cdw import ariane_pkg::*; #(
     logic is_last_cdw_lvl;
 
     // Propagate done signal from PTW
-    logic ptw_done_q, ptw_done_n;
+    logic ptw_done_q;
 
     // It's not possible to load the entire DC/PC in one request.
     // Aux counter to know how many DWs we have loaded
@@ -264,7 +263,6 @@ module iommu_cdw import ariane_pkg::*; #(
         process_id_n           = process_id_q;
         dc_n                   = dc_q;
         pc_n                   = pc_q;
-        ptw_done_n             = ptw_done_q;
 
         // itlb_miss_o           = 1'b0;
         // dtlb_miss_o           = 1'b0;
@@ -437,7 +435,6 @@ module iommu_cdw import ariane_pkg::*; #(
                 // Comming from GUEST_TR, pdtp.PPN has been translated by the PTW. Must be first stored in DC reg.
                 if (ptw_done_i) begin
                     dc_n.fsc.ppn = pdt_ppn_i;
-                    ptw_done_n = 1'b1;
                 end
 
                 // Last DW (When stage-2 is enabled we must verify if the DC has been updated with the translated pdtp.PPN)
@@ -451,7 +448,9 @@ module iommu_cdw import ariane_pkg::*; #(
                 end
 
                 // Not last DW. Update counter and pptr, save DW
-                else if (data_rvalid_q) begin
+                // INFO: When waiting for the PTW to complete an implicit translation, data_rvalid may be set multiple times
+                // INFO: by guaranteing that DC is not full we avoid entering this condition
+                else if (data_rvalid_q && !(is_ddt_walk_q && dc_fully_loaded)) begin
 
                     entry_cnt_n = entry_cnt_q + 1;
 
@@ -611,9 +610,8 @@ module iommu_cdw import ariane_pkg::*; #(
                     endcase
                 end
 
-                if (flush_i) begin
-                    state_n = IDLE;
-                end
+                // If an error occur in implicit second-stage translation, we abort the transaction and go back to idle
+                if (flush_i)    state_n = IDLE;
             end
 
             // If Stage-2 is enabled, this state triggers the PTW to perform second-stage translation for pdtp.PPN or a non-leaf PDT GPPN
@@ -627,18 +625,17 @@ module iommu_cdw import ariane_pkg::*; #(
                     if(data_rvalid_q) begin
 
                         // When coming from MEM_ACCESS, the ppn to be translated is located in nl.ppn
-                        // "If ddte/pdte.V == 0, stop and report "DDT entry not valid" (cause = 258/266)"
+                        // "If pdte.V == 0, stop and report "PDT entry not valid" (cause = 258/266)"
                         if (!nl.v) begin
                             state_n = ERROR;
-                            if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_ENTRY_INVALID;
-                            else cause_n = iommu_pkg::PDT_ENTRY_INVALID;
+                            cause_n = iommu_pkg::PDT_ENTRY_INVALID;
                         end
 
                         // "If if any bits or encoding that are reserved for future standard use are set within ddte,"
                         // "stop and report "DDT entry misconfigured" (cause = 259)"
                         else if (nl.reserved_1 || nl.reserved_2) begin
                             state_n = ERROR;
-                            cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                            cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
                         end
 
                         // Set pdt_ppn with nl.ppn and trigger PTW
@@ -728,7 +725,7 @@ module iommu_cdw import ariane_pkg::*; #(
             is_ddt_walk_q           <= is_ddt_walk_n;
             dc_q                    <= dc_n;
             pc_q                    <= pc_n;
-            ptw_done_q              <= ptw_done_n;
+            ptw_done_q              <= ptw_done_i;
         end
     end
 

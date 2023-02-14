@@ -27,7 +27,6 @@
       a stronger implementation (+ HW cost).
 */
 
-// TODO: Add DC.tc.DTF bit logic to disable reporting of faults (what to do to abort transaction?)
 module iommu_translation_top import ariane_pkg::*; #(
 
     parameter int unsigned IOTLB_ENTRIES = 4,
@@ -64,7 +63,8 @@ module iommu_translation_top import ariane_pkg::*; #(
     // Error/fault signaling according to thew spec
     // TODO: Ariane pkg has an exception_t struct
     output logic                                trans_error_o,
-    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,   // Fault code as defined by IOMMU and Priv Spec
+    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,       // Fault code as defined by IOMMU and Priv Spec
+    output logic                                report_fault_o,
 
     // We need the tail and head registers of each memory queue:
     // CQ: cqt is input for the IOMMU, cqh is inout for the IOMMU
@@ -80,38 +80,27 @@ module iommu_translation_top import ariane_pkg::*; #(
     input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
 );
 
-    // FSM states
-    enum logic[2:0] {
-        INIT,
-        DC_LOOKUP,
-        PC_LOOKUP,
-        ADDR_LOOKUP,
-        ERROR
-    } state_q, state_n;
-
     // DDTC
     logic                       ddtc_access;
     iommu_pkg::dc_ext_t         ddtc_lu_content;
     logic                       ddtc_lu_hit;
 
-    assign ddtc_access = (req_trans_i);
-
     // PDTC
-    logic                           pdtc_access;
-    iommu_pkg::pc_t                 pdtc_lu_content;
-    logic                           pdtc_lu_hit;
+    logic                       pdtc_access;
+    iommu_pkg::pc_t             pdtc_lu_content;
+    logic                       pdtc_lu_hit;
 
     // IOTLB
-    logic                    iotlb_access;
-    logic [riscv::GPLEN-1:0] iotlb_lu_gpaddr;
-    riscv::pte_t             iotlb_lu_content;
-    riscv::pte_t             iotlb_lu_g_content;
-    logic                    iotlb_lu_is_s_2M;
-    logic                    iotlb_lu_is_s_1G;
-    logic                    iotlb_lu_is_g_2M;
-    logic                    iotlb_lu_is_g_1G;
-    logic                    iotlb_lu_is_msi;
-    logic                    iotlb_lu_hit;
+    logic                       iotlb_access;
+    logic [riscv::GPLEN-1:0]    iotlb_lu_gpaddr;
+    riscv::pte_t                iotlb_lu_content;
+    riscv::pte_t                iotlb_lu_g_content;
+    logic                       iotlb_lu_is_s_2M;
+    logic                       iotlb_lu_is_s_1G;
+    logic                       iotlb_lu_is_g_2M;
+    logic                       iotlb_lu_is_g_1G;
+    logic                       iotlb_lu_is_msi;
+    logic                       iotlb_lu_hit;
 
     // Bare translation signaled by PTW
     logic is_bare_translation;
@@ -130,6 +119,14 @@ module iommu_translation_top import ariane_pkg::*; #(
     logic [PSCID_WIDTH-1:0] pscid;
     logic [riscv::PPNW-1:0] iohgatp_ppn, iosatp_ppn;
 
+    // PTW implicit translations for CDW walks
+    logic                           cdw_implicit_access;
+    logic [riscv::GPPNW-1:0]        pdt_gppn;
+    logic                           cdw_done;
+    logic                           flush_cdw;
+    logic [riscv::PPNW-1:0]         iohgatp_ppn_fw;
+    logic                           is_ddt_walk;
+
     // If DC.tc.DPE is 1 and no valid process_id is given by the device, default value of zero is used
     logic [PROCESS_ID_WIDTH-1:0] process_id;
     assign process_id = (!pid_v_i && ddtc_lu_content.tc.dpe) ? '0 : process_id_i;
@@ -139,9 +136,6 @@ module iommu_translation_top import ariane_pkg::*; #(
     assign first_stage_is_bare  =   ((ddtc_lu_content.tc.pdtv && pdtc_lu_content.fsc.mode == 4'b0000) ||
                                     (!ddtc_lu_content.tc.pdtv && ddtc_lu_content.fsc.mode == 4'b0000));
     assign second_stage_is_bare =   (ddtc_lu_content.iohgatp.mode == 4'b0000);
-
-    // To propagate error code
-    logic [(iommu_pkg::CAUSE_LEN-1):0]  cause_q, cause_n;
 
     // To check whether process_id is wider than supported
     logic pid_wider_than_supported;
@@ -168,9 +162,24 @@ module iommu_translation_top import ariane_pkg::*; #(
     logic is_rx;
     assign is_rx = (!trans_type_i[3] && !trans_type_i[1] && trans_type_i[0]);
 
+    // PMP
     riscv::pmp_access_t pmp_access_type;
     logic pmp_data_allow;
     assign pmp_access_type = is_store ? riscv::ACCESS_WRITE : riscv::ACCESS_READ;
+
+    // Efective iohgatp.ppn field to introduce in the PTW. May need to be forwarded by the CDW
+    logic [riscv::PPNW-1:0] ptw_iohgatp_ppn;
+    assign ptw_iohgatp_ppn = (is_ddt_walk & cdw_implicit_access) ? iohgatp_ppn_fw : iohgatp_ppn;
+
+    // To select en_stage1 and en_stage2 source for PTW implicit second-stage translations in CDW Walks
+    logic ptw_en_stage1, ptw_en_stage2;
+    assign ptw_en_stage1 = (cdw_implicit_access) ? 1'b0 : en_stage1;
+    assign ptw_en_stage2 = (cdw_implicit_access) ? 1'b1 : en_stage2;
+
+    // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
+    // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
+    logic report_always;
+    assign report_fault_o = (ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk));
 
     // Update wires
     logic                           ddtc_update;
@@ -192,18 +201,6 @@ module iommu_translation_top import ariane_pkg::*; #(
     logic [GSCID_WIDTH-1:0]         iotlb_up_gscid;
     riscv::pte_t                    iotlb_up_content;
     riscv::pte_t                    iotlb_up_g_content;
-
-    logic                           cdw_implicit_access;
-    logic [riscv::GPPNW-1:0]        pdt_gppn;
-    logic [riscv::PPNW-1:0]         pdt_ppn;
-    logic                           cdw_done;
-    logic                           flush_cdw;
-    logic [riscv::PPNW-1:0]         iohgatp_ppn_fw;
-    logic                           is_ddt_walk;
-
-    // Efective iohgatp.ppn field to introduce in the PTW. May need to be forwarded by the CDW
-    logic [riscv::PPNW-1:0] ptw_iohgatp;
-    assign ptw_iohgatp = (is_ddt_walk & cdw_implicit_access) ? iohgatp_ppn_fw : iohgatp_ppn;
 
     //# Device Directory Table Cache
     iommu_ddtc #(
@@ -311,8 +308,6 @@ module iommu_translation_top import ariane_pkg::*; #(
     );
 
     //# Page Table Walker
-    //? Can i use the same memory bus signals for PTW and CDW? I think not
-
     iommu_ptw_sv39x4 #(
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH),
@@ -322,7 +317,6 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
         
         // Error signaling
-        .dtf_i                  (ddtc_lu_content.tc.dtf),                  // DTF bit from DC. Disables reporting of translation process faults
         .ptw_active_o           (),           // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
         .ptw_error_stage2_o     (),     // set when the fault occurred in stage 2
@@ -330,8 +324,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         .ptw_iopmp_excep_o      (ptw_access_error),      // set when an (IO)PMP access exception occured
         .cause_code_o           (ptw_cause_code),
 
-        .en_stage1_i            (en_stage1),            // Enable signal for stage 1 translation. Defined by DC/PC
-        .en_stage2_i            (en_stage2),            // Enable signal for stage 2 translation. Defined by DC only
+        .en_stage1_i            (ptw_en_stage1),            // Enable signal for stage 1 translation. Defined by DC/PC
+        .en_stage2_i            (ptw_en_stage2),            // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
 
         // PTW memory interface
@@ -375,7 +369,7 @@ module iommu_translation_top import ariane_pkg::*; #(
 
         // from DC/PC
         .iosatp_ppn_i           (iosatp_ppn),  // ppn from iosatp
-        .iohgatp_ppn_i          (ptw_iohgatp), // ppn from iohgatp (may be forwarded by the CDW)
+        .iohgatp_ppn_i          (ptw_iohgatp_ppn), // ppn from iohgatp (may be forwarded by the CDW)
 
         // (IO)PMP
         .conf_reg_i             (),
@@ -393,8 +387,7 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni                 (rst_ni),                 // Asynchronous reset active low
         
         // Error signaling
-        .dtf_i                  (ddtc_lu_content.tc.dtf),                  // DTF bit from DC. Disables reporting of translation process faults
-        .cdw_active_o           (),           // Set when PTW is walking memory
+        .cdw_active_o           (),           // Set when CDW is walking memory
         .cdw_error_o            (cdw_error),            // set when an error occurred
         .cause_code_o           (cdw_cause_code),           // Fault code as defined by IOMMU and Priv Spec
 
@@ -458,7 +451,7 @@ module iommu_translation_top import ariane_pkg::*; #(
         // CDW implicit translations (Second-stage only)
         .ptw_done_i             (cdw_done),
         .flush_i                (flush_cdw),    //! This signal may be externally OR'ed with an overall flush signal
-        .pdt_ppn_i              (pdt_ppn),
+        .pdt_ppn_i              (iotlb_up_g_content.ppn),
         .cdw_implicit_access_o  (cdw_implicit_access),
         .is_ddt_walk_o          (is_ddt_walk),
         .pdt_gppn_o             (pdt_gppn),
@@ -471,7 +464,6 @@ module iommu_translation_top import ariane_pkg::*; #(
     );
 
     //# Translation logic
-    // TODO: Guarantee aborting translation when an error occurs. Further logic should not be executed...
 
     always_comb begin : translation
 
@@ -489,9 +481,7 @@ module iommu_translation_top import ariane_pkg::*; #(
         is_msi_o            = 1'b0;
         trans_valid_o       = 1'b0;
         translated_addr_o   = '0;
-
-        state_n         = state_q;
-        cause_n         = cause_q;
+        report_always       = 1'b0;
 
         // A translation is triggered by setting req_trans_i
         if (req_trans_i) begin
@@ -501,7 +491,7 @@ module iommu_translation_top import ariane_pkg::*; #(
             if (ddtp_i.iommu_mode == 4'b0000) begin
                 cause_code_o    = iommu_pkg::ALL_INB_TRANSACTIONS_DISALLOWED;
                 trans_error_o   = 1'b1;
-                ddtc_access     = 1'b0;
+                report_always   = 1'b1;
             end
 
             // "If ddtp.iommu_mode == Bare and any of the following conditions (*) hold then stop and report "Transaction type disallowed" (cause = 260)."
@@ -511,25 +501,27 @@ module iommu_translation_top import ariane_pkg::*; #(
                 if (is_translated || is_pcie_tr_req) begin
                     cause_code_o    = iommu_pkg::TRANS_TYPE_DISALLOWED;
                     trans_error_o   = 1'b1;
-                    ddtc_access     = 1'b0;
+                    report_always   = 1'b1;
                 end
 
                 // " else the translation process is completed with the IOVA as the translated address"
                 else begin
-                    
-                    // TODO: Signal translation success
-                    
+                    trans_valid_o       = 1'b1;
+                    translated_addr_o   = iova_i[riscv::PLEN-1:0];
                 end
             end
 
             // This implementation will support MSI address translation, so DC always is presented in extended format
 
             // "If the device_id is wider than supported by the IOMMU, then stop and report "Transaction type disallowed" (cause = 260)."
-            if ((ddtp_i.iommu_mode == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode == 4'b0010 && (|device_id_i[23:6]))) begin
+            else if ((ddtp_i.iommu_mode == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode == 4'b0010 && (|device_id_i[23:6]))) begin
                 cause_code_o = iommu_pkg::TRANS_TYPE_DISALLOWED;
                 trans_error_o   = 1'b1;
-                ddtc_access     = 1'b0;
+                report_always   = 1'b1;
             end
+
+            // IOMMU is not in bare mode and no errors ocurred. Lookup DDTC
+            else ddtc_access = 1'b1;
         end
 
         //# DDTC Lookup
@@ -552,9 +544,10 @@ module iommu_translation_top import ariane_pkg::*; #(
                 // Translated request
                 if (is_translated) begin
 
-                    // When DC.tc.T2GPA = 0, translated requests are performed using an SPA
+                    // When DC.tc.T2GPA = 0, translated requests are performed using an SPA. Translation process is complete
                     if (!ddtc_lu_content.tc.t2gpa) begin
-                        // TODO: Signal translation success
+                        trans_valid_o       = 1'b1;
+                        translated_addr_o   = iova_i[riscv::PLEN-1:0];
                     end
 
                     // If DC.tc.T2GPA = 1, translated requests are performed using a GPA. The IOMMU performs second-stage translation
@@ -596,7 +589,6 @@ module iommu_translation_top import ariane_pkg::*; #(
                             iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
                             // iosatp not used since Stage 1 is Bare
                             iotlb_access    = 1'b1;
-
                         end
 
                         else pdtc_access = 1'b1;
@@ -645,7 +637,7 @@ module iommu_translation_top import ariane_pkg::*; #(
                 end
 
                 //# Normal entry
-                // IOTLB should not have entries with both stages disabled and MSI flag clear. However, we double-check
+                // INFO: IOTLB should not have entries with both stages disabled and MSI flag clear. However, we double-check
                 else if (en_stage1 || en_stage2) begin
                     /*
                     A fault is generated if:

@@ -16,6 +16,7 @@
     Description: RISC-V IOMMU overall SV package.
 */
 
+// TODO: Change iommu_pkg to riscv_iommu
 package iommu_pkg;
 
     // Device Context max length
