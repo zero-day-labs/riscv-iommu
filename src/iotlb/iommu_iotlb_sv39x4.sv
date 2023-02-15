@@ -19,10 +19,6 @@
 //              This module is an adaptation of the Sv39 TLB developed
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
 
-//! The output address of the IOTLB should only be considered valid if GSCID and PSCID are valid.
-//! This means that lookup_i = iotlb_access & ddtc_hit & (pdtc_hit ^ DC.tc.pdtv).
-//! The same condition applies for triggering the PTW.
-
 module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4,
     parameter int unsigned PSCID_WIDTH  = 1,
@@ -38,9 +34,9 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    flush_av_i,       // ADDR valid
     input  logic                    flush_gv_i,       // GSCID valid
     input  logic                    flush_pscv_i,     // PSCID valid
-    input  logic                    flush_iova_i,     // IOVA to be flushed
-    input  logic                    flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
-    input  logic                    flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
+    input  logic [riscv::GPPNW-1:0] flush_vpn_i,     // IOVA to be flushed
+    input  logic [PSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
+    input  logic [GSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
     // TODO: If flush and update operations are mutually exclusive, some signals may be shared
     // Update signals
@@ -209,7 +205,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     end
 
     // ------------------
-    //* Update and Flush
+    //# Update and Flush
     // ------------------
 
     logic  [IOTLB_ENTRIES-1:0] vaddr_vpn0_match;
@@ -239,9 +235,9 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
 
             // check if given GVA (39-bits) matches VPN tag
-            vaddr_vpn0_match[i] = (flush_iova_i[20:12] == tags_q[i].vpn0);
-            vaddr_vpn1_match[i] = (flush_iova_i[29:21] == tags_q[i].vpn1);
-            vaddr_vpn2_match[i] = (flush_iova_i[30+riscv::VPN2:30] == tags_q[i].vpn2[riscv::VPN2:0]);   // [38:30]
+            vaddr_vpn0_match[i] = (flush_vpn_i[8:0] == tags_q[i].vpn0);
+            vaddr_vpn1_match[i] = (flush_vpn_i[17:9] == tags_q[i].vpn1);
+            vaddr_vpn2_match[i] = (flush_vpn_i[18+riscv::VPN2:18] == tags_q[i].vpn2[riscv::VPN2:0]);   // [26:18]
 
             // S/VS superpage cases
             vaddr_2M_match[i] = (vaddr_vpn2_match[i] && vaddr_vpn1_match[i] && tags_q[i].is_s_2M);
@@ -252,9 +248,9 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             
             // check if given GPA matches with any tag
             // Since the IOVA may be a GVA or a GPA, i think the input port may be the same...
-            gpaddr_gppn0_match[i] = (flush_iova_i[20:12] == gppn[i][8:0]);
-            gpaddr_gppn1_match[i] = (flush_iova_i[29:21] == gppn[i][17:9]);
-            gpaddr_gppn2_match[i] = (flush_iova_i[30+riscv::GPPN2:30] == gppn[i][18+riscv::GPPN2:18]);
+            gpaddr_gppn0_match[i] = (flush_vpn_i[8:0] == gppn[i][8:0]);
+            gpaddr_gppn1_match[i] = (flush_vpn_i[17:9] == gppn[i][17:9]);
+            gpaddr_gppn2_match[i] = (flush_vpn_i[18+riscv::GPPN2:18] == gppn[i][18+riscv::GPPN2:18]);
 
             // G superpage cases
             gpaddr_2M_match[i] = (gpaddr_gppn2_match[i] && gpaddr_gppn1_match[i] && tags_q[i].is_g_2M);
