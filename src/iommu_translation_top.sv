@@ -320,7 +320,7 @@ module iommu_translation_top import ariane_pkg::*; #(
         .ptw_active_o           (),                     // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
         .ptw_error_stage2_o     (),                     // set when the fault occurred in stage 2
-        .ptw_error_stage2_int_o (),                     // set when an error occurred in stage 2 during stage 1 translation
+        .ptw_error_stage2_int_o (),                     // set when fault occurred during an implicit access for 1st-stage translation
         .ptw_iopmp_excep_o      (ptw_access_error),     // set when an (IO)PMP access exception occured
         .cause_code_o           (ptw_cause_code),
 
