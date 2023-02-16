@@ -102,7 +102,7 @@ module cq_handler import ariane_pkg::*; #(
 
     // To mask the input head index according to the size of the CQ
     logic [31:0]    masked_head;
-    assign          masked_head = (cq_size_i <= 7) ? (cq_head_i & 32'b1111_1111) : (cq_head_i & ~({32{1'b1}} << cq_size_i));
+    assign          masked_head = (cq_size_i <= 7) ? (cq_head_i & 32'b1111_1111) : (cq_head_i & ~({32{1'b1}} << (cq_size_i+1)));
 
     // Control busy signal to notice SW when is not possible to write to cqcsr
     logic cq_en_q, cq_en_n;

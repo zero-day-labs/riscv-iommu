@@ -18,7 +18,7 @@
 //              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB 
 //              developed by Bruno Sá.
 
-//TODO: Change D$ memory interface to AXI Master memory interface
+// TODO: Change D$ memory interface to AXI Master memory interface
 
 //# Disabled verilator_lint_off WIDTH
 
@@ -48,7 +48,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output dcache_req_i_t           mem_req_o,              // Request port to memory
 
     // to IOTLB, update logic
-    // TODO: Update signals will be grouped in a packed struct after validation with cocotb
     output  logic                    update_o,
     output  logic                    up_is_s_2M_o,
     output  logic                    up_is_s_1G_o,
@@ -60,9 +59,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output  logic [GSCID_WIDTH-1:0]  up_gscid_o,
     output riscv::pte_t              up_content_o,
     output riscv::pte_t              up_g_content_o,
-
-    // output tlb_update_sv39x4_t      itlb_update_o,
-    // output tlb_update_sv39x4_t      dtlb_update_o,
 
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]                  req_iova_i,
@@ -163,6 +159,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // To save final GPA
     logic [riscv::GPLEN-1:0] gpaddr;
 
+    // To signal page faults / guest page faults
+    logic page_fault_q, page_fault_n;
+
     // input IOVA (GPA) is the address of a virtual IMSIC
     assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i &&
                                    ((req_iova_i[(riscv::VLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
@@ -246,10 +245,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     logic allow_access;
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
-    // G stage error occurs whenever ptw_stage_q != STAGE_1 in the PROP_ERR state
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
 
-    // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
+    // TODO: Insert functional IOPMP.
     pmp #(
         .PLEN       ( riscv::PLEN            ),
         .PMP_LEN    ( riscv::PLEN - 2        ),
@@ -316,6 +314,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 msi_translation_n   = 1'b0;
                 gpaddr_n            = '0;
                 gpte_n              = '0;
+                page_fault_n        = 1'b0;
 
                 // check for possible IOTLB miss
                 if ((iotlb_access_i & ~iotlb_hit_i) || cdw_implicit_access_i) begin
@@ -445,9 +444,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // Invalid PTE
                         // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
                         if (!pte.v || (!pte.r && pte.w)) begin
-                            if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
-                            else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
-                            state_n = PROPAGATE_ERROR;
+                            page_fault_n    = 1'b1;
+                            state_n         = PROPAGATE_ERROR;
                         end
 
                         //# Valid PTE
@@ -527,8 +525,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0    ) ||       // 2M
                                     (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
                                     
-                                    if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
-                                    else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
+                                    page_fault_n    = 1'b1;
                                     state_n             = PROPAGATE_ERROR;
                                     ptw_stage_n         = ptw_stage_q;
                                     update_o = 1'b0;
@@ -608,8 +605,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
                                 // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
                                 if(pte.a || pte.d || pte.u) begin
-                                    if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
-                                    else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
+                                    page_fault_n    = 1'b1;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
                                 end
@@ -617,8 +613,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
                                 //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                                 if (ptw_lvl_q == LVL3) begin
-                                    if (is_store_i) cause_n = iommu_pkg::STORE_PAGE_FAULT;
-                                    else            cause_n = iommu_pkg::LOAD_PAGE_FAULT;
+                                    page_fault_n    = 1'b1;
                                     ptw_lvl_n   = LVL3;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
@@ -629,8 +624,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
                         // Svnapot and Svpbmt are not implemented
                         if ((|pte.reserved) != 1'b0) begin
-                            if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
-                            else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                            page_fault_n    = 1'b1;
                             state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n = ptw_stage_q;
                             update_o = 1'b0;
@@ -672,10 +666,22 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             PROPAGATE_ERROR: begin
                 state_n     = IDLE;
                 ptw_error_o = 1'b1;
-                cause_code_o = cause_q;
+
+                // Set cause code and flags
+                if (page_fault_q) begin
+                    if (ptw_stage_q != STAGE_1) begin
+                        if (is_store_i) cause_code_o = iommu_pkg::STORE_GUEST_PAGE_FAULT;
+                        else            cause_code_o = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
+                    end
+                    else begin
+                        if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
+                        else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                    end
+                end
+                else cause_code_o = cause_q;
                 ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
                 ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
-                flush_cdw_o = (cdw_implicit_access_q) ? 1'b1 : 1'b0;
+                flush_cdw_o = cdw_implicit_access_q;
             end
 
             PROPAGATE_ACCESS_ERROR: begin
@@ -712,6 +718,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             data_rvalid_q           <= 1'b0;
             cause_q                 <= '0;
             cdw_implicit_access_q   <= 1'b0;
+            page_fault_q            <= 1'b0;
 
         end else begin
             state_q                 <= state_n;
@@ -732,6 +739,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             data_rvalid_q           <= mem_resp_i.data_rvalid;
             cause_q                 <= cause_n;
             cdw_implicit_access_q   <= cdw_implicit_access_n;
+            page_fault_q            <= page_fault_n;
         end
     end
 
