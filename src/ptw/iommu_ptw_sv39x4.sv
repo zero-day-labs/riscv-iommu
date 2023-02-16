@@ -23,6 +23,8 @@
                     -   Bruno Sá, University of Minho.
 */
 
+//TODO: Change D$ memory interface to AXI Master memory interface
+
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_ptw_sv39x4 import ariane_pkg::*; #(
@@ -42,8 +44,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
     // TODO: Integrate functional IOPMP
 
-    //! External logic should check if associated DC defines Sv39/Sv39x4 as translation scheme
-    //! Otherwise, the PTW should not be even triggered
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
     input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
@@ -89,14 +89,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic                        flush_cdw_o,
 
     // from IOTLB, to monitor misses
-    input  logic                    iotlb_access_i,     //! Remember the external logic to avoid looking up before CDTC hit
+    input  logic                    iotlb_access_i,
     input  logic                    iotlb_hit_i,
 
     // from DC/PC
     input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
     input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp (may be forwarded by the CDW)
 
-    // TODO: include HPM
     // // Performance counters
     // output logic                    itlb_miss_o,
     // output logic                    dtlb_miss_o,
@@ -366,7 +365,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                     // MSI Address translation may be invoked if no stage is enabled
                     else if (iova_is_imsic_addr) begin
-                        ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
+                        ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i), 4'b0};
                         msi_translation_n   = 1'b1;   // signal next cycle
                     end
 
@@ -422,7 +421,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         else begin
                             update_o = 1'b1;
 
-                            // TODO: For now, only write-through mode for MSI translation is supported. In the future, implement MRIF mode.
+                            // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
                             if (msi_pte.m != iommu_pkg::WRITE_THROUGH) begin
                                 update_o = 1'b0;
                                 cause_n = iommu_pkg::TRANS_TYPE_DISALLOWED;
@@ -491,7 +490,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         // GPA is an IMSIC address (even if Stage 2 is disabled)
                                         if (gpaddr_is_imsic_addr) begin
                                             ptw_stage_n = WAIT_GRANT;
-                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i) << 4);
+                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
                                         end
                                     end
@@ -674,7 +673,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             end
 
             // Propagate error to IOMMU
-            // TODO: Maybe we only need one error state as we are encoding and propagating the fault cause.
             // We do need to propagate the bad GPA
             PROPAGATE_ERROR: begin
                 state_n     = IDLE;

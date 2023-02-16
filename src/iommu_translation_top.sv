@@ -211,14 +211,14 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
         // TODO: Flush signals
-        .flush_i            (),       // IODIR.INVAL_DDT
-        .flush_dv_i         (),    // device_id valid
-        .flush_did_i        (),   // device_id to be flushed
+        .flush_i            (),                 // IODIR.INVAL_DDT
+        .flush_dv_i         (),                 // device_id valid
+        .flush_did_i        (),                 // device_id to be flushed
 
         // Update signals
         .update_i           (ddtc_update),      // update flag
         .up_did_i           (ddtc_up_did),      // device ID to be updated
-        .up_content_i       (ddtc_up_content),       // DC to be inserted
+        .up_content_i       (ddtc_up_content),  // DC to be inserted
 
         // Lookup signals
         .lookup_i           (ddtc_access),      // lookup flag
@@ -237,22 +237,22 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
         // Flush signals
-        .flush_i            (),       // IODIR.INVAL_DDT or IODIR.INVAL_PDT
-        .flush_dv_i         (),    // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
-        .flush_pv_i         (),    // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
-        .flush_did_i        (),   // device_id to be flushed
-        .flush_pid_i        (),   // process_id to be flushed (if flush_pv_i = 1)
+        .flush_i            (),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
+        .flush_dv_i         (),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
+        .flush_pv_i         (),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
+        .flush_did_i        (),                 // device_id to be flushed
+        .flush_pid_i        (),                 // process_id to be flushed (if flush_pv_i = 1)
 
         // Update signals
         .update_i           (pdtc_update),      // update flag
         .up_did_i           (ddtc_up_did),      // device ID to be inserted
         .up_pid_i           (pdtc_up_pid),      // process ID to be inserted
-        .up_content_i       (pdtc_up_content),       // PC to be inserted
+        .up_content_i       (pdtc_up_content),  // PC to be inserted
 
         // Lookup signals
         .lookup_i           (pdtc_access),      // lookup flag
         .lu_did_i           (device_id_i),      // device_id to tag PDTC
-        .lu_pid_i           (process_id),      // process_id to tag PDTC
+        .lu_pid_i           (process_id),       // process_id to tag PDTC
         .lu_content_o       (pdtc_lu_content),  // PC found in PDTC
         .lu_hit_o           (pdtc_lu_hit)       // hit flag
     );
@@ -263,18 +263,18 @@ module iommu_translation_top import ariane_pkg::*; #(
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH)
     ) iotlb (
-        .clk_i              (clk_i),            // Clock
-        .rst_ni             (rst_ni),           // Asynchronous reset active low
+        .clk_i              (clk_i),    // Clock
+        .rst_ni             (rst_ni),   // Asynchronous reset active low
 
         // Flush signals
-        .flush_vma_i        (),      // IOTINVAL.VMA
-        .flush_gvma_i       (),     // IOTINVAL.GVMA
-        .flush_av_i         (),       // ADDR valid
-        .flush_gv_i         (),       // GSCID valid
-        .flush_pscv_i       (),     // PSCID valid
-        .flush_iova_i       (),     // IOVA to be flushed
-        .flush_gscid_i      (),    // GSCID identifier to be flushed (VM identifier)
-        .flush_pscid_i      (),    // PSCID identifier to be flushed (address space identifier)
+        .flush_vma_i        (),         // IOTINVAL.VMA
+        .flush_gvma_i       (),         // IOTINVAL.GVMA
+        .flush_av_i         (),         // ADDR valid
+        .flush_gv_i         (),         // GSCID valid
+        .flush_pscv_i       (),         // PSCID valid
+        .flush_vpn_i        (),         // VPN to be flushed
+        .flush_gscid_i      (),         // GSCID identifier to be flushed (VM identifier)
+        .flush_pscid_i      (),         // PSCID identifier to be flushed (address space identifier)
 
         // Update signals
         .update_i           (iotlb_update),
@@ -290,21 +290,21 @@ module iommu_translation_top import ariane_pkg::*; #(
         .up_g_content_i     (iotlb_up_g_content),
 
         // Lookup signals
-        .lookup_i           (iotlb_access),                 // lookup flag
-        .lu_iova_i          (iova_i),                // IOVA to look for 
-        .lu_pscid_i         (pscid),               // PSCID to look for
-        .lu_gscid_i         (gscid),               // GSCID to look for
-        .lu_gpaddr_o        (iotlb_lu_gpaddr),              // GPA to return in case of an exception
-        .lu_content_o       (iotlb_lu_content),             // S/VS-stage PTE (GPA PPN)
-        .lu_g_content_o     (iotlb_lu_g_content),           // G-stage PTE (SPA PPN)
+        .lookup_i           (iotlb_access),         // lookup flag
+        .lu_iova_i          (iova_i),               // IOVA to look for 
+        .lu_pscid_i         (pscid),                // PSCID to look for
+        .lu_gscid_i         (gscid),                // GSCID to look for
+        .lu_gpaddr_o        (iotlb_lu_gpaddr),      // GPA to return in case of an exception
+        .lu_content_o       (iotlb_lu_content),     // S/VS-stage PTE (GPA PPN)
+        .lu_g_content_o     (iotlb_lu_g_content),   // G-stage PTE (SPA PPN)
         .lu_is_s_2M_o       (iotlb_lu_is_s_2M),               
         .lu_is_s_1G_o       (iotlb_lu_is_s_1G),
         .lu_is_g_2M_o       (iotlb_lu_is_g_2M),               
         .lu_is_g_1G_o       (iotlb_lu_is_g_1G),
-        .lu_is_msi_o        (iotlb_lu_is_msi),              // IOTLB entry contains a GPA associated with a guest vIMSIC
-        .s_stg_en_i         (en_stage1),               // s-stage enabled
-        .g_stg_en_i         (en_stage2),               // g-stage enabled
-        .lu_hit_o           (iotlb_lu_hit)                  // hit flag
+        .lu_is_msi_o        (iotlb_lu_is_msi),      // IOTLB entry contains a GPA associated with a guest vIMSIC
+        .s_stg_en_i         (en_stage1),            // s-stage enabled
+        .g_stg_en_i         (en_stage2),            // g-stage enabled
+        .lu_hit_o           (iotlb_lu_hit)          // hit flag
     );
 
     //# Page Table Walker
@@ -317,20 +317,20 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
         
         // Error signaling
-        .ptw_active_o           (),           // Set when PTW is walking memory
+        .ptw_active_o           (),                     // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
-        .ptw_error_stage2_o     (),     // set when the fault occurred in stage 2
-        .ptw_error_stage2_int_o (), // set when an error occurred in stage 2 during stage 1 translation
-        .ptw_iopmp_excep_o      (ptw_access_error),      // set when an (IO)PMP access exception occured
+        .ptw_error_stage2_o     (),                     // set when the fault occurred in stage 2
+        .ptw_error_stage2_int_o (),                     // set when an error occurred in stage 2 during stage 1 translation
+        .ptw_iopmp_excep_o      (ptw_access_error),     // set when an (IO)PMP access exception occured
         .cause_code_o           (ptw_cause_code),
 
-        .en_stage1_i            (ptw_en_stage1),            // Enable signal for stage 1 translation. Defined by DC/PC
-        .en_stage2_i            (ptw_en_stage2),            // Enable signal for stage 2 translation. Defined by DC only
+        .en_stage1_i            (ptw_en_stage1),        // Enable signal for stage 1 translation. Defined by DC/PC
+        .en_stage2_i            (ptw_en_stage2),        // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
 
         // PTW memory interface
-        .mem_resp_i             (mem_resp_i),             // Response port from memory
-        .mem_req_o              (mem_req_o),              // Request port to memory
+        .mem_resp_i             (mem_resp_i),           // Response port from memory
+        .mem_req_o              (mem_req_o),            // Request port to memory
 
         // to IOTLB, update logic
         .update_o               (iotlb_update),
@@ -368,8 +368,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         .iotlb_hit_i            (iotlb_lu_hit),
 
         // from DC/PC
-        .iosatp_ppn_i           (iosatp_ppn),  // ppn from iosatp
-        .iohgatp_ppn_i          (ptw_iohgatp_ppn), // ppn from iohgatp (may be forwarded by the CDW)
+        .iosatp_ppn_i           (iosatp_ppn),       // ppn from iosatp
+        .iohgatp_ppn_i          (ptw_iohgatp_ppn),  // ppn from iohgatp (may be forwarded by the CDW)
 
         // (IO)PMP
         .conf_reg_i             (),
@@ -383,13 +383,13 @@ module iommu_translation_top import ariane_pkg::*; #(
             .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
             .ArianeCfg          (ArianeCfg)
     ) cdw (
-        .clk_i                  (clk_i),                  // Clock
-        .rst_ni                 (rst_ni),                 // Asynchronous reset active low
+        .clk_i                  (clk_i),                // Clock
+        .rst_ni                 (rst_ni),               // Asynchronous reset active low
         
         // Error signaling
-        .cdw_active_o           (),           // Set when CDW is walking memory
+        .cdw_active_o           (),                     // Set when CDW is walking memory
         .cdw_error_o            (cdw_error),            // set when an error occurred
-        .cause_code_o           (cdw_cause_code),           // Fault code as defined by IOMMU and Priv Spec
+        .cause_code_o           (cdw_cause_code),       // Fault code as defined by IOMMU and Priv Spec
 
         // DC config checks
         .caps_ats_i             (capabilities_i.ats),
@@ -415,7 +415,7 @@ module iommu_translation_top import ariane_pkg::*; #(
         .dc_sxl_i               (ddtc_lu_content.tc.sxl),
 
         // PTW memory interface
-        .mem_resp_i             (mem_resp_i),             // Response port from memory
+        .mem_resp_i             (mem_resp_i),            // Response port from memory
         .mem_req_o              (mem_req_o),             // Request port to memory
 
         // Update logic
@@ -428,8 +428,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         .up_pc_content_o        (pdtc_up_content),
 
         // CDCs tags
-        .req_did_i              (device_id_i),    // device ID associated with request
-        .req_pid_i              (process_id),    // process ID associated with request
+        .req_did_i              (device_id_i),          // device ID associated with request
+        .req_pid_i              (process_id),           // process ID associated with request
 
         // from DDTC / PDTC, to monitor misses
         .ddtc_access_i          (ddtc_access),
@@ -439,14 +439,14 @@ module iommu_translation_top import ariane_pkg::*; #(
         .pdtc_hit_i             (pdtc_lu_hit),
 
         // from regmap
-        .ddtp_ppn_i             (ddtp_i.ppn),    // PPN from ddtp register
-        .ddtp_mode_i            (ddtp_i.mode),    // DDT levels and IOMMU mode
+        .ddtp_ppn_i             (ddtp_i.ppn),       // PPN from ddtp register
+        .ddtp_mode_i            (ddtp_i.mode),      // DDT levels and IOMMU mode
 
         // from DC (for PC walks)
         //! Similarly to the PTW, we only want to know if second stage is enabled. External logic should verify the scheme...
-        .en_stage2_i            (en_stage2),    // Second-stage translation is enabled
-        .pdtp_ppn_i             (ddtc_lu_content.fsc.ppn),     // PPN from DC.fsc.PPN
-        .pdtp_mode_i            (ddtc_lu_content.fsc.mode),    // PDT levels from DC.fsc.MODE
+        .en_stage2_i            (en_stage2),                    // Second-stage translation is enabled
+        .pdtp_ppn_i             (ddtc_lu_content.fsc.ppn),      // PPN from DC.fsc.PPN
+        .pdtp_mode_i            (ddtc_lu_content.fsc.mode),     // PDT levels from DC.fsc.MODE
 
         // CDW implicit translations (Second-stage only)
         .ptw_done_i             (cdw_done),
@@ -627,8 +627,7 @@ module iommu_translation_top import ariane_pkg::*; #(
                     // MSI PTEs contain the PPN in the same position as normal PTEs
                     translated_addr_o   = {iotlb_lu_g_content.ppn, iova_i[11:0]};
 
-                    //? Do MSI physical addresses need to be checked by PMP? These addresses are actually IMSIC addresses
-                    //? Are IMSIC interrupt files memory-mapped?
+                    // MSI Physical Addresses must also be checked by PMP
                     if(!pmp_data_allow) begin
                         trans_valid_o   = 1'b0;
                         cause_code_o    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
@@ -650,8 +649,8 @@ module iommu_translation_top import ariane_pkg::*; #(
                     */
                     if ((is_store && ((!iotlb_lu_content.w && en_stage1) || (!iotlb_lu_g_content.w && en_stage2))   ) ||    // (1)
                         (is_rx && (!iotlb_lu_content.x && en_stage1) || (!iotlb_lu_g_content.x && en_stage2)        ) ||    // (2)
-                        (priv_lvl_i == riscv::PRIV_LVL_U && !pte.u                                                  ) ||    // (3)
-                        (priv_lvl_i == riscv::PRIV_LVL_S && pte.u && (!pdtc_lu_content.ta.sum || pte.x)             )       // (4)
+                        (priv_lvl_i == riscv::PRIV_LVL_U && !iotlb_lu_content.u                                                  ) ||    // (3)
+                        (priv_lvl_i == riscv::PRIV_LVL_S && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x)             )       // (4)
                         ) begin
                             if (is_store)   cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
                             else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;

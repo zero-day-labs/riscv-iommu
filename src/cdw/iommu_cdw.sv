@@ -17,6 +17,7 @@
     Description: RISC-V IOMMU Hardware CDW (Context Directory Walker).
 */
 
+// TODO: Change D$ memory interface to AXI Master memory interface
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_cdw import ariane_pkg::*; #(
@@ -278,7 +279,7 @@ module iommu_cdw import ariane_pkg::*; #(
                 entry_cnt_n     = '0;
 
                 // check for DDTC misses
-                //! Simultaneous accesses may occur in the DDTC and PDTC. We need DC to find PC, so first walk DDT.
+                // External logic guarantees that DDTC is looked up before PDTC
                 if (ddtc_access_i && ~ddtc_hit_i) begin
                     
                     is_ddt_walk_n = 1'b1;
@@ -298,7 +299,7 @@ module iommu_cdw import ariane_pkg::*; #(
                 end
 
                 // check for PDTC misses
-                else if (pdtc_access_i && ~pdtc_hit_i && ~ddtc_access_i) begin
+                else if (pdtc_access_i && ~pdtc_hit_i) begin
                     
                     process_id_n    = req_pid_i;
                     state_n         = MEM_ACCESS;

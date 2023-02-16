@@ -178,6 +178,91 @@ package iommu_pkg;
         logic           v;
     } msi_mrif_pte_t;
 
+    //----------------------
+    //#  IOMMU Command Queue
+    //----------------------
+
+    // Opcodes
+    localparam logic [6:0] IOTINVAL = 6'd1;
+    localparam logic [6:0] IOFENCE  = 6'd2;
+    localparam logic [6:0] IOTDIR   = 6'd3;
+    localparam logic [6:0] ATS      = 6'd4;
+
+    // Func3
+    localparam logic [2:0] VMA      = 3'b000;
+    localparam logic [2:0] GVMA     = 3'b001;
+    
+    localparam logic [2:0] DDT      = 3'b000;
+    localparam logic [2:0] PDT      = 3'b001;
+
+
+    // Generic CQ entry (used to check type of command)
+    typedef struct packed {
+        logic [117:0]   operands;
+        logic [2:0]     func3;
+        logic [6:0]     opcode;
+    } cq_entry_t;
+
+    // IOTLB Invalidation Command
+    typedef struct packed {
+        logic [1:0]     reserved_4;
+        logic [51:0]    addr;           // Actually VPN... Named 'ADDR' to match with Spec document
+        logic [13:0]    reserved_3;
+        logic [15:0]    gscid;
+        logic [9:0]     reserved_2;
+        logic           gv;
+        logic           pscv;
+        logic [19:0]    pscid;
+        logic           reserved_1;
+        logic           av;
+        logic [2:0]     func3;
+        logic [6:0]     opcode;
+    } cq_iotinval_t;
+
+    // CQ IO Fence command
+    typedef struct packed {
+        logic [1:0]     reserved_2;
+        logic [62:0]    addr;
+        logic [31:0]    data;
+        logic [17:0]    reserved_1;
+        logic           pw;
+        logic           pr;
+        logic           wsi;
+        logic           av;
+        logic [2:0]     func3;
+        logic [6:0]     opcode;
+    } cq_iofence_t;
+
+    // Context Directory Cache Invalidation Commands
+    typedef struct packed {
+        logic [63:0]    reserved_4;
+        logic [23:0]    did;
+        logic [5:0]     reserved_3;
+        logic           dv;
+        logic           reserved_2;
+        logic [19:0]    pid;
+        logic [1:0]     reserved_1;
+        logic [2:0]     func3;
+        logic [6:0]     opcode;
+    } cq_iodirinval_t;
+
+    //----------------------------
+    //#  IOMMU Fault Queue Structs
+    //----------------------------
+
+    typedef struct packed {
+        logic [63:0]    iotval2;
+        logic [63:0]    iotval;
+        logic [31:0]    reserved;
+        logic [31:0]    custom;
+        logic [23:0]    did;
+        logic [5:0]     ttyp;
+        logic           priv;
+        logic           pv;
+        logic [19:0]    pid;
+        logic [11:0]    cause;
+    } fq_record_t;
+
     //-----------------------------
     //#  IOMMU fault CAUSE encoding
     //-----------------------------
