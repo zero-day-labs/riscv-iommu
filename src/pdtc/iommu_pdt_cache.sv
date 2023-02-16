@@ -94,7 +94,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     // ------------------
 
     /*
-        * IODIR.INVAL_DDT
+        # IODIR.INVAL_DDT
         IODIR.INVAL_DDT guarantees that any previous stores made by a RISC-V hart to the DDT are observed
         before all subsequent implicit reads from IOMMU to DDT. If DV is 0, then the command invalidates
         all DDT and PDT entries cached for all devices. If DV is 1, then the command invalidates cached leaf
@@ -115,14 +115,14 @@ module iommu_pdtc import ariane_pkg::*; #(
                     tags_n[i].valid = 1'b0;
                 end
 
-                // DV = 1: Invalidate only the PDTC entry that matches given device_id and corresponding PDT entries
+                // DV = 1: Invalidate only the PDTC entry that matches given device_id
                 else if (tags_q[i].device_id == flush_did_i) begin
                     tags_n[i].valid = 1'b0;
                 end
             end
 
             /*
-                * IODIR.INVAL_PDT
+                # IODIR.INVAL_PDT
                 IODIR.INVAL_PDT guarantees that any previous stores made by a RISC-V hart to the PDT are observed
                 before all subsequent implicit reads from IOMMU to PDT. The command invalidates cached leaf
                 PDT entry for the specified PID and DID.

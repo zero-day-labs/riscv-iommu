@@ -48,7 +48,7 @@ module iommu_field
 
     import iommu_field_pkg::*;
 
-    // Write arbiter output signals signals.
+    // Write arbiter output signals.
     // It takes WE, WD, DE, D, Q signals and yields the valid WE and WD that will cause writes to the register
     logic arb_wr_en;
     logic [DW-1:0] arb_wr_data;
