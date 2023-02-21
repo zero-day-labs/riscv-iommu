@@ -19,8 +19,8 @@
 
 //! NOTES:
 /*
-    -   FSM triggered by the occurrence of a fault/event raised when processing transactions.
-    -   // TODO: Implement support for faults originated from PCIe Message Requests
+    -   FSM triggered by the occurrence of a fault/event raised when processing transactions (attention with DTF bit!).
+    -   // TODO: Implement support for faults originated from PCIe Message Requests (Future Work)
     -   Guest page faults caused by implicit memory accesses for first-stage address translation and 
         PDT Walk when Stage 2 is not Bare must be identified. 
         For the former case, we have the ptw_error_stage2_int_o signal from the PTW, which identifies faults 
@@ -58,18 +58,18 @@ module fq_handler import ariane_pkg::*; #(
     input logic                     fq_mf_i,             
     input logic                     fq_of_i,  
 
-    output logic                    error_o,            // To enable write of corresponding error bit to regmap
+    output logic                    error_wen_o,            // To enable write of corresponding error bit to regmap
     output logic                    fq_mf_o,            // Set when a memory fault occurred during FQ access
     output logic                    fq_of_o,            // The execution of a command lead to a timeout 
     output logic                    fq_ip_o,            // To set ipsr.fip register if a fault occurs and fq_ie is set
 
     // Event data
-    input  logic                                event_valid,    // a fault/event has occurred
+    input  logic                                event_valid_i,    // a fault/event has occurred
     input  logic [iommu_pkg::TTYP_LEN-1:0]      trans_type_i,   // transaction type
     input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,   // Fault code as defined by IOMMU and Priv Spec
     //? complete VLEN for IOVA? Offset required?
     input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
-    input  logic [riscv::SVX-1:0]               gpaddr,             // to report bits [63:2] of the GPA in case of a Guest Page Fault
+    input  logic [riscv::SVX-1:0]               gpaddr_i,             // to report bits [63:2] of the GPA in case of a Guest Page Fault
     input  logic [DEVICE_ID_WIDTH-1:0]          did_i,              // device_id associated with the transaction
     input  logic                                pv_i,               // to indicate if transaction has a valid process_id
     input  logic [PROCESS_ID_WIDTH-1:0]         pid_i,              // process_id associated with the transaction
@@ -78,8 +78,8 @@ module fq_handler import ariane_pkg::*; #(
     input  logic                                is_implicit_i,      // Guest page fault caused by implicit access for 1st-stage addr translation
 
     // Memory Bus
-    input  dcache_req_o_t           mem_resp_i,             // Response port from memory
-    output dcache_req_i_t           mem_req_o               // Request port to memory
+    input  ariane_axi_pkg::resp_t   mem_resp_i,
+    output ariane_axi_pkg::req_t    mem_req_o
 );
 
     // FSM States
@@ -88,6 +88,13 @@ module fq_handler import ariane_pkg::*; #(
         WRITE,
         ERROR
     }   state_q, state_n;
+
+    // Write FSM states
+    enum logic [1:0] {
+        AW_REQ,
+        W_DATA,
+        B_RESP
+    }   wr_state_q, wr_state_n;
 
     // Physical pointer to access memory
     logic [riscv::PLEN-1:0] fq_pptr_q, fq_pptr_n;
@@ -101,7 +108,7 @@ module fq_handler import ariane_pkg::*; #(
     assign busy_o = (fq_en_i != fq_en_q);
 
     /* 
-        INFO: When the fqon bit reads 0, the IOMMU guarantees: 
+        INFO: When the fqon bit reads 0, the IOMMU guarantees:
               (i)  That there are no in-flight implicit writes to the FQ in progress;
               (ii) No new fault records will be written to the fault-queue.
     */
@@ -111,23 +118,72 @@ module fq_handler import ariane_pkg::*; #(
     logic   error_vector;
     assign  error_vector    = (fq_mf_i | fq_of_i);
 
-    // To enable write of error bits to regmap
-    assign  error_o         = (fq_mf_o | fq_of_o);
-
     // FQ Record register to save event data
     iommu_pkg::fq_record_t fq_entry_q, fq_entry_n;
+
+    // Counter to send all four FQ record DWs
+    logic [1:0] wr_cnt_q, wr_cnt_n;
 
     //# Combinational logic
     always_comb begin : fq_handler
         
         // Default values
+        // AXI parameters
+        // AW
+        mem_req_o.aw.id         = 4'b0001;
+        mem_req_o.aw.addr       = fq_pptr_q;
+        mem_req_o.aw.len        = 8'd3;         // FQ records are 32-bytes wide
+        mem_req_o.aw.size       = 3'b011;
+        mem_req_o.aw.burst      = axi_pkg::BURST_INCR;
+        mem_req_o.aw.lock       = '0;
+        mem_req_o.aw.cache      = '0;
+        mem_req_o.aw.prot       = '0;
+        mem_req_o.aw.qos        = '0;
+        mem_req_o.aw.region     = '0;
+        mem_req_o.aw.atop       = '0;
+        mem_req_o.aw.user       = '0;
+
+        mem_req_o.aw_valid      = 1'b0;
+
+        // W
+        mem_req_o.w.data        = '0;                   // Must be set on each transfer
+        mem_req_o.w.strb        = '1;
+        mem_req_o.w.last        = 1'b0;                 // Must be set in the last transfer
+        mem_req_o.w.user        = '0;
+
+        mem_req_o.w_valid       = 1'b0;
+
+        // B
+        mem_req_o.b_ready       = 1'b0;
+
+        // AR
+        mem_req_o.ar.id         = 4'b0001;
+        mem_req_o.ar.addr       = '0;                   // IOMMU never reads from FQ
+        mem_req_o.ar.len        = '0;
+        mem_req_o.ar.size       = 3'b011;
+        mem_req_o.ar.burst      = axi_pkg::BURST_FIXED;
+        mem_req_o.ar.lock       = '0;
+        mem_req_o.ar.cache      = '0;
+        mem_req_o.ar.prot       = '0;
+        mem_req_o.ar.qos        = '0;
+        mem_req_o.ar.region     = '0;
+        mem_req_o.ar.atop       = '0;
+        mem_req_o.ar.user       = '0;
+
+        mem_req_o.ar_valid      = 1'b0;                 // IOMMU never reads from FQ
+
+        // R
+        mem_req_o.r_ready       = 1'b0;                 // IOMMU never reads from FQ
+
         fq_tail_o   = fq_tail_i;
         fq_mf_o     = fq_mf_i;
         fq_of_o     = fq_of_i;
 
         state_n     = state_q;
+        wr_state_n  = wr_state_q;
         fq_pptr_n   = fq_pptr_q;
         fq_entry_n  = fq_entry_q;
+        wr_cnt_n    = wr_cnt_q;
 
         case (state_q)
 
@@ -142,12 +198,15 @@ module fq_handler import ariane_pkg::*; #(
                         fq_tail_o   = '0;
                         fq_mf_o     = 1'b0;
                         fq_of_o     = 1'b0;
+                        error_wen_o = 1'b1;
+
                         fq_en_n     = 1'b1;
                     end
                 
-                    else if (event_valid) begin
+                    else if (event_valid_i) begin
 
-                        state_n = WRITE;
+                        state_n     = WRITE;
+                        wr_state_n  = AW_REQ;
 
                         fq_entry_n.iotval2  = '0;
                         fq_entry_n.iotval   = '0;
@@ -173,7 +232,7 @@ module fq_handler import ariane_pkg::*; #(
                         // If the CAUSE is a guest-page fault then bits 63:2 of the GPA are reported in iotval2[63:2].
                         if (is_guest_pf_i) begin
 
-                                fq_entry_n.iotval2      = {22'b0, gpaddr};  // zero-extended GPA
+                                fq_entry_n.iotval2      = {22'b0, gpaddr_i};  // zero-extended GPA
                                 fq_entry_n.iotval2[0]   = is_implicit_i;    // Guest page fault was caused by an implicit access
                                 fq_entry_n.iotval2[1]   = 1'b0;             // Always zero since A/D update of bits is not implemented
                             end
@@ -184,8 +243,9 @@ module fq_handler import ariane_pkg::*; #(
 
                         // If a fault that must be reported occurs and the FQ is full, set fq_of and signal error
                         if (fq_tail_i == fq_head_i - 1) begin
-                            fq_of_o = 1'b1;
-                            state_n = ERROR;
+                            fq_of_o     = 1'b1;
+                            error_wen_o = 1'b1;
+                            state_n     = ERROR;
                         end
                     end
                 end
@@ -198,7 +258,63 @@ module fq_handler import ariane_pkg::*; #(
 
             // Remember to increment fq_tail after writting to FQ
             WRITE: begin
-                
+                case (wr_state_q)
+
+                    // Send request to AW Channel
+                    AW_REQ: begin
+                        mem_req_o.aw_valid  = 1'b1;
+
+                        if (mem_resp_i.aw_ready) begin
+                            wr_state_n  = W_DATA;
+                            wr_cnt_n    = '0;
+                        end
+                    end
+
+                    // Send data through W channel
+                    W_DATA: begin
+                        case (wr_cnt_q)
+                            2'b00: mem_req_o.w.data    = fq_entry_q[63:0];
+                            2'b01: mem_req_o.w.data    = fq_entry_q[127:64];
+                            2'b10: mem_req_o.w.data    = fq_entry_q[191:128];
+                            2'b11: begin
+                                mem_req_o.w.data    = fq_entry_q[255:192];
+                                mem_req_o.w.last    = 1'b1;
+                            end
+                        endcase
+                        
+                        mem_req_o.w_valid   = 1'b1;
+
+                        if(mem_resp_i.w_ready) begin
+                            wr_cnt_n    = wr_cnt_q + 1;     // only increment counter after receiving WREADY
+
+                            if (&wr_cnt_q) begin
+                                wr_state_n  = B_RESP;
+                            end
+                        end
+                    end
+
+                    // Check response code
+                    B_RESP: begin
+                        if (mem_resp_i.b_valid) begin
+                            
+                            mem_req_o.b_ready   = 1'b1;
+                            if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
+                                // AXI error
+                                state_n         = ERROR;
+                                fq_mf_o         = 1'b1;
+                                error_wen_o     = 1'b1;
+                            end
+
+                            // After writing FQ record we can go back to IDLE
+                            else begin
+                                fq_tail_o   = fq_tail_i + 1;    // Increment fqt
+                                state_n     = IDLE;
+                            end
+                        end
+                    end
+
+                    default: state_n = IDLE;
+                endcase
             end
 
             // When an error occurs, the FQ stops generating faults until SW clear all error bits
@@ -207,8 +323,7 @@ module fq_handler import ariane_pkg::*; #(
                 if (!error_vector)
                     state_n = IDLE;
 
-                if (fq_ie_i)
-                    fq_ip_o = 1'b1;
+                fq_ip_o = fq_ie_i;
             end
 
             default: state_n = IDLE;
@@ -220,6 +335,7 @@ module fq_handler import ariane_pkg::*; #(
         if (~rst_ni) begin
             // Reset values
             state_q     <= IDLE;
+            wr_state_q  <= AW_REQ;
             fq_pptr_q   <= '0;
             fq_entry_q  <= '0;
             fq_en_q     <= 1'b0;
@@ -227,6 +343,7 @@ module fq_handler import ariane_pkg::*; #(
 
         else begin
             state_q     <= state_n;
+            wr_state_q  <= wr_state_n;
             fq_pptr_q   <= fq_pptr_n;
             fq_entry_q  <= fq_entry_n;
             fq_en_q     <= fq_en_n;

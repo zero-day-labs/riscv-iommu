@@ -43,22 +43,21 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
     input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
 
-    // PTW memory interface
-    input  dcache_req_o_t           mem_resp_i,             // Response port from memory
-    output dcache_req_i_t           mem_req_o,              // Request port to memory
+    input  ariane_axi_pkg::resp_t   mem_resp_i,
+    output ariane_axi_pkg::req_t    mem_req_o,
 
     // to IOTLB, update logic
-    output  logic                    update_o,
-    output  logic                    up_is_s_2M_o,
-    output  logic                    up_is_s_1G_o,
-    output  logic                    up_is_g_2M_o,
-    output  logic                    up_is_g_1G_o,
-    output  logic                    up_is_msi_o,
-    output  logic [riscv::GPPNW-1:0] up_vpn_o,
-    output  logic [PSCID_WIDTH-1:0]  up_pscid_o,
-    output  logic [GSCID_WIDTH-1:0]  up_gscid_o,
-    output riscv::pte_t              up_content_o,
-    output riscv::pte_t              up_g_content_o,
+    output logic                    update_o,
+    output logic                    up_is_s_2M_o,
+    output logic                    up_is_s_1G_o,
+    output logic                    up_is_g_2M_o,
+    output logic                    up_is_g_1G_o,
+    output logic                    up_is_msi_o,
+    output logic [riscv::GPPNW-1:0] up_vpn_o,
+    output logic [PSCID_WIDTH-1:0]  up_pscid_o,
+    output logic [GSCID_WIDTH-1:0]  up_gscid_o,
+    output riscv::pte_t             up_content_o,
+    output riscv::pte_t             up_g_content_o,
 
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]                  req_iova_i,
@@ -104,10 +103,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     riscv::pte_t pte;
     // register to perform context switch between stages
     riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store GPA to be updated in the IOTLB
-    assign pte = riscv::pte_t'(data_rdata_q);
+    assign pte = riscv::pte_t'(mem_resp_i.r.data);
 
     iommu_pkg::msi_wt_pte_t msi_pte;
-    assign msi_pte = iommu_pkg::msi_wt_pte_t'(data_rdata_q);
+    assign msi_pte = iommu_pkg::msi_wt_pte_t'(mem_resp_i.r.data);
 
     // PTW states
     enum logic[2:0] {
@@ -135,8 +134,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // global mapping aux signal
     logic global_mapping_q, global_mapping_n;
-    // latched tag signal
-    logic tag_valid_n,      tag_valid_q;
     // to register PSCID to be updated
     logic [PSCID_WIDTH-1:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
     // to register GSCID to be updated
@@ -171,13 +168,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
-    // directly output the correct physical address
-    assign mem_req_o.address_index = ptw_pptr_q[DCACHE_INDEX_WIDTH-1:0];
-    assign mem_req_o.address_tag   = ptw_pptr_q[DCACHE_INDEX_WIDTH+DCACHE_TAG_WIDTH-1:DCACHE_INDEX_WIDTH];
-    // we are never going to kill this request
-    assign mem_req_o.kill_req      = '0;
-    // we are never going to write with the HPTW
-    assign mem_req_o.data_wdata    = 64'b0;
 
     //# IOTLB Update combinational logic
     always_comb begin : iotlb_update
@@ -239,9 +229,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         end
     end
 
-    // data memory request port
-    assign mem_req_o.tag_valid      = tag_valid_q;
-
     logic allow_access;
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
@@ -266,39 +253,78 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     always_comb begin : ptw
         automatic logic [riscv::PLEN-1:0] pptr;
         // default assignments
-        // PTW memory interface
-        tag_valid_n            = 1'b0;
-        mem_req_o.data_req     = 1'b0;
-        mem_req_o.data_be      = 8'hFF;
-        mem_req_o.data_size    = 2'b11;
-        mem_req_o.data_we      = 1'b0;
-        ptw_error_o            = 1'b0;
-        ptw_error_stage2_o     = 1'b0;
-        ptw_error_stage2_int_o = 1'b0;
-        ptw_iopmp_excep_o      = 1'b0;
-        cause_code_o           = '0;
-        update_o               = 1'b0;
-        cdw_done_o             = 1'b0;
-        flush_cdw_o            = 1'b0;
-        bare_translation_o     = 1'b0;
+        // AXI parameters
+        // AW
+        mem_req_o.aw.id         = 4'b0000;              //? Can we define any value for AR.ID?
+        mem_req_o.aw.addr       = '0;           // Physical address to access
+        mem_req_o.aw.len        = 8'b0;                 // 1 beat per burst only
+        mem_req_o.aw.size       = 3'b011;               // 64 bits (8 bytes) per beat
+        mem_req_o.aw.burst      = axi_pkg::BURST_FIXED; // Fixed start address
+        mem_req_o.aw.lock       = '0;
+        mem_req_o.aw.cache      = '0;
+        mem_req_o.aw.prot       = '0;
+        mem_req_o.aw.qos        = '0;
+        mem_req_o.aw.region     = '0;
+        mem_req_o.aw.atop       = '0;
+        mem_req_o.aw.user       = '0;
+
+        mem_req_o.aw_valid      = 1'b0;                 // PTW will never write to memory
+
+        // W
+        mem_req_o.w.data        = '0;
+        mem_req_o.w.strb        = '0;
+        mem_req_o.w.last        = '0;
+        mem_req_o.w.user        = '0;
+
+        mem_req_o.w_valid       = 1'b0;                 // PTW will never write to memory
+
+        // B
+        mem_req_o.b_ready       = 1'b0;
+
+        // AR
+        mem_req_o.ar.id         = 4'b0000;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.addr       = ptw_pptr_q;           // Physical address to access
+        mem_req_o.ar.len        = 8'b0;                 // 1 beat per burst only
+        mem_req_o.ar.size       = 3'b011;               // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst      = axi_pkg::BURST_FIXED; // Fixed start address
+        mem_req_o.ar.lock       = '0;
+        mem_req_o.ar.cache      = '0;
+        mem_req_o.ar.prot       = '0;
+        mem_req_o.ar.qos        = '0;
+        mem_req_o.ar.region     = '0;
+        mem_req_o.ar.atop       = '0;
+        mem_req_o.ar.user       = '0;
+
+        mem_req_o.ar_valid      = 1'b0;                 // to init a request
+        mem_req_o.r_ready       = 1'b0;                 // to signal read completion
         
-        ptw_lvl_n              = ptw_lvl_q;
-        gptw_lvl_n             = gptw_lvl_q;
-        ptw_pptr_n             = ptw_pptr_q;
-        gptw_pptr_n            = gptw_pptr_q;
-        state_n                = state_q;
-        ptw_stage_n            = ptw_stage_q;
-        gpte_n                 = gpte_q;
-        global_mapping_n       = global_mapping_q;
-        msi_translation_n      = msi_translation_q;
-        iotlb_update_pscid_n   = iotlb_update_pscid_q;
-        iotlb_update_gscid_n   = iotlb_update_gscid_q;
-        iova_n                 = iova_q;
-        gpaddr_n               = gpaddr_q;
-        pptr                   = ptw_pptr_q;
-        gpaddr                 = gpaddr_q;
-        cause_n                = cause_q;
-        cdw_implicit_access_n  = cdw_implicit_access_q;
+        ptw_error_o             = 1'b0;
+        ptw_error_stage2_o      = 1'b0;
+        ptw_error_stage2_int_o  = 1'b0;
+        ptw_iopmp_excep_o       = 1'b0;
+        cause_code_o            = '0;
+        update_o                = 1'b0;
+        cdw_done_o              = 1'b0;
+        flush_cdw_o             = 1'b0;
+        bare_translation_o      = 1'b0;
+        
+        ptw_lvl_n               = ptw_lvl_q;
+        gptw_lvl_n              = gptw_lvl_q;
+        ptw_pptr_n              = ptw_pptr_q;
+        gptw_pptr_n             = gptw_pptr_q;
+        state_n                 = state_q;
+        ptw_stage_n             = ptw_stage_q;
+        gpte_n                  = gpte_q;
+        global_mapping_n        = global_mapping_q;
+        msi_translation_n       = msi_translation_q;
+        iotlb_update_pscid_n    = iotlb_update_pscid_q;
+        iotlb_update_gscid_n    = iotlb_update_gscid_q;
+        iova_n                  = iova_q;
+        gpaddr_n                = gpaddr_q;
+        pptr                    = ptw_pptr_q;
+        gpaddr                  = gpaddr_q;
+        cause_n                 = cause_q;
+        cdw_implicit_access_n   = cdw_implicit_access_q;
 
         // itlb_miss_o           = 1'b0;
         // dtlb_miss_o           = 1'b0;
@@ -385,20 +411,22 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
             // perform memory access with address hold in ptw_pptr_q
             WAIT_GRANT: begin
-                // send request to memory
-                mem_req_o.data_req = 1'b1;
-                // wait for the WAIT_GRANT
-                if (mem_resp_i.data_gnt) begin
-                    // send the tag valid signal to request bus, one cycle later
-                    tag_valid_n = 1'b1;
+                // send request to AXI Bus
+                mem_req_o.ar_valid = 1'b1;
+                
+                // wait for AXI Bus to accept the request
+                if (mem_resp_i.ar_ready) begin
                     state_n     = PTE_LOOKUP;
                 end
             end
 
             // process the incoming memory data (hold in pte)
             PTE_LOOKUP: begin
-                // we wait for the valid signal
-                if (data_rvalid_q) begin
+                // we wait for RVALID to start reading
+                if (mem_resp_i.r_valid) begin
+
+                    mem_req_o.r_ready   = 1'b1;
+                    // RLAST should be set
 
                     //# MSI address translation
                     if (msi_translation_q) begin
@@ -625,18 +653,20 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // Svnapot and Svpbmt are not implemented
                         if ((|pte.reserved) != 1'b0) begin
                             page_fault_n    = 1'b1;
-                            state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_n = ptw_stage_q;
-                            update_o = 1'b0;
+                            state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                            ptw_stage_n     = ptw_stage_q;
+                            update_o        = 1'b0;
+                            cdw_done_o      = 1'b0;
                         end
 
                         // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                         if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
                             if (is_store_i) cause_n = iommu_pkg::STORE_GUEST_PAGE_FAULT;
                             else            cause_n = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
-                            state_n = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                            state_n     = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n = ptw_stage_q;
-                            update_o = 1'b0;
+                            update_o    = 1'b0;
+                            cdw_done_o  = 1'b0;
                         end
                     end
                     
@@ -648,15 +678,25 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             // "If accessing pte violates a PMA or PMP check, raise an access-fault exception corresponding to the original access type."
                             if (is_store_i) cause_n = iommu_pkg::ST_ACCESS_FAULT;
                             else            cause_n = iommu_pkg::LD_ACCESS_FAULT;
-                            update_o = 1'b0;
-                            ptw_stage_n = ptw_stage_q;
                         end
 
                         // MSI address translation
                         else cause_n = iommu_pkg::MSI_PTE_LD_ACCESS_FAULT;
+
                         // we have to return the failed address in bad_addr
-                        ptw_pptr_n = ptw_pptr_q;
-                        state_n = PROPAGATE_ACCESS_ERROR;
+                        ptw_pptr_n  = ptw_pptr_q;
+                        update_o    = 1'b0;
+                        cdw_done_o  = 1'b0;
+                        state_n     = PROPAGATE_ACCESS_ERROR;
+                    end
+
+                    // Check for AXI errors
+                    if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
+                        cause_n = iommu_pkg::PT_DATA_CORRUPTION;
+                        state_n = PROPAGATE_ERROR;
+
+                        update_o = 1'b0;
+                        cdw_done_o  = 1'b0;
                     end
                 end
             end
@@ -688,7 +728,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 state_n     = IDLE;
                 ptw_iopmp_excep_o = 1'b1;
                 cause_code_o = cause_q;
-                flush_cdw_o = (cdw_implicit_access_q) ? 1'b1 : 1'b0;
+                flush_cdw_o = cdw_implicit_access_q;
             end
 
             default: begin
@@ -704,7 +744,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             ptw_stage_q             <= STAGE_1;
             ptw_lvl_q               <= LVL1;
             gptw_lvl_q              <= LVL1;
-            tag_valid_q             <= 1'b0;
             iotlb_update_pscid_q    <= '0;
             iotlb_update_gscid_q    <= '0;
             iova_q                  <= '0;
@@ -727,7 +766,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             gptw_pptr_q             <= gptw_pptr_n;
             ptw_lvl_q               <= ptw_lvl_n;
             gptw_lvl_q              <= gptw_lvl_n;
-            tag_valid_q             <= tag_valid_n;
             iotlb_update_pscid_q    <= iotlb_update_pscid_n;
             iotlb_update_gscid_q    <= iotlb_update_gscid_n;
             iova_q                  <= iova_n;

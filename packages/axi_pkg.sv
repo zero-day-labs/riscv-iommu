@@ -166,7 +166,7 @@ package axi_pkg;
       // * Use this equation for any subsequent transfers:
       //     `Address_N = Start_Address + ((N – 1) × Number_Bytes) – (Number_Bytes × Burst_Length)`
       // This means that the address calculation of a `BURST_WRAP` fundamentally works the same
-      // as for a `BURST_INC`, the difference is when the calculated address increments
+      // as for a `BURST_INCR`, the difference is when the calculated address increments
       // over the wrap threshold, the address wraps around by subtracting the accessed address
       // space from the normal `BURST_INCR` address. The lower wrap boundary is equivalent to
       // The wrap trigger condition minus the container size (`num_bytes(size) * (len + 1)`).

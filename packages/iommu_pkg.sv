@@ -296,7 +296,7 @@ package iommu_pkg;
     localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_LD_ACCESS_FAULT          = 265;
     localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_INVALID                  = 266;
     localparam logic [CAUSE_LEN-1:0] PDT_ENTRY_MISCONFIGURED            = 267;
-    localparam logic [CAUSE_LEN-1:0] DDT_DATA_CORRUPTION                = 268;  //? What is the difference between data corruption and misconfigured ?
+    localparam logic [CAUSE_LEN-1:0] DDT_DATA_CORRUPTION                = 268;
     localparam logic [CAUSE_LEN-1:0] PDT_DATA_CORRUPTION                = 269;
     localparam logic [CAUSE_LEN-1:0] MSI_PT_DATA_CORRUPTION             = 270;
     localparam logic [CAUSE_LEN-1:0] MSI_MRIF_DATA_CORRUPTION           = 271;
