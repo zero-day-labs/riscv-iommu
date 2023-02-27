@@ -48,9 +48,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
     input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
 
-    // PTW memory interface
-    // input  dcache_req_o_t           mem_resp_i,             // Response port from memory
-    // output dcache_req_i_t           mem_req_o,              // Request port to memory
     input  ariane_axi_pkg::resp_t   mem_resp_i,
     output ariane_axi_pkg::req_t    mem_req_o,
 
@@ -142,8 +139,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // global mapping aux signal
     logic global_mapping_q, global_mapping_n;
-    // latched tag signal
-    logic tag_valid_n,      tag_valid_q;
     // to register PSCID to be updated
     logic [PSCID_WIDTH-1:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
     // to register GSCID to be updated
@@ -263,10 +258,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     always_comb begin : ptw
         automatic logic [riscv::PLEN-1:0] pptr;
         // default assignments
-        // Fixed AXI parameters
+        // AXI parameters
         // AW
         mem_req_o.aw.id         = 4'b0000;              //? Can we define any value for AR.ID?
-        mem_req_o.aw.addr       = ptw_pptr_q;           // Physical address to access
+        mem_req_o.aw.addr       = '0;           // Physical address to access
         mem_req_o.aw.len        = 8'b0;                 // 1 beat per burst only
         mem_req_o.aw.size       = 3'b011;               // 64 bits (8 bytes) per beat
         mem_req_o.aw.burst      = axi_pkg::BURST_FIXED; // Fixed start address
@@ -701,7 +696,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     end
 
                     // Check for AXI errors
-                    if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
+                    if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
                         cause_n = iommu_pkg::PT_DATA_CORRUPTION;
                         state_n = PROPAGATE_ERROR;
 
@@ -754,7 +749,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             ptw_stage_q             <= STAGE_1;
             ptw_lvl_q               <= LVL1;
             gptw_lvl_q              <= LVL1;
-            tag_valid_q             <= 1'b0;
             iotlb_update_pscid_q    <= '0;
             iotlb_update_gscid_q    <= '0;
             iova_q                  <= '0;
@@ -777,7 +771,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             gptw_pptr_q             <= gptw_pptr_n;
             ptw_lvl_q               <= ptw_lvl_n;
             gptw_lvl_q              <= gptw_lvl_n;
-            tag_valid_q             <= tag_valid_n;
             iotlb_update_pscid_q    <= iotlb_update_pscid_n;
             iotlb_update_gscid_q    <= iotlb_update_gscid_n;
             iova_q                  <= iova_n;

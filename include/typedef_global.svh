@@ -5,13 +5,15 @@
 `include "include/typedef_reg.svh"
 `include "include/typedef_axi.svh"
 `include "packages/axi_pkg.sv"
+`include "packages/ariane_axi_pkg.sv"
+
+/*
+    ! NOTE: The CVA6 repo already has a file defining all AXI types.
+    !       For further integration, all AXI types used by the IOMMU must be adapted
+*/
 
 `ifndef GLOBAL_TYPEDEF_SVH
 `define GLOBAL_TYPEDEF_SVH
-
-typedef logic [13-1:0] addr_t;
-typedef logic [64-1:0] data_t;
-typedef logic [8-1:0] strb_t;
 
 
 // `define REG_BUS_TYPEDEF_REQ(req_t, addr_t, data_t, strb_t) \
@@ -31,7 +33,7 @@ typedef logic [8-1:0] strb_t;
 //     } rsp_t;
 `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
 
-
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // All AXI4-Lite Channels and Request/Response Structs in One Macro
 //
 // This can be used whenever the user is not interested in "precise" control of the naming of the
