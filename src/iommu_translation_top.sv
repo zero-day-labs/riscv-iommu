@@ -626,13 +626,6 @@ module iommu_translation_top import ariane_pkg::*; #(
                     is_msi_o            = 1'b1;
                     // MSI PTEs contain the PPN in the same position as normal PTEs
                     translated_addr_o   = {iotlb_lu_g_content.ppn, iova_i[11:0]};
-
-                    // MSI Physical Addresses must also be checked by PMP
-                    if(!pmp_data_allow) begin
-                        trans_valid_o   = 1'b0;
-                        cause_code_o    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
-                        trans_error_o   = 1'b1;
-                    end
                 end
 
                 //# Normal entry
@@ -660,18 +653,46 @@ module iommu_translation_top import ariane_pkg::*; #(
 
                     //# Address Translation Found
                     else begin
+                        
                         translated_addr_o = {((en_stage2) ? iotlb_lu_g_content.ppn : iotlb_lu_content.ppn), iova_i[11:0]};
 
                         // Apply superpage cases
-                        if (iotlb_lu_is_g_2M || iotlb_lu_is_s_2M)   translated_addr_o[20:12] = iova_i[20:12];
-                        if (iotlb_lu_is_g_1G || iotlb_lu_is_s_1G)   translated_addr_o[29:12] = iova_i[29:12];
+                        if (en_stage1 && en_stage2) begin
+                            case ({iotlb_lu_is_s_2M, iotlb_lu_is_s_1G, iotlb_lu_is_g_2M, iotlb_lu_is_g_1G})
 
-                        if(!pmp_data_allow) begin
-                            trans_valid_o   = 1'b0;
-                            cause_code_o    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
-                            trans_error_o   = 1'b1;
+                                // 1-S: 4k | 2-S: 2M:   {PPN[2], PPN[1],  GPPN[0], OFF}
+                                4'b0010:    translated_addr_o[20:12] = iotlb_lu_content.ppn[20:12];
+
+                                // 1-S: 2M | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
+                                // 1-S: 1G | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
+                                4'b1010, 4'b0110:   translated_addr_o[20:12] = iova_i[20:12];
+
+                                // 1-S: 4k | 2-S: 1G:   {PPN[2], GPPN[1], GPPN[0], OFF}
+                                4'b0001:    translated_addr_o[29:12] = iotlb_lu_content.ppn[29:12];
+
+                                // 1-S: 1G | 2-S: 1G:   {PPN[2], VPN[1],  VPN[0],  OFF}
+                                4'b0101:    translated_addr_o[29:12] = iova_i[29:12];
+
+                                // 1-S: 2M | 2-S: 1G:   {PPN[2], GPPN[1], VPN[0],  OFF}
+                                4'b1001:    translated_addr_o[29:12] = {iotlb_lu_content.ppn[29:21], iova_i[20:12]};
+                                default: 
+                                    // 1-S: 4k | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
+                                    // 1-S: 2M | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
+                                    // 1-S: 1G | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
+                            endcase
+                        end
+
+                        else begin
+                            if (iotlb_lu_is_g_1G || iotlb_lu_is_s_1G)   translated_addr_o[29:12] = iova_i[29:12];
+                            if (iotlb_lu_is_g_2M || iotlb_lu_is_s_2M)   translated_addr_o[20:12] = iova_i[20:12];
                         end
                     end
+                end
+
+                if(!pmp_data_allow) begin
+                    trans_valid_o   = 1'b0;
+                    cause_code_o    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
+                    trans_error_o   = 1'b1;
                 end
             end
 
@@ -707,17 +728,5 @@ module iommu_translation_top import ariane_pkg::*; #(
         .conf_i        ( pmpcfg_i            ),
         .allow_o       ( pmp_data_allow      )
     );
-
-    // Sequential logic
-    // always_ff @(posedge clk_i or negedge rst_ni) begin : sequential_logic
-
-    //     if(~rst_ni) begin
-    //         cause_q         <= '0;
-    //     end
-
-    //     else begin
-    //         cause_q         <= cause_n;
-    //     end
-        
-    // end
+    
 endmodule

@@ -73,7 +73,7 @@ module cq_handler import ariane_pkg::*; #(
     output logic                        flush_av_o,     // Address valid
     output logic                        flush_gv_o,     // GSCID valid
     output logic                        flush_pscv_o,   // PSCID valid
-    output logic [riscv::VLEN-1:0]      flush_vpn_o,    // IOVA to tag entries to be flushed
+    output logic [riscv::GPPNW-1:0]     flush_vpn_o,    // IOVA to tag entries to be flushed
     output logic [GSCID_WIDTH-1:0]      flush_gscid_o,  // GSCID (Guest physical address space identifier) to tag entries to be flushed
     output logic [PSCID_WIDTH-1:0]      flush_pscid_o   // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
@@ -343,7 +343,7 @@ module cq_handler import ariane_pkg::*; #(
 
                         flush_av_o      = cmd_iotinval.av;
                         flush_gv_o      = cmd_iotinval.gv;
-                        flush_vpn_o     = cmd_iotinval.addr;    // ADDR[63:12]
+                        flush_vpn_o     = cmd_iotinval.addr[riscv::GPPNW-1:0];    // ADDR[63:12]
                         flush_gscid_o   = cmd_iotinval.gscid;
                         flush_pscid_o   = cmd_iotinval.pscid;
 

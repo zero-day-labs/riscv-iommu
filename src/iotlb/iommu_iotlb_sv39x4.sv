@@ -23,8 +23,8 @@
 
 module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4,
-    parameter int unsigned PSCID_WIDTH  = 1,
-    parameter int unsigned GSCID_WIDTH  = 1
+    parameter int unsigned PSCID_WIDTH  = 20,
+    parameter int unsigned GSCID_WIDTH  = 16
 )(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
@@ -36,7 +36,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    flush_av_i,       // ADDR valid
     input  logic                    flush_gv_i,       // GSCID valid
     input  logic                    flush_pscv_i,     // PSCID valid
-    input  logic [riscv::GPPNW-1:0] flush_vpn_i,     // IOVA to be flushed
+    input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN to be flushed
     input  logic [PSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
     input  logic [GSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
