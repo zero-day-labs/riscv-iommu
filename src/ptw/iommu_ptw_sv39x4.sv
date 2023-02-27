@@ -18,8 +18,6 @@
 //              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB 
 //              developed by Bruno Sá.
 
-// TODO: Change D$ memory interface to AXI Master memory interface
-
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_ptw_sv39x4 import ariane_pkg::*; #(
@@ -510,7 +508,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                                         // GPA is an IMSIC address (even if Stage 2 is disabled)
                                         if (gpaddr_is_imsic_addr) begin
-                                            ptw_stage_n = WAIT_GRANT;
+                                            state_n = WAIT_GRANT;
                                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
                                         end
@@ -549,15 +547,15 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 // "Stop and raise a page-fault exception corresponding to the original access type."
                                 // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
                                 // " a page-fault exception is raised."
-                                if ((ptw_lvl_q == LVL1 && pte.ppn[17:0] != '0   ) ||       // 1G
-                                    (ptw_lvl_q == LVL2 && pte.ppn[8:0] != '0    ) ||       // 2M
+                                if ((ptw_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
+                                    (ptw_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
                                     (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
                                     
-                                    page_fault_n    = 1'b1;
+                                    page_fault_n        = 1'b1;
                                     state_n             = PROPAGATE_ERROR;
                                     ptw_stage_n         = ptw_stage_q;
-                                    update_o = 1'b0;
-                                    cdw_done_o = 1'b0;
+                                    update_o            = 1'b0;
+                                    cdw_done_o          = 1'b0;
                                 end
                             end
                             
@@ -661,12 +659,11 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                         // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                         if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                            if (is_store_i) cause_n = iommu_pkg::STORE_GUEST_PAGE_FAULT;
-                            else            cause_n = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
-                            state_n     = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_n = ptw_stage_q;
-                            update_o    = 1'b0;
-                            cdw_done_o  = 1'b0;
+                            page_fault_n    = 1'b1;
+                            state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                            ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
+                            update_o        = 1'b0;
+                            cdw_done_o      = 1'b0;
                         end
                     end
                     
@@ -710,6 +707,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 // Set cause code and flags
                 if (page_fault_q) begin
                     if (ptw_stage_q != STAGE_1) begin
+                        ptw_error_stage2_o   = 1'b1;
                         if (is_store_i) cause_code_o = iommu_pkg::STORE_GUEST_PAGE_FAULT;
                         else            cause_code_o = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
                     end
@@ -719,7 +717,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     end
                 end
                 else cause_code_o = cause_q;
-                ptw_error_stage2_o   = (ptw_stage_q != STAGE_1) ? 1'b1 : 1'b0;
                 ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
                 flush_cdw_o = cdw_implicit_access_q;
             end
