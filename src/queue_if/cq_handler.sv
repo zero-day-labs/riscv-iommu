@@ -14,6 +14,8 @@
     -   Registers that are handled both by SW and HW have an input port and an output port.
     !-   IOMMU support for WSI (caps.IGS) and enable of WSI (fctl.WSI) must be checked externally before setting cqcsr.fence_w_ip
     -   Write enable signal at HW side of the regmap for head register should be hardwired to 1
+    -   ipsr.cip write enable signal may be the value of the signal itself, in order to be written only when is set.
+        Signal is only cleared by SW.
 */
 
 module cq_handler import ariane_pkg::*; #(
@@ -54,8 +56,7 @@ module cq_handler import ariane_pkg::*; #(
     output logic                    fence_w_ip_o,       // Set to indicate completion of an IOFENCE command
     output logic                    cq_ip_o,            // To set cip bit in ipsr register if a fault occurs and cq_ie is set
 
-    input  logic                    caps_wsi_i,           // To know whether WSI generation is supported
-    input  logic                    fctl_wsi_i,           // To know whether WSI generation is enabled
+    input  logic                    wsi_en_i,           // Indicates if the IOMMU supports and uses WSI generation
 
     // DDTC Invalidation
     output logic                        flush_ddtc_o,   // Flush DDTC
@@ -75,7 +76,7 @@ module cq_handler import ariane_pkg::*; #(
     output logic                        flush_pscv_o,   // PSCID valid
     output logic [riscv::GPPNW-1:0]     flush_vpn_o,    // IOVA to tag entries to be flushed
     output logic [GSCID_WIDTH-1:0]      flush_gscid_o,  // GSCID (Guest physical address space identifier) to tag entries to be flushed
-    output logic [PSCID_WIDTH-1:0]      flush_pscid_o   // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+    output logic [PSCID_WIDTH-1:0]      flush_pscid_o,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
     // Memory Bus
     input  ariane_axi_pkg::resp_t   mem_resp_i,
@@ -120,6 +121,9 @@ module cq_handler import ariane_pkg::*; #(
     // To check if any error bit was cleared by SW
     logic   error_vector;
     assign  error_vector    = (cq_mf_i | cmd_to_i | cmd_ill_i);
+
+    // Set ipsr.cie if any error bit is set
+    assign cq_ip_o  = ((cq_mf_o | cmd_to_o | cmd_ill_o | fence_w_ip_o) & cq_ie_i);
 
     // CQ entry register
     logic [127:0]   cmd_q, cmd_n;
@@ -408,7 +412,10 @@ module cq_handler import ariane_pkg::*; #(
                             end
 
                             // Set cqcsr.fence_w_ip if IOMMU supports and uses WSIs
-                            fence_w_ip_o = cmd_iofence.wsi & caps_wsi_i & fctl_wsi_i;
+                            if (cmd_iofence.wsi && wsi_en_i) begin
+                                fence_w_ip_o    = 1'b1;
+                                error_wen_o     = 1'b1;
+                            end
                         end
 
                         // TODO: Check PR and PW bits
@@ -473,8 +480,6 @@ module cq_handler import ariane_pkg::*; #(
                 
                 if (!error_vector)
                     state_n = IDLE;
-
-                cq_ip_o = cq_ie_i;  // set ipsr.cip if cqcsr.ie is set
             end
 
             default: state_n = IDLE;

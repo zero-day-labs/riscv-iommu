@@ -19,15 +19,12 @@
 
 //! NOTES:
 /*
-    - For now, specific flush signals are internal, we only receive command queue indexes to know whether a command has to be processed.
-      If a flush/invalidation command has to be executed, the command is decoded to enable the corresponding flush signal
-
     - For now, req_trans_i must be hold high for the entire translation process (whenever walks are needed). If it is cleared, 
       IOTLB hit signal is also cleared even if it has a valid translation. Further on, input signals may be propagated to achieve 
       a stronger implementation (+ HW cost).
 */
 
-module iommu_translation_top import ariane_pkg::*; #(
+module iommu_translation_wrapper import ariane_pkg::*; #(
 
     parameter int unsigned IOTLB_ENTRIES = 4,
     parameter int unsigned DDTC_ENTRIES = 4,
@@ -52,24 +49,55 @@ module iommu_translation_top import ariane_pkg::*; #(
     input  logic [iommu_pkg::TTYP_LEN-1:0]  trans_type_i,           //? When not implementing ATS, are all requests untranslated?
     input  riscv::priv_lvl_t                priv_lvl_i,             // Privilege mode associated with the transaction
 
-    input  dcache_req_o_t                   mem_resp_i,             // Response port from memory
-    output dcache_req_i_t                   mem_req_o,              // Request port to memory
+    // Memory Bus
+    input  ariane_axi_pkg::resp_t   mem_resp_i,
+    output ariane_axi_pkg::req_t    mem_req_o,
 
     // From Regmap
     input  iommu_pkg::capabilities_t    capabilities_i,
     input  iommu_pkg::fctl_t            fctl_i,
     input  iommu_pkg::ddtp_t            ddtp_i,
+    // CQ
+    input  logic [riscv::PPNW-1:0]      cqb_ppn_i,
+    input  logic [4:0]                  cqb_size_i,
+    input  logic [31:0]                 cqh_i,
+    output logic [31:0]                 cqh_o,
+    input  logic [31:0]                 cqt_i,
+    // FQ
+    input  logic [riscv::PPNW-1:0]      fqb_ppn_i,
+    input  logic [4:0]                  fqb_size_i,
+    input  logic [31:0]                 fqh_i,
+    input  logic [31:0]                 fqt_i,
+    output logic [31:0]                 fqt_o,
+    // cqcsr
+    input  logic                        cq_en_i,
+    input  logic                        cq_ie_i,
+    input  logic                        cq_mf_i,
+    input  logic                        cq_cmd_to_i,    
+    input  logic                        cq_cmd_ill_i,
+    input  logic                        cq_fence_w_ip_i,
+    output logic                        cq_mf_o,
+    output logic                        cq_cmd_to_o,
+    output logic                        cq_cmd_ill_o,
+    output logic                        cq_fence_w_ip_o,
+    output logic                        cq_on_o,
+    output logic                        cq_busy_o,
+    // fqcsr
+    input  logic                        fq_en_i,
+    input  logic                        fq_ie_i,
+    input  logic                        fq_mf_i,
+    input  logic                        fq_of_i,
+    output logic                        fq_mf_o,
+    output logic                        fq_of_o,
+    output logic                        fq_on_o,
+    output logic                        fq_busy_o,
+    //ipsr
+    output logic                        cq_ip_o,
+    output logic                        fq_ip_o,
 
-    // Error/fault signaling according to thew spec
-    // TODO: Ariane pkg has an exception_t struct
-    output logic                                trans_error_o,
-    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,       // Fault code as defined by IOMMU and Priv Spec
-    output logic                                report_fault_o,
-
-    // We need the tail and head registers of each memory queue:
-    // CQ: cqt is input for the IOMMU, cqh is inout for the IOMMU
-    // FQ: fqt is inout for the IOMMU, fqh may not be important for the IOMMU
-    // PQ: pqt is inout for the IOMMU, pqh may not be important for the IOMMU (not implemented until PCIe implementation)
+    // To enable write of error bits to cqcsr and fqcsr
+    output logic                        cq_error_wen_o,
+    output logic                        fq_error_wen_o,
 
     output logic                        trans_valid_o,      // Translation completed
     output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
@@ -77,7 +105,7 @@ module iommu_translation_top import ariane_pkg::*; #(
 
     // SPA IOPMP
     input  riscv::pmpcfg_t [15:0]           conf_reg_i,
-    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
+    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i
 );
 
     // DDTC
@@ -139,8 +167,8 @@ module iommu_translation_top import ariane_pkg::*; #(
 
     // To check whether process_id is wider than supported
     logic pid_wider_than_supported;
-    assign pid_wider_than_supported = ((ddtc_lu_content.fsc.mode == 4'b0001 && |process_id_i[19:8]) ||
-                                       (ddtc_lu_content.fsc.mode == 4'b0010 && |process_id_i[19:17]));
+    assign pid_wider_than_supported = ((ddtc_lu_content.fsc.mode == 4'b0001 && |process_id[19:8]) ||
+                                       (ddtc_lu_content.fsc.mode == 4'b0010 && |process_id[19:17]));
 
     // To determine if current DC enables MSI translation
     logic msi_enabled;
@@ -162,6 +190,10 @@ module iommu_translation_top import ariane_pkg::*; #(
     logic is_rx;
     assign is_rx = (!trans_type_i[3] && !trans_type_i[1] && trans_type_i[0]);
 
+    // To determine if transaction has supervisor privilege
+    logic   is_s_priv;
+    assign  is_s_priv   = (priv_lvl_i == riscv::PRIV_LVL_S);
+
     // PMP
     riscv::pmp_access_t pmp_access_type;
     logic pmp_data_allow;
@@ -172,14 +204,28 @@ module iommu_translation_top import ariane_pkg::*; #(
     assign ptw_iohgatp_ppn = (is_ddt_walk & cdw_implicit_access) ? iohgatp_ppn_fw : iohgatp_ppn;
 
     // To select en_stage1 and en_stage2 source for PTW implicit second-stage translations in CDW Walks
-    logic ptw_en_stage1, ptw_en_stage2;
-    assign ptw_en_stage1 = (cdw_implicit_access) ? 1'b0 : en_stage1;
-    assign ptw_en_stage2 = (cdw_implicit_access) ? 1'b1 : en_stage2;
+    logic   ptw_en_stage1, ptw_en_stage2;
+    assign  ptw_en_stage1 = (cdw_implicit_access) ? 1'b0 : en_stage1;
+    assign  ptw_en_stage2 = (cdw_implicit_access) ? 1'b1 : en_stage2;
 
+    // Set for faults occurred before DDTC lookup
+    logic   report_always;
+    // Error/fault signaling according to the spec
+    // TODO: Ariane pkg has an exception_t struct
+    logic                               trans_error;
+    logic [(iommu_pkg::CAUSE_LEN-1):0]  cause_code;       // Fault code as defined by IOMMU and Priv Spec
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
-    logic report_always;
-    assign report_fault_o = (ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk));
+    logic   report_fault;
+    assign  report_fault = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk)) & trans_error);
+
+    logic   is_implicit;
+    logic   ptw_error_stage2_int;
+    assign  is_implicit = (ptw_error_stage2_int | (flush_cdw & ~is_ddt_walk));
+
+    // To indicate if the IOMMU supports and uses WSI as interrupt generation mechanism
+    logic   wsi_en;
+    assign  wsi_en = (^capabilities_i.igs & fctl_i.wsi);
 
     // Update wires
     logic                           ddtc_update;
@@ -202,6 +248,36 @@ module iommu_translation_top import ariane_pkg::*; #(
     riscv::pte_t                    iotlb_up_content;
     riscv::pte_t                    iotlb_up_g_content;
 
+    // Flush wires
+    logic                           flush_ddtc;
+    logic                           flush_dv;
+    logic [DEVICE_ID_WIDTH-1:0]     flush_did;
+    logic                           flush_pdtc;
+    logic                           flush_pv;
+    logic [PROCESS_ID_WIDTH-1:0]    flush_pid;
+    logic                           flush_vma;
+    logic                           flush_gvma;
+    logic                           flush_av;
+    logic                           flush_gv;
+    logic                           flush_pscv;
+    logic [riscv::GPPNW-1:0]        flush_vpn;
+    logic [GSCID_WIDTH-1:0]         flush_gscid;
+    logic [PSCID_WIDTH-1:0]         flush_pscid;
+
+    // AXI interfaces
+    ariane_axi_pkg::resp_t  ptw_mem_resp_i;
+    ariane_axi_pkg::req_t   ptw_mem_req_o;
+    ariane_axi_pkg::resp_t  cdw_mem_resp_i;
+    ariane_axi_pkg::req_t   cdw_mem_req_o;
+    ariane_axi_pkg::resp_t  cq_mem_resp_i;
+    ariane_axi_pkg::req_t   cq_mem_req_o;
+    ariane_axi_pkg::resp_t  fq_mem_resp_i;
+    ariane_axi_pkg::req_t   fq_mem_req_o;
+
+    // More wires
+    logic                   ptw_error_stage2;   // Set when a guest page fault occurs
+    logic                   ptw_bad_gpaddr;
+
     //# Device Directory Table Cache
     iommu_ddtc #(
         .DDTC_ENTRIES       (DDTC_ENTRIES),
@@ -210,10 +286,9 @@ module iommu_translation_top import ariane_pkg::*; #(
         .clk_i              (clk_i),            // Clock
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
-        // TODO: Flush signals
-        .flush_i            (),                 // IODIR.INVAL_DDT
-        .flush_dv_i         (),                 // device_id valid
-        .flush_did_i        (),                 // device_id to be flushed
+        .flush_i            (flush_ddtc),                 // IODIR.INVAL_DDT
+        .flush_dv_i         (flush_dv),                 // device_id valid
+        .flush_did_i        (flush_did),                 // device_id to be flushed
 
         // Update signals
         .update_i           (ddtc_update),      // update flag
@@ -237,11 +312,11 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
         // Flush signals
-        .flush_i            (),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
-        .flush_dv_i         (),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
-        .flush_pv_i         (),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
-        .flush_did_i        (),                 // device_id to be flushed
-        .flush_pid_i        (),                 // process_id to be flushed (if flush_pv_i = 1)
+        .flush_i            (flush_pdtc),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
+        .flush_dv_i         (flush_dv),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
+        .flush_pv_i         (flush_pv),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
+        .flush_did_i        (flush_did),                 // device_id to be flushed
+        .flush_pid_i        (flush_pid),                 // process_id to be flushed (if flush_pv_i = 1)
 
         // Update signals
         .update_i           (pdtc_update),      // update flag
@@ -267,14 +342,14 @@ module iommu_translation_top import ariane_pkg::*; #(
         .rst_ni             (rst_ni),   // Asynchronous reset active low
 
         // Flush signals
-        .flush_vma_i        (),         // IOTINVAL.VMA
-        .flush_gvma_i       (),         // IOTINVAL.GVMA
-        .flush_av_i         (),         // ADDR valid
-        .flush_gv_i         (),         // GSCID valid
-        .flush_pscv_i       (),         // PSCID valid
-        .flush_vpn_i        (),         // VPN to be flushed
-        .flush_gscid_i      (),         // GSCID identifier to be flushed (VM identifier)
-        .flush_pscid_i      (),         // PSCID identifier to be flushed (address space identifier)
+        .flush_vma_i        (flush_vma),         // IOTINVAL.VMA
+        .flush_gvma_i       (flush_gvma),         // IOTINVAL.GVMA
+        .flush_av_i         (flush_av),         // ADDR valid
+        .flush_gv_i         (flush_gv),         // GSCID valid
+        .flush_pscv_i       (flush_pscv),         // PSCID valid
+        .flush_vpn_i        (flush_vpn),         // VPN to be flushed
+        .flush_gscid_i      (flush_gscid),         // GSCID identifier to be flushed (VM identifier)
+        .flush_pscid_i      (flush_pscid),         // PSCID identifier to be flushed (address space identifier)
 
         // Update signals
         .update_i           (iotlb_update),
@@ -319,8 +394,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         // Error signaling
         .ptw_active_o           (),                     // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
-        .ptw_error_stage2_o     (),                     // set when the fault occurred in stage 2
-        .ptw_error_stage2_int_o (),                     // set when fault occurred during an implicit access for 1st-stage translation
+        .ptw_error_stage2_o     (ptw_error_stage2),     // set when the fault occurred in stage 2
+        .ptw_error_stage2_int_o (ptw_error_stage2_int),                     // set when fault occurred during an implicit access for 1st-stage translation
         .ptw_iopmp_excep_o      (ptw_access_error),     // set when an (IO)PMP access exception occured
         .cause_code_o           (ptw_cause_code),
 
@@ -328,9 +403,9 @@ module iommu_translation_top import ariane_pkg::*; #(
         .en_stage2_i            (ptw_en_stage2),        // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
 
-        // PTW memory interface
-        .mem_resp_i             (mem_resp_i),           // Response port from memory
-        .mem_req_o              (mem_req_o),            // Request port to memory
+        // PTW AXI Master memory interface
+        .mem_resp_i             (ptw_mem_resp_i),           // Response port from memory
+        .mem_req_o              (ptw_mem_req_o),            // Request port to memory
 
         // to IOTLB, update logic
         .update_o               (iotlb_update),
@@ -374,14 +449,14 @@ module iommu_translation_top import ariane_pkg::*; #(
         // (IO)PMP
         .conf_reg_i             (),
         .addr_reg_i             (),
-        .bad_gpaddr_o           ()    // to return the GPA in case of access error
+        .bad_gpaddr_o           (ptw_bad_gpaddr)    // to return the GPA in case of guest page fault
     );
 
     //# Context Directory Walker
     iommu_cdw #(
-            .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
-            .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
-            .ArianeCfg          (ArianeCfg)
+        .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
+        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
+        .ArianeCfg              (ArianeCfg)
     ) cdw (
         .clk_i                  (clk_i),                // Clock
         .rst_ni                 (rst_ni),               // Asynchronous reset active low
@@ -415,8 +490,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         .dc_sxl_i               (ddtc_lu_content.tc.sxl),
 
         // PTW memory interface
-        .mem_resp_i             (mem_resp_i),            // Response port from memory
-        .mem_req_o              (mem_req_o),             // Request port to memory
+        .mem_resp_i             (cdw_mem_resp_i),            // Response port from memory
+        .mem_req_o              (cdw_mem_req_o),             // Request port to memory
 
         // Update logic
         .update_dc_o            (ddtc_update),
@@ -443,7 +518,6 @@ module iommu_translation_top import ariane_pkg::*; #(
         .ddtp_mode_i            (ddtp_i.mode),      // DDT levels and IOMMU mode
 
         // from DC (for PC walks)
-        //! Similarly to the PTW, we only want to know if second stage is enabled. External logic should verify the scheme...
         .en_stage2_i            (en_stage2),                    // Second-stage translation is enabled
         .pdtp_ppn_i             (ddtc_lu_content.fsc.ppn),      // PPN from DC.fsc.PPN
         .pdtp_mode_i            (ddtc_lu_content.fsc.mode),     // PDT levels from DC.fsc.MODE
@@ -463,6 +537,119 @@ module iommu_translation_top import ariane_pkg::*; #(
         .bad_paddr_o            ()    // to return the SPA in case of access error
     );
 
+    cq_handler #(
+            .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
+            .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
+            .PSCID_WIDTH        (PSCID_WIDTH),
+            .GSCID_WIDTH        (GSCID_WIDTH),
+            .ArianeCfg          (ArianeCfg)
+    ) (
+        .clk_i                  (clk_i),
+        .rst_ni                 (rst_ni),
+
+        // Regmap
+        .cq_base_ppn_i          (cqb_ppn_i),        // Base address of the CQ in memory (Should be aligned. See Spec)
+        .cq_size_i              (cq_size_i),        // Size of the CQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+
+        .cq_en_i                (cq_en_i),          // CQ enable bit from cqcsr, handled by SW
+        .cq_ie_i                (cq_ie_i),          // CQ interrupt enable bit from cqcsr, handled by SW
+
+        .cq_tail_i              (cqt_i),            // CQ tail index (SW writes the next CQ entry to cq_base + cq_tail * 16 bytes)
+        .cq_head_i              (cqh_i),            // CQ head index (the IOMMU reads the next entry from cq_base + cq_head * 16 bytes)
+        .cq_head_o              (cqh_o),
+
+        .cq_on_o                (cq_on_o),          // CQ active bit. Indicates to SW whether the CQ is active or not
+        .busy_o                 (cq_busy_o),        // CQ busy bit. Indicates SW that the CQ is in the middle of a state transition, 
+                                                    //              so it has to wait to write to cqcsr.
+
+        .cq_mf_i                (cq_mf_i),          // Error bit status 
+        .cmd_to_i               (cq_cmd_to_i),    
+        .cmd_ill_i              (cq_cmd_ill_i),
+        .fence_w_ip_i           (cq_fence_w_ip_i), 
+
+        .error_wen_o            (cq_error_wen_o),   // To enable write of corresponding error bit to regmap
+        .cq_mf_o                (cq_mf_o),          // Set when a memory fault occurred during CQ access
+        .cmd_to_o               (cq_cmd_to_o),      // The execution of a command lead to a timeout //! Future work for PCIe ATS
+        .cmd_ill_o              (cq_cmd_ill_o),     // Illegal or unsupported command was fetched from CQ
+        .fence_w_ip_o           (cq_fence_w_ip_o),  // Set to indicate completion of an IOFENCE command
+        .cq_ip_o                (cq_ip_o),          // To set cip bit in ipsr register if a fault occurs and cq_ie is set
+
+        .wsi_en_i               (wsi_en),           // To know whether WSI generation is supported
+
+        // DDTC Invalidation
+        .flush_ddtc_o           (flush_ddtc),       // Flush DDTC
+        .flush_dv_o             (flush_dv),         // Indicates if device_id is valid
+        .flush_did_o            (flush_did),        // device_id to tag entries to be flushed
+
+        // PDTC Invalidation
+        .flush_pdtc_o           (flush_pdtc),       // Flush PDTC
+        .flush_pv_o             (flush_pv),         // This is used to difference between IODIR.INVAL_DDT and IODIR.INVAL_PDT
+        .flush_pid_o            (flush_pid),        // process_id to be flushed if PV = 1
+
+        // IOTLB Invalidation
+        .flush_vma_o            (flush_vma),        // Flush first-stage PTEs cached entries in IOTLB
+        .flush_gvma_o           (flush_gvma),       // Flush second-stage PTEs cached entries in IOTLB 
+        .flush_av_o             (flush_av),         // Address valid
+        .flush_gv_o             (flush_gv),         // GSCID valid
+        .flush_pscv_o           (flush_pscv),       // PSCID valid
+        .flush_vpn_o            (flush_vpn),        // IOVA to tag entries to be flushed
+        .flush_gscid_o          (flush_gscid),      // GSCID (Guest physical address space identifier) to tag entries to be flushed
+        .flush_pscid_o          (flush_pscid),      // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+
+        // Memory Bus
+        .mem_resp_i             (cq_mem_resp_i),
+        .mem_req_o              (cq_mem_req_o)
+    );
+
+    fq_handler #(
+        .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
+        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
+        .ArianeCfg              (ArianeCfg)
+    ) ( 
+        .clk_i                  (clk_i),
+        .rst_ni                 (rst_ni),
+
+        // Regmap
+        .fq_base_ppn_i          (fqb_ppn_i),        // Base address of the FQ in memory (Should be aligned. See Spec)
+        .fq_size_i              (fq_size_i),        // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+
+        .fq_en_i                (fq_en_i),          // FQ enable bit from fqcsr, handled by SW
+        .fq_ie_i                (fq_ie_i),          // FQ interrupt enable bit from fqcsr, handled by SW
+
+        .fq_head_i              (fqh_i),            // FQ head index (SW reads the next entry from fq_base + fq_head * 32 bytes)
+        .fq_tail_i              (fqt_i),            // FQ tail index (IOMMU writes the next FQ entry to fq_base + fq_tail * 32 bytes)
+        .fq_tail_o              (fqt_o),
+
+        .fq_on_o                (fq_on_o),          // FQ active bit. Indicates to SW whether the FQ is active or not
+        .busy_o                 (fq_busy_o),        // FQ busy bit. Indicates SW that the FQ is in the middle of a state transition, 
+                                                    //              so it has to wait to write to fqcsr.
+
+        .fq_mf_i                (fq_mf_i),             
+        .fq_of_i                (fq_of_i),  
+
+        .error_wen_o            (fq_error_wen_o),   // To enable write of corresponding error bit to regmap
+        .fq_mf_o                (fq_mf_o),          // Set when a memory fault occurred during FQ access
+        .fq_of_o                (fq_of_o),          // The execution of a command lead to a timeout 
+        .fq_ip_o                (fq_ip_o),          // To set ipsr.fip register if a fault occurs and fq_ie is set
+
+        // Event data
+        .event_valid_i          (report_fault),     // a fault/event has occurred
+        .trans_type_i           (trans_type_i),     // transaction type
+        .cause_code_i           (cause_code),       // Fault code as defined by IOMMU and Priv Spec
+        .iova_i                 (iova_i),           // to report if transaction has an IOVA
+        .gpaddr_i               (ptw_bad_gpaddr),   // to report bits [63:2] of the GPA in case of a Guest Page Fault
+        .did_i                  (device_id_i),      // device_id associated with the transaction
+        .pv_i                   (pid_v_i),          // to indicate if transaction has a valid process_id
+        .pid_i                  (process_id),       // process_id associated with the transaction
+        .is_supervisor_i        (is_s_priv),        // indicate if transaction has supervisor privilege
+        .is_guest_pf_i          (ptw_error_stage2), // indicate if event is a guest page fault
+        .is_implicit_i          (is_implicit),      // Guest page fault caused by implicit access for 1st-stage addr translation
+
+        // Memory Bus
+        .mem_resp_i             (fq_mem_resp_i),
+        .mem_req_o              (fq_mem_req_o)
+    );
+
     //# Translation logic
 
     always_comb begin : translation
@@ -476,8 +663,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         iosatp_ppn          = '0;
         iohgatp_ppn         = '0;
         iotlb_access        = 1'b0;
-        cause_code_o        = '0;
-        trans_error_o       = 1'b0;
+        cause_code        = '0;
+        trans_error         = 1'b0;
         is_msi_o            = 1'b0;
         trans_valid_o       = 1'b0;
         translated_addr_o   = '0;
@@ -489,8 +676,8 @@ module iommu_translation_top import ariane_pkg::*; #(
             //# Input Checks
             // "If ddtp.iommu_mode == Off then stop and report "All inbound transactions disallowed" (cause = 256)."
             if (ddtp_i.iommu_mode == 4'b0000) begin
-                cause_code_o    = iommu_pkg::ALL_INB_TRANSACTIONS_DISALLOWED;
-                trans_error_o   = 1'b1;
+                cause_code    = iommu_pkg::ALL_INB_TRANSACTIONS_DISALLOWED;
+                trans_error   = 1'b1;
                 report_always   = 1'b1;
             end
 
@@ -499,8 +686,8 @@ module iommu_translation_top import ariane_pkg::*; #(
                 
                 // "(*) If the transaction is a translated request or a PCIe ATS request"
                 if (is_translated || is_pcie_tr_req) begin
-                    cause_code_o    = iommu_pkg::TRANS_TYPE_DISALLOWED;
-                    trans_error_o   = 1'b1;
+                    cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                    trans_error   = 1'b1;
                     report_always   = 1'b1;
                 end
 
@@ -515,8 +702,8 @@ module iommu_translation_top import ariane_pkg::*; #(
 
             // "If the device_id is wider than supported by the IOMMU, then stop and report "Transaction type disallowed" (cause = 260)."
             else if ((ddtp_i.iommu_mode == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode == 4'b0010 && (|device_id_i[23:6]))) begin
-                cause_code_o = iommu_pkg::TRANS_TYPE_DISALLOWED;
-                trans_error_o   = 1'b1;
+                cause_code = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                trans_error   = 1'b1;
                 report_always   = 1'b1;
             end
 
@@ -534,8 +721,8 @@ module iommu_translation_top import ariane_pkg::*; #(
                 (pid_v_i && !ddtc_lu_content.tc.pdtv) ||
                 (pid_v_i && ddtc_lu_content.tc.pdtv && pid_wider_than_supported)) begin
 
-                cause_code_o = iommu_pkg::TRANS_TYPE_DISALLOWED;
-                trans_error_o   = 1'b1;
+                cause_code = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                trans_error   = 1'b1;
             end
 
             // avoid triggering a CDW walk for a PC or a PTW walk when the previous fault occurs 
@@ -600,9 +787,9 @@ module iommu_translation_top import ariane_pkg::*; #(
             if (pdtc_lu_hit) begin
                 
                 // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
-                if (priv_lvl_i == riscv::PRIV_LVL_S && !pdtc_lu_content.ta.ens) begin
-                    cause_code_o    = iommu_pkg::TRANS_TYPE_DISALLOWED;
-                    trans_error_o   = 1'b1;
+                if (is_s_priv && !pdtc_lu_content.ta.ens) begin
+                    cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                    trans_error   = 1'b1;
                 end
 
                 else begin
@@ -642,12 +829,12 @@ module iommu_translation_top import ariane_pkg::*; #(
                     */
                     if ((is_store && ((!iotlb_lu_content.w && en_stage1) || (!iotlb_lu_g_content.w && en_stage2))   ) ||    // (1)
                         (is_rx && (!iotlb_lu_content.x && en_stage1) || (!iotlb_lu_g_content.x && en_stage2)        ) ||    // (2)
-                        (priv_lvl_i == riscv::PRIV_LVL_U && !iotlb_lu_content.u                                                  ) ||    // (3)
-                        (priv_lvl_i == riscv::PRIV_LVL_S && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x)             )       // (4)
+                        (priv_lvl_i == riscv::PRIV_LVL_U && !iotlb_lu_content.u                                     ) ||    // (3)
+                        (is_s_priv && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x)         )       // (4)
                         ) begin
-                            if (is_store)   cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
-                            else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
-                            trans_error_o   = 1'b1;
+                            if (is_store)   cause_code = iommu_pkg::STORE_PAGE_FAULT;
+                            else            cause_code = iommu_pkg::LOAD_PAGE_FAULT;
+                            trans_error   = 1'b1;
                             trans_valid_o   = 1'b0;
                     end 
 
@@ -691,8 +878,8 @@ module iommu_translation_top import ariane_pkg::*; #(
 
                 if(!pmp_data_allow) begin
                     trans_valid_o   = 1'b0;
-                    cause_code_o    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
-                    trans_error_o   = 1'b1;
+                    cause_code    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
+                    trans_error   = 1'b1;
                 end
             end
 
@@ -709,8 +896,8 @@ module iommu_translation_top import ariane_pkg::*; #(
         // If we had to walk memory is because we had a miss. As we had an exception,
         // the corresponding cache/TLB was not updated, and translation was never set to valid
         if (ptw_error || ptw_access_error || cdw_error) begin
-            cause_code_o    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
-            trans_error_o   = 1'b1;
+            cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
+            trans_error   = 1'b1;
         end
     end
 
@@ -728,5 +915,5 @@ module iommu_translation_top import ariane_pkg::*; #(
         .conf_i        ( pmpcfg_i            ),
         .allow_o       ( pmp_data_allow      )
     );
-    
+
 endmodule

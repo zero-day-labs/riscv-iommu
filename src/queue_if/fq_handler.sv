@@ -57,7 +57,7 @@ module fq_handler import ariane_pkg::*; #(
     input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,   // Fault code as defined by IOMMU and Priv Spec
     //? complete VLEN for IOVA? Offset required?
     input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
-    input  logic [riscv::SVX-1:0]               gpaddr_i,             // to report bits [63:2] of the GPA in case of a Guest Page Fault
+    input  logic [riscv::SVX-1:0]               gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
     input  logic [DEVICE_ID_WIDTH-1:0]          did_i,              // device_id associated with the transaction
     input  logic                                pv_i,               // to indicate if transaction has a valid process_id
     input  logic [PROCESS_ID_WIDTH-1:0]         pid_i,              // process_id associated with the transaction
@@ -233,6 +233,7 @@ module fq_handler import ariane_pkg::*; #(
                         if (fq_tail_i == fq_head_i - 1) begin
                             fq_of_o     = 1'b1;
                             error_wen_o = 1'b1;
+                            fq_ip_o     = fq_ie_i;
                             state_n     = ERROR;
                         end
                     end
@@ -286,6 +287,7 @@ module fq_handler import ariane_pkg::*; #(
                         if (mem_resp_i.b_valid) begin
                             
                             mem_req_o.b_ready   = 1'b1;
+                            fq_ip_o             = fq_ie_i;  // When a new record is written and fie is set, set ipsr.fip
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
                                 // AXI error
                                 state_n         = ERROR;
@@ -310,8 +312,6 @@ module fq_handler import ariane_pkg::*; #(
             ERROR: begin
                 if (!error_vector)
                     state_n = IDLE;
-
-                fq_ip_o = fq_ie_i;
             end
 
             default: state_n = IDLE;
