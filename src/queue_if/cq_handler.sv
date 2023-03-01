@@ -158,7 +158,7 @@ module cq_handler import ariane_pkg::*; #(
         // Default values
         // AXI parameters
         // AW
-        mem_req_o.aw.id         = 4'b0001;
+        mem_req_o.aw.id         = 4'b0000;
         mem_req_o.aw.addr       = cq_pptr_q;
         mem_req_o.aw.len        = 8'b0;
         mem_req_o.aw.size       = 3'b011;
@@ -185,7 +185,7 @@ module cq_handler import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0001;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.id         = 4'b0010;              //? Can we define any value for AR.ID?
         mem_req_o.ar.addr       = cq_pptr_q;            // Physical address to access
         mem_req_o.ar.len        = 8'd1;                 // CQ entries are 16-bytes wide (2 beats)
         mem_req_o.ar.size       = 3'b011;               // 64 bits (8 bytes) per beat
