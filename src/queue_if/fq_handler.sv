@@ -145,7 +145,7 @@ module fq_handler import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0001;
+        mem_req_o.ar.id         = 4'b0011;
         mem_req_o.ar.addr       = '0;                   // IOMMU never reads from FQ
         mem_req_o.ar.len        = '0;
         mem_req_o.ar.size       = 3'b011;

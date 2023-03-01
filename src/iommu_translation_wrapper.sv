@@ -14,7 +14,7 @@
     Author: Manuel Rodríguez, University of Minho
     Date: 06/02/2023
 
-    Description: RISC-V IOMMU Top Translation Logic.
+    Description: RISC-V IOMMU Translation Modules Wrapper.
 */
 
 //! NOTES:
@@ -50,8 +50,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     input  riscv::priv_lvl_t                priv_lvl_i,             // Privilege mode associated with the transaction
 
     // Memory Bus
-    input  ariane_axi_pkg::resp_t   mem_resp_i,
-    output ariane_axi_pkg::req_t    mem_req_o,
+    input  ariane_axi_pkg::resp_t       mem_resp_i,
+    output ariane_axi_pkg::req_t        mem_req_o,
 
     // From Regmap
     input  iommu_pkg::capabilities_t    capabilities_i,
@@ -265,18 +265,41 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic [PSCID_WIDTH-1:0]         flush_pscid;
 
     // AXI interfaces
-    ariane_axi_pkg::resp_t  ptw_mem_resp_i;
-    ariane_axi_pkg::req_t   ptw_mem_req_o;
-    ariane_axi_pkg::resp_t  cdw_mem_resp_i;
-    ariane_axi_pkg::req_t   cdw_mem_req_o;
-    ariane_axi_pkg::resp_t  cq_mem_resp_i;
-    ariane_axi_pkg::req_t   cq_mem_req_o;
-    ariane_axi_pkg::resp_t  fq_mem_resp_i;
-    ariane_axi_pkg::req_t   fq_mem_req_o;
+    ariane_axi_pkg::resp_t  ptw_axi_resp;
+    ariane_axi_pkg::req_t   ptw_axi_req;
+    ariane_axi_pkg::resp_t  cdw_axi_resp;
+    ariane_axi_pkg::req_t   cdw_axi_req;
+    ariane_axi_pkg::resp_t  cq_axi_resp;
+    ariane_axi_pkg::req_t   cq_axi_req;
+    ariane_axi_pkg::resp_t  fq_axi_resp;
+    ariane_axi_pkg::req_t   fq_axi_req;
 
     // More wires
     logic                   ptw_error_stage2;   // Set when a guest page fault occurs
     logic                   ptw_bad_gpaddr;
+
+    //# Arbitration and mux logic to assign AXI4 Master IF to a module
+    mem_if_wrapper memory_if (
+        // External ports: To AXI Bus
+        .mem_resp_i     (mem_resp_i),
+        .mem_req_o      (mem_req_o),
+        
+        // From PTW
+        .ptw_resp_o     (ptw_axi_resp),
+        .ptw_req_i      (ptw_axi_req),
+
+        // From CDW
+        .cdw_resp_o     (cdw_axi_resp),
+        .cdw_req_i      (cdw_axi_req),
+
+        // From CQ
+        .cq_resp_o      (cq_axi_resp),
+        .cq_req_i       (cq_axi_req),
+
+        // From FQ
+        .fq_resp_o      (fq_axi_resp),
+        .fq_req_i       (fq_axi_req)
+    );
 
     //# Device Directory Table Cache
     iommu_ddtc #(
@@ -404,8 +427,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
 
         // PTW AXI Master memory interface
-        .mem_resp_i             (ptw_mem_resp_i),           // Response port from memory
-        .mem_req_o              (ptw_mem_req_o),            // Request port to memory
+        .mem_resp_i             (ptw_axi_resp),           // Response port from memory
+        .mem_req_o              (ptw_axi_req),            // Request port to memory
 
         // to IOTLB, update logic
         .update_o               (iotlb_update),
@@ -490,8 +513,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .dc_sxl_i               (ddtc_lu_content.tc.sxl),
 
         // PTW memory interface
-        .mem_resp_i             (cdw_mem_resp_i),            // Response port from memory
-        .mem_req_o              (cdw_mem_req_o),             // Request port to memory
+        .mem_resp_i             (cdw_axi_resp),            // Response port from memory
+        .mem_req_o              (cdw_axi_req),             // Request port to memory
 
         // Update logic
         .update_dc_o            (ddtc_update),
@@ -597,8 +620,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .flush_pscid_o          (flush_pscid),      // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
         // Memory Bus
-        .mem_resp_i             (cq_mem_resp_i),
-        .mem_req_o              (cq_mem_req_o)
+        .mem_resp_i             (cq_axi_resp),
+        .mem_req_o              (cq_axi_req)
     );
 
     fq_handler #(
@@ -646,8 +669,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .is_implicit_i          (is_implicit),      // Guest page fault caused by implicit access for 1st-stage addr translation
 
         // Memory Bus
-        .mem_resp_i             (fq_mem_resp_i),
-        .mem_req_o              (fq_mem_req_o)
+        .mem_resp_i             (fq_axi_resp),
+        .mem_req_o              (fq_axi_req)
     );
 
     //# Translation logic
@@ -663,7 +686,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         iosatp_ppn          = '0;
         iohgatp_ppn         = '0;
         iotlb_access        = 1'b0;
-        cause_code        = '0;
+        cause_code          = '0;
         trans_error         = 1'b0;
         is_msi_o            = 1'b0;
         trans_valid_o       = 1'b0;

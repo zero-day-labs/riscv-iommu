@@ -224,7 +224,7 @@ module iommu_cdw import ariane_pkg::*; #(
         // default assignments
         // AXI parameters
         // AW
-        mem_req_o.aw.id         = 4'b0001;
+        mem_req_o.aw.id         = 4'b0011;
         mem_req_o.aw.addr       = '0;
         mem_req_o.aw.len        = 8'b0;
         mem_req_o.aw.size       = 3'b011;

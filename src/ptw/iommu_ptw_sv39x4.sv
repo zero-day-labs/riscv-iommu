@@ -258,7 +258,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         // default assignments
         // AXI parameters
         // AW
-        mem_req_o.aw.id         = 4'b0000;              //? Can we define any value for AR.ID?
+        mem_req_o.aw.id         = 4'b0010;              //? Can we define any value for AR.ID?
         mem_req_o.aw.addr       = '0;           // Physical address to access
         mem_req_o.aw.len        = 8'b0;                 // 1 beat per burst only
         mem_req_o.aw.size       = 3'b011;               // 64 bits (8 bytes) per beat
