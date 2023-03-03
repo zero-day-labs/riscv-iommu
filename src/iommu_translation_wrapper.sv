@@ -38,7 +38,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     input  logic    clk_i,
     input  logic    rst_ni,
 
-    input  logic    req_trans_i;            // Trigger translation
+    input  logic    req_trans_i,            // Trigger translation
 
     // Translation request data
     input  logic [DEVICE_ID_WIDTH-1:0]      device_id_i,
@@ -99,9 +99,11 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        cq_error_wen_o,
     output logic                        fq_error_wen_o,
 
+    // Request status and output data
     output logic                        trans_valid_o,      // Translation completed
     output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
     output logic [riscv::PLEN-1:0]      translated_addr_o,  // Translated address
+    output logic                        trans_error_o,
 
     // SPA IOPMP
     input  riscv::pmpcfg_t [15:0]           conf_reg_i,
@@ -217,7 +219,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
     logic   report_fault;
-    assign  report_fault = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk)) & trans_error);
+    assign  report_fault    = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk)) & trans_error);
+    assign  trans_error_o   = trans_error;  // The requesting device needs to know if an error occurred
 
     logic   is_implicit;
     logic   ptw_error_stage2_int;
