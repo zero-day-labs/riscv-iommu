@@ -304,7 +304,10 @@ package iommu_pkg;
     localparam logic [CAUSE_LEN-1:0] MSI_ST_ACCESS_FAULT                = 273;
     localparam logic [CAUSE_LEN-1:0] PT_DATA_CORRUPTION                 = 274;
 
-    // TODO: Transaction type encoding
+    //---------------------------
+    //# Transaction type encoding
+    //---------------------------
+    
     localparam TTYP_LEN = 6;
 
     localparam logic [TTYP_LEN-1:0] NONE                = 6'b000000;
