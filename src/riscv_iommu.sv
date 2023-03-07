@@ -42,7 +42,7 @@ module riscv_iommu #(
     input  ariane_axi_soc_pkg::resp_t       mem_resp_i,
     output ariane_axi_soc_pkg::req_t        mem_req_o,
 
-    // Programming Interface (Slave) (Have to be converted to AXI Lite)
+    // Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
     input  ariane_axi_soc_pkg::req_t        prog_req_i,
     output ariane_axi_soc_pkg::resp_t       prog_resp_o
 );
@@ -74,6 +74,10 @@ module riscv_iommu #(
 
     // AXI request bus used to intercept AxADDR and AxVALID parameters, and connect to the demux slave port
     ariane_axi_soc_pkg::req_t       axi_aux_req;
+
+    // Memory-Mapped Register Interface connections
+    iommu_reg_pkg::iommu_reg2hw_t   reg2hw;
+    iommu_reg_pkg::iommu_hw2reg_t   hw2reg;
 
     // Error slave AXI bus
     ariane_axi_soc_pkg::req_t       error_req;
@@ -134,6 +138,7 @@ module riscv_iommu #(
     // R
     assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
 
+    // TODO: Check whether the IOMMU writes to icvec and msi_cfg_tbl. If not, hardwire inputs to zero
     iommu_translation_wrapper #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES),
         .DDTC_ENTRIES       (DDTC_ENTRIES),
@@ -163,55 +168,79 @@ module riscv_iommu #(
         .mem_req_o      (mem_req_o),
 
         // From Regmap
-        .capabilities_i (),
-        .fctl_i         (),
-        .ddtp_i         (),
+        .capabilities_i (reg2hw.capabilities),
+        .fctl_i         (reg2hw.fctl),
+        .ddtp_i         (reg2hw.ddtp),
         // CQ
-        .cqb_ppn_i      (),
-        .cqb_size_i     (),
-        .cqh_i          (),
-        .cqh_o          (),
-        .cqt_i          (),
+        .cqb_ppn_i      (reg2hw.cqb.ppn.q),
+        .cqb_size_i     (reg2hw.cqb.log2sz_1.q),
+        .cqh_i          (reg2hw.cqh.q),
+        .cqh_o          (hw2reg.cqh.d),
+        .cqt_i          (reg2hw.cqt.q),
         // FQ
-        .fqb_ppn_i      (),
-        .fqb_size_i     (),
-        .fqh_i          (),
-        .fqt_i          (),
-        .fqt_o          (),
+        .fqb_ppn_i      (reg2hw.fqb.ppn.q),
+        .fqb_size_i     (reg2hw.fqb.log2sz_1.q),
+        .fqh_i          (reg2hw.fqh.q),
+        .fqt_i          (reg2hw.fqt.q),
+        .fqt_o          (hw2reg.fqt.d),
         // cqcsr
-        .cq_en_i        (),
-        .cq_ie_i        (),
-        .cq_mf_i        (),
-        .cq_cmd_to_i    (),    
-        .cq_cmd_ill_    (),
-        .cq_fence_w_ip_i(),
-        .cq_mf_o        (),
-        .cq_cmd_to_o    (),
-        .cq_cmd_ill_    (),
-        .cq_fence_w_ip_o(),
-        .cq_on_o        (),
-        .cq_busy        (),
+        .cq_en_i        (reg2hw.cqcsr.cqen.q),
+        .cq_ie_i        (reg2hw.cqcsr.cie.q),
+        .cq_mf_i        (reg2hw.cqcsr.cqmf.q),
+        .cq_cmd_to_i    (reg2hw.cqcsr.cmd_to.q),    
+        .cq_cmd_ill_i   (reg2hw.cqcsr.cmd_ill.q),
+        .cq_fence_w_ip_i(reg2hw.cqcsr.fence_w_ip.q),
+        .cq_mf_o        (hw2reg.cqcsr.cqmf.d),
+        .cq_cmd_to_o    (hw2reg.cqcsr.cmd_to.d),
+        .cq_cmd_ill_o   (hw2reg.cqcsr.cmd_ill.d),
+        .cq_fence_w_ip_o(hw2reg.cqcsr.fence_w_ip.d),
+        .cq_on_o        (hw2reg.cqcsr.cqon.d),
+        .cq_busy_o      (hw2reg.cqcsr.busy.d),
         // fqcsr
-        .fq_en_i        (),
-        .fq_ie_i        (),
-        .fq_mf_i        (),
-        .fq_of_i        (),
-        .fq_mf_o        (),
-        .fq_of_o        (),
-        .fq_on_o        (),
-        .fq_busy_o      (),
+        .fq_en_i        (reg2hw.fqcsr.fqen.q),
+        .fq_ie_i        (reg2hw.fqcsr.fie.q),
+        .fq_mf_i        (reg2hw.fqcsr.fqmf.q),
+        .fq_of_i        (reg2hw.fqcsr.fqof.q),
+        .fq_mf_o        (hw2reg.cqcsr.fqmf.d),
+        .fq_of_o        (hw2reg.cqcsr.fqof.d),
+        .fq_on_o        (hw2reg.cqcsr.fqon.d),
+        .fq_busy_o      (hw2reg.cqcsr.busy.d),
         //ipsr
-        .cq_ip_o        (),
-        .fq_ip_o        (),
+        .cq_ip_o        (hw2reg.ipsr.cip.d),
+        .fq_ip_o        (hw2reg.ipsr.fip.d),
 
         // To enable write of error bits to cqcsr and fqcsr
         .cq_error_wen_o (),
         .fq_error_wen_o (),
 
-        .trans_valid_o      (trans_valid),     // Translation successfully completed
-        .is_msi_o           (),     // Indicate whether the translated address is an MSI address
-        .translated_addr_o  (spaddr),     // Translated address
-        .trans_error_o      (trans_error)      // Translation error
+        .trans_valid_o      (trans_valid),  // Translation successfully completed
+        .is_msi_o           (),             // Indicate whether the translated address is an MSI address
+        .translated_addr_o  (spaddr),       // Translated address
+        .trans_error_o      (trans_error)   // Translation error
+    );
+
+    iommu_regmap_if #(
+        .ADDR_WIDTH     (ariane_axi_soc::AddrWidth),
+        .DATA_WIDTH     (ariane_axi_soc::DataWidth),
+        .ID_WIDTH       (ariane_soc::IdWidth      ),
+        .USER_WIDTH     (ariane_axi_soc::UserWidth),
+        .BUFFER_DEPTH   (), // ?
+        .DECOUPLE_W     (), // ?
+        .axi_req_t      (ariane_axi_soc_pkg::req_t),
+        .axi_rsp_t      (ariane_axi_soc_pkg::resp_t),
+        .axi_lite_req_t (axi_lite_req_t),
+        .axi_lite_rsp_t (axi_lite_rsp_t),
+        .reg_req_t      (reg_req_t),
+        .reg_rsp_t      (reg_rsp_t)
+    ) i_iommu_regmap_if (
+        .clk_i          (clk_i),
+        .rst_ni         (rst_ni),
+
+        .prog_req_i     (prog_req_i),
+        .prog_resp_o    (prog_resp_o),
+
+        .reg2hw_o       (reg2hw),
+        .hw2reg_i       (hw2reg)    // TODO: Check WE signals!
     );
 
     //# Channel selection

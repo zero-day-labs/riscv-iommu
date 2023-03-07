@@ -24,21 +24,20 @@ module axi_lite_to_reg #(
     /// Whether the AXI-Lite W channel should be decoupled with a register. This
     /// can help break long paths at the expense of registers.
     parameter bit DECOUPLE_W = 1
-    //* No need to pass type as parameter since they will be defined in 'typedef_global.svh' for all scope
-    // /// AXI-Lite request struct type.
-    // parameter type axi_lite_req_t = logic,
-    // /// AXI-Lite response struct type.
-    // parameter type axi_lite_rsp_t = logic,
-    // /// Regbus request struct type.
-    // parameter type reg_req_t = logic,
-    // /// Regbus response struct type.
-    // parameter type reg_rsp_t = logic
+    /// AXI-Lite request struct type.
+    parameter type axi_lite_req_t = logic,
+    /// AXI-Lite response struct type.
+    parameter type axi_lite_rsp_t = logic,
+    /// Regbus request struct type.
+    parameter type reg_req_t = logic,
+    /// Regbus response struct type.
+    parameter type reg_rsp_t = logic
   ) (
-    input  logic           clk_i         ,
-    input  logic           rst_ni        ,
+    input  logic           clk_i,
+    input  logic           rst_ni,
     input  axi_lite_req_t  axi_lite_req_i,  // contains all request signals
     output axi_lite_rsp_t  axi_lite_rsp_o,  // contains all response signals
-    output reg_req_t       reg_req_o     ,
+    output reg_req_t       reg_req_o,
     input  reg_rsp_t       reg_rsp_i
   );
   

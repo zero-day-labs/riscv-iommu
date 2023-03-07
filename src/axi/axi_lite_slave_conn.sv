@@ -23,7 +23,7 @@ module axi_lite_slave_conn #(
     // width of data bus in bits
     parameter int unsigned DATA_WIDTH   = 64,
     // width of address bus in bits
-    parameter int unsigned ADDR_WIDTH   = 13,
+    parameter int unsigned ADDR_WIDTH   = 64,
     // width of strobe (width of data bus in words)
     parameter int unsigned STRB_WIDTH   = (DATA_WIDTH / 8)
 ) (
@@ -65,8 +65,8 @@ module axi_lite_slave_conn #(
     //
     // AXI request/response pair
     //
-    output axi_lite_req_t                    axi_lite_req_o,
-    input  axi_lite_rsp_t                    axi_lite_rsp_i
+    output axi_lite_req_t               axi_lite_req_o,
+    input  axi_lite_rsp_t               axi_lite_rsp_i
 );
 
   //
@@ -75,7 +75,7 @@ module axi_lite_slave_conn #(
   assign axi_lite_req_o.aw.addr   = s_axil_awaddr;
   assign axi_lite_req_o.aw.prot   = s_axil_awprot;
   assign axi_lite_req_o.aw_valid  = s_axil_awvalid;
-  assign s_axil_awready       = axi_lite_rsp_i.aw_ready;
+  assign s_axil_awready           = axi_lite_rsp_i.aw_ready;
 
   //
   // Write data channel
@@ -83,13 +83,13 @@ module axi_lite_slave_conn #(
   assign axi_lite_req_o.w.data    = s_axil_wdata;
   assign axi_lite_req_o.w.strb    = s_axil_wstrb;
   assign axi_lite_req_o.w_valid   = s_axil_wvalid;
-  assign s_axil_wready        = axi_lite_rsp_i.w_ready;
+  assign s_axil_wready            = axi_lite_rsp_i.w_ready;
 
   //
   // Write response channel
   //
-  assign s_axil_bresp         = axi_lite_rsp_i.b.resp;
-  assign s_axil_bvalid        = axi_lite_rsp_i.b_valid;
+  assign s_axil_bresp             = axi_lite_rsp_i.b.resp;
+  assign s_axil_bvalid            = axi_lite_rsp_i.b_valid;
   assign axi_lite_req_o.b_ready   = s_axil_bready;
 
   //
@@ -98,14 +98,14 @@ module axi_lite_slave_conn #(
   assign axi_lite_req_o.ar.addr   = s_axil_araddr;
   assign axi_lite_req_o.ar.prot   = s_axil_arprot;
   assign axi_lite_req_o.ar_valid  = s_axil_arvalid;
-  assign s_axil_arready       = axi_lite_rsp_i.ar_ready;
+  assign s_axil_arready           = axi_lite_rsp_i.ar_ready;
 
   //
   // Read data channel
   //
-  assign s_axil_rdata         = axi_lite_rsp_i.r.data;
-  assign s_axil_rresp         = axi_lite_rsp_i.r.resp;
-  assign s_axil_rvalid        = axi_lite_rsp_i.r_valid;
+  assign s_axil_rdata             = axi_lite_rsp_i.r.data;
+  assign s_axil_rresp             = axi_lite_rsp_i.r.resp;
+  assign s_axil_rvalid            = axi_lite_rsp_i.r_valid;
   assign axi_lite_req_o.r_ready   = s_axil_rready;
 
 endmodule
