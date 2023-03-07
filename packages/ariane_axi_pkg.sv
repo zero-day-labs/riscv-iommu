@@ -15,8 +15,6 @@
  * Description: Contains Ariane's AXI ports, does not contain user ports
  */
 
- // TODO: Include AXI Lite structs
-
 package ariane_axi;
 
     // used in axi_adapter.sv

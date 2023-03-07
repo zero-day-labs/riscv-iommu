@@ -54,9 +54,9 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output ariane_axi_pkg::req_t        mem_req_o,
 
     // From Regmap
-    input  iommu_pkg::capabilities_t    capabilities_i,
-    input  iommu_pkg::fctl_t            fctl_i,
-    input  iommu_pkg::ddtp_t            ddtp_i,
+    input  iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities_i,
+    input  iommu_reg_pkg::iommu_reg2hw_fctl_reg_t           fctl_i,
+    input  iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t           ddtp_i,
     // CQ
     input  logic [riscv::PPNW-1:0]      cqb_ppn_i,
     input  logic [4:0]                  cqb_size_i,
@@ -228,7 +228,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     // To indicate if the IOMMU supports and uses WSI as interrupt generation mechanism
     logic   wsi_en;
-    assign  wsi_en = (^capabilities_i.igs & fctl_i.wsi);
+    assign  wsi_en = (^capabilities_i.igs.q & fctl_i.wsi.q);
 
     // Update wires
     logic                           ddtc_update;
@@ -493,24 +493,24 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .cause_code_o           (cdw_cause_code),       // Fault code as defined by IOMMU and Priv Spec
 
         // DC config checks
-        .caps_ats_i             (capabilities_i.ats),
-        .caps_t2gpa_i           (capabilities_i.t2gpa),
-        .caps_pd20_i            (capabilities_i.pd20),
-        .caps_pd17_i            (capabilities_i.pd17),
-        .caps_pd8_i             (capabilities_i.pd8),
-        .caps_sv32_i            (capabilities_i.sv32),
-        .caps_sv39_i            (capabilities_i.sv39),
-        .caps_sv48_i            (capabilities_i.sv48), 
-        .caps_sv57_i            (capabilities_i.sv57),
-        .fctl_glx_i             (fctl_i.gxl), 
-        .caps_sv32x4_i          (capabilities_i.sv32x4),
-        .caps_sv39x4_i          (capabilities_i.sv39x4),
-        .caps_sv48x4_i          (capabilities_i.sv48x4),
-        .caps_sv57x4_i          (capabilities_i.sv57x4),
-        .caps_msi_flat_i        (capabilities_i.msi_flat),
-        .caps_amo_i             (capabilities_i.amo),
-        .caps_end_i             (capabilities_i.endi),
-        .fctl_be_i              (fctl_i.be),
+        .caps_ats_i             (capabilities_i.ats.q),
+        .caps_t2gpa_i           (capabilities_i.t2gpa.q),
+        .caps_pd20_i            (capabilities_i.pd20.q),
+        .caps_pd17_i            (capabilities_i.pd17.q),
+        .caps_pd8_i             (capabilities_i.pd8.q),
+        .caps_sv32_i            (capabilities_i.sv32.q),
+        .caps_sv39_i            (capabilities_i.sv39.q),
+        .caps_sv48_i            (capabilities_i.sv48.q), 
+        .caps_sv57_i            (capabilities_i.sv57.q),
+        .fctl_glx_i             (fctl_i.gxl.q), 
+        .caps_sv32x4_i          (capabilities_i.sv32x4.q),
+        .caps_sv39x4_i          (capabilities_i.sv39x4.q),
+        .caps_sv48x4_i          (capabilities_i.sv48x4.q),
+        .caps_sv57x4_i          (capabilities_i.sv57x4.q),
+        .caps_msi_flat_i        (capabilities_i.msi_flat.q),
+        .caps_amo_i             (capabilities_i.amo.q),
+        .caps_end_i             (capabilities_i.endi.q),
+        .fctl_be_i              (fctl_i.be.q),
 
         // PC checks
         .dc_sxl_i               (ddtc_lu_content.tc.sxl),
@@ -540,8 +540,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .pdtc_hit_i             (pdtc_lu_hit),
 
         // from regmap
-        .ddtp_ppn_i             (ddtp_i.ppn),       // PPN from ddtp register
-        .ddtp_mode_i            (ddtp_i.mode),      // DDT levels and IOMMU mode
+        .ddtp_ppn_i             (ddtp_i.ppn.q),       // PPN from ddtp register
+        .ddtp_mode_i            (ddtp_i.iommu_mode.q),      // DDT levels and IOMMU mode
 
         // from DC (for PC walks)
         .en_stage2_i            (en_stage2),                    // Second-stage translation is enabled
@@ -701,14 +701,14 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     
             //# Input Checks
             // "If ddtp.iommu_mode == Off then stop and report "All inbound transactions disallowed" (cause = 256)."
-            if (ddtp_i.iommu_mode == 4'b0000) begin
+            if (ddtp_i.iommu_mode.q == 4'b0000) begin
                 cause_code    = iommu_pkg::ALL_INB_TRANSACTIONS_DISALLOWED;
                 trans_error   = 1'b1;
                 report_always   = 1'b1;
             end
 
             // "If ddtp.iommu_mode == Bare and any of the following conditions (*) hold then stop and report "Transaction type disallowed" (cause = 260)."
-            else if (ddtp_i.iommu_mode == 4'b0001) begin
+            else if (ddtp_i.iommu_mode.q == 4'b0001) begin
                 
                 // "(*) If the transaction is a translated request or a PCIe ATS request"
                 if (is_translated || is_pcie_tr_req) begin
@@ -727,7 +727,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
             // This implementation will support MSI address translation, so DC always is presented in extended format
 
             // "If the device_id is wider than supported by the IOMMU, then stop and report "Transaction type disallowed" (cause = 260)."
-            else if ((ddtp_i.iommu_mode == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode == 4'b0010 && (|device_id_i[23:6]))) begin
+            else if ((ddtp_i.iommu_mode.q == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode.q == 4'b0010 && (|device_id_i[23:6]))) begin
                 cause_code = iommu_pkg::TRANS_TYPE_DISALLOWED;
                 trans_error   = 1'b1;
                 report_always   = 1'b1;

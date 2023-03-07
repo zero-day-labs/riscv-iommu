@@ -21,9 +21,9 @@
 
 module iommu_field
     #(
-        parameter int DW = 32,                          // bit width of the register field (2-state)
-        parameter iommu_field_pkg::sw_access_e SwAccess = SwAccessRW,    // SW access permission
-        parameter logic [DW-1:0] RESVAL = '0            // reset value, 
+        parameter int                           DATA_WIDTH = 32,        // bit width of the register field (2-state)
+        parameter iommu_field_pkg::sw_access_e  SwAccess = SwAccessRW,  // SW access permission
+        parameter logic [DATA_WIDTH-1:0]        RESVAL = '0             // reset value, 
     )
     (
         input clk_i,
@@ -31,19 +31,19 @@ module iommu_field
 
         // Signals from SW side: valid for RW, WO, W1C, W1S, W0C, RC
         // In case of RC, top module connects Read Pulse to WE. WD should be 1'b0 in this case ???
-        input we,
-        input [DW-1:0] wd,
+        input we,                           // SW WE
+        input [DATA_WIDTH-1:0] wd,          // SW WD
 
         // From HW: valid for HRW, HWO
-        input de,
-        input [DW-1:0] d,
+        input de,                           // HW WE
+        input [DATA_WIDTH-1:0] d,           // HW WD
 
         // To HW and SW Reg IF read
-        output logic qe,
-        output logic [DW-1:0] q,
+        output logic qe,                    // definitive write enable
+        output logic [DATA_WIDTH-1:0] q,    // HW read port
 
-        output logic [DW-1:0] ds,
-        output logic [DW-1:0] qs
+        output logic [DATA_WIDTH-1:0] ds,
+        output logic [DATA_WIDTH-1:0] qs    // SW read port
     );
 
     import iommu_field_pkg::*;
@@ -51,11 +51,11 @@ module iommu_field
     // Write arbiter output signals.
     // It takes WE, WD, DE, D, Q signals and yields the valid WE and WD that will cause writes to the register
     logic arb_wr_en;
-    logic [DW-1:0] arb_wr_data;
+    logic [DATA_WIDTH-1:0] arb_wr_data;
 
     // Data write arbiter
     iommu_field_arb #(
-        .DW(DW),
+        .DATA_WIDTH(DATA_WIDTH),
         .SwAccess(SwAccess)
     ) int_wr_arb(
         .we(we),
@@ -64,8 +64,8 @@ module iommu_field
         .d(d),
         .q(q),
 
-        .wr_en(arb_wr_en),
-        .wr_data(arb_wr_data)
+        .wr_en(arb_wr_en),      // Arbitrated WE
+        .wr_data(arb_wr_data)   // Arbitrated WD
     );
 
     // Register update logic

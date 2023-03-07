@@ -22,25 +22,25 @@
 module iommu_field_arb
     import iommu_field_pkg::*;
     #(
-        parameter int         DW       = 32,
+        parameter int         DATA_WIDTH = 32,
         parameter sw_access_e SwAccess = SwAccessRW
     )
     (
         // From SW: valid for RW, WO, W1C, W1S, W0C, RC.
         // In case of RC, top connects read pulse to we.
-        input          we,
-        input [DW-1:0] wd,
+        input                   we,
+        input [DATA_WIDTH-1:0]  wd,
 
         // From HW: valid for HRW, HWO.
-        input          de,
-        input [DW-1:0] d,
+        input                   de,
+        input [DATA_WIDTH-1:0]  d,
 
         // From register: actual reg value. (Needed to mask input value when W1S, W1C)
-        input [DW-1:0] q,
+        input [DATA_WIDTH-1:0]  q,
 
         // To register: actual write enable and write data.
-        output logic          wr_en,
-        output logic [DW-1:0] wr_data
+        output logic                    wr_en,
+        output logic [DATA_WIDTH-1:0]   wr_data
     );
 
     // If RW or WO, allow write (if SW is not requesting write, set WD with HW D value)
@@ -48,7 +48,7 @@ module iommu_field_arb
         assign wr_en   = we | de;
         assign wr_data = (we == 1'b1) ? wd : d; // SW higher priority
         // Unused q - Prevent lint errors.
-        logic [DW-1:0] unused_q;
+        logic [DATA_WIDTH-1:0] unused_q;
         assign unused_q = q;
     end
 
@@ -57,9 +57,9 @@ module iommu_field_arb
         assign wr_en   = de;
         assign wr_data = d;
         // Unused we, wd, q - Prevent lint errors.
-        logic          unused_we;
-        logic [DW-1:0] unused_wd;
-        logic [DW-1:0] unused_q;
+        logic                   unused_we;
+        logic [DATA_WIDTH-1:0]  unused_wd;
+        logic [DATA_WIDTH-1:0]  unused_q;
         assign unused_we = we;
         assign unused_wd = wd;
         assign unused_q  = q;
@@ -92,7 +92,7 @@ module iommu_field_arb
         assign wr_en  = we | de;
         assign wr_data = (de ? d : q) & (we ? '0 : '1); // 
         // Unused wd - Prevent lint errors.
-        logic [DW-1:0] unused_wd;
+        logic [DATA_WIDTH-1:0] unused_wd;
         assign unused_wd = wd;
     end
     
@@ -100,9 +100,9 @@ module iommu_field_arb
         assign wr_en   = de;
         assign wr_data = d;
         // Unused we, wd, q - Prevent lint errors.
-        logic          unused_we;
-        logic [DW-1:0] unused_wd;
-        logic [DW-1:0] unused_q;
+        logic                   unused_we;
+        logic [DATA_WIDTH-1:0]  unused_wd;
+        logic [DATA_WIDTH-1:0]  unused_q;
         assign unused_we = we;
         assign unused_wd = wd;
         assign unused_q  = q;

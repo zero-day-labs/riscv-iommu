@@ -18,8 +18,6 @@
 //
 // Disclaimer:  This file was generated using LowRISC `reggen` tool. Edit at your own risk.
 
-// TODO: update FCTL register with GXL field, instead of ADFD
-
 
 `include "include/assertions.svh"
 `include "packages/iommu_reg_pkg_exp.sv"
@@ -27,54 +25,42 @@
 `include "include/typedef_reg.svh"
 `include "include/typedef_global.svh"
 
-module iommu_regmap_top 
-  #(
-      // parameter type reg_req_t = logic,
-      // parameter type reg_rsp_t = logic,
-      parameter int AW = 13,
-      parameter int DW = 64
-  ) (
-    input clk_i,
-    input rst_ni,
-    input  reg_req_t reg_req_i,
-    output reg_rsp_t reg_rsp_o,
-    // To HW
-    output iommu_reg_pkg::iommu_reg2hw_t reg2hw, // Write
-    input  iommu_reg_pkg::iommu_hw2reg_t hw2reg, // Read
+module iommu_regmap_wrapper #(
+    parameter int 			ADDR_WIDTH = 64,
+    parameter int 			DATA_WIDTH = 64,
+    parameter type 			reg_req_t = logic,
+    parameter type 			reg_rsp_t = logic,
+	  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8)
+) (
+	input logic clk_i,
+	input logic rst_ni,
+	// From SW
+	input  reg_req_t 						reg_req_i,
+	output reg_rsp_t 						reg_rsp_o,
+	// To HW
+	output iommu_reg_pkg::iommu_reg2hw_t 	reg2hw, // Write
+	input  iommu_reg_pkg::iommu_hw2reg_t 	hw2reg, // Read
 
-
-    // Config
-    input devmode_i // If 1, explicit error return for unmapped register access
-  );
+	// Config
+	input logic devmode_i // If 1, explicit error return for unmapped register access
+);
 
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
-  localparam int DBW = DW/8;                    // Byte Width
-
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
-  logic           reg_we;
-  logic           reg_re;
-  logic [AW-1:0]  reg_addr;
-  logic [DW-1:0]  reg_wdata;
-  logic [DBW-1:0] reg_be;
-  logic [DW-1:0]  reg_rdata;
-  logic           reg_error;
-  logic           reg_ready;
+  logic           			reg_we;
+  logic           			reg_re;
+  logic [ADDR_WIDTH-1:0]  	reg_addr;
+  logic [DATA_WIDTH-1:0]  	reg_wdata;
+  logic [STRB_WIDTH-1:0] 	reg_be;
+  logic [DATA_WIDTH-1:0]  	reg_rdata;
+  logic           			reg_error;
+  logic           			reg_ready;
 
-  logic          addrmiss, wr_err;
-
-  logic [DW-1:0] reg_rdata_next;
-
-  // Below register interface can be changed
-  // EXP: Conversion from the input generic register interface and the register file signals
-  // Register types must be defined in the top level module that instantiates the IOMMU
-  // typedef logic [AW-1:0] addr_t;
-  // typedef logic [DW-1:0] data_t;
-  // typedef logic [DBW-1:0] strb_t;
-
-  // `REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
+  logic addrmiss, wr_err;
+  logic [DATA_WIDTH-1:0] reg_rdata_next;
 
   reg_req_t  reg_intf_req;
   reg_rsp_t  reg_intf_rsp;
@@ -86,7 +72,7 @@ module iommu_regmap_top
 
   assign reg_we = reg_intf_req.valid & reg_intf_req.write;
   assign reg_re = reg_intf_req.valid & ~reg_intf_req.write;
-  assign reg_addr = reg_intf_req.addr;
+  assign reg_addr = reg_intf_req.addr[11:0];	// only compare the offsets. Regmap is 4kiB alligned.
   assign reg_wdata = reg_intf_req.wdata;
   assign reg_be = reg_intf_req.wstrb;
   assign reg_intf_rsp.rdata = reg_rdata;
@@ -97,14 +83,6 @@ module iommu_regmap_top
   assign reg_rdata = reg_re ? reg_rdata_next : '0;
   assign reg_error = (devmode_i & addrmiss) | wr_err;   // when in development mode, address misses are not silent
 
-  // Ready setting logic
-  // always_ff @(posedge clk_i) begin
-  //   if(reg_we || reg_re)
-  //     reg_ready <= 1'b1;
-  //   else
-  //     reg_ready <= 1'b0;
-  // end
-
 
   // Define SW related signals
   // Format: <reg>_<field>_{wd|we|qs}
@@ -113,151 +91,149 @@ module iommu_regmap_top
   // EXP: qs signals are connected from the registers (those that can be read from SW);
 
   // caps
-  logic [7:0] capabilities_version_qs;
-  logic capabilities_sv32_qs;
-  logic capabilities_sv39_qs;
-  logic capabilities_sv48_qs;
-  logic capabilities_sv57_qs;
-  logic capabilities_svnapot_qs;
-  logic capabilities_svpbmt_qs;
-  logic capabilities_sv32x4_qs;
-  logic capabilities_sv39x4_qs;
-  logic capabilities_sv48x4_qs;
-  logic capabilities_sv57x4_qs;
-  logic capabilities_msi_flat_qs;
-  logic capabilities_msi_mrif_qs;
-  logic capabilities_amo_qs;
-  logic capabilities_ats_qs;
-  logic capabilities_t2gpa_qs;
-  logic capabilities_endi_qs;
-  logic [1:0] capabilities_igs_qs;
-  logic capabilities_hpm_qs;
-  logic capabilities_dbg_qs;
-  logic [5:0] capabilities_pas_qs;
-  logic capabilities_pd8_qs;
-  logic capabilities_pd17_qs;
-  logic capabilities_pd20_qs;
+  logic [7:0] 	capabilities_version_qs;
+  logic 		capabilities_sv32_qs;
+  logic 		capabilities_sv39_qs;
+  logic 		capabilities_sv48_qs;
+  logic 		capabilities_sv57_qs;
+  logic 		capabilities_svpbmt_qs;
+  logic 		capabilities_sv32x4_qs;
+  logic 		capabilities_sv39x4_qs;
+  logic 		capabilities_sv48x4_qs;
+  logic 		capabilities_sv57x4_qs;
+  logic 		capabilities_msi_flat_qs;
+  logic 		capabilities_msi_mrif_qs;
+  logic 		capabilities_amo_qs;
+  logic 		capabilities_ats_qs;
+  logic 		capabilities_t2gpa_qs;
+  logic 		capabilities_endi_qs;
+  logic [1:0] 	capabilities_igs_qs;
+  logic 		capabilities_hpm_qs;
+  logic 		capabilities_dbg_qs;
+  logic [5:0] 	capabilities_pas_qs;
+  logic 		capabilities_pd8_qs;
+  logic 		capabilities_pd17_qs;
+  logic 		capabilities_pd20_qs;
 
   // fctl
-  logic fctl_be_qs;
-  logic fctl_be_wd;
-  logic fctl_be_we;
-  logic fctl_wsi_qs;
-  logic fctl_wsi_wd;
-  logic fctl_wsi_we;
-  logic fctl_adfd_qs;
-  logic fctl_adfd_wd;
-  logic fctl_adfd_we;
+  logic 		fctl_be_qs;
+//   logic fctl_be_wd;
+//   logic fctl_be_we;
+  logic 		fctl_wsi_qs;
+  logic 		fctl_wsi_wd;
+  logic 		fctl_wsi_we;
+  logic 		fctl_glx_qs;
+  logic 		fctl_glx_wd;
+  logic 		fctl_glx_we;
 
   // ddtp
-  logic [3:0] ddtp_iommu_mode_qs;
-  logic [3:0] ddtp_iommu_mode_wd;
-  logic ddtp_iommu_mode_we;
-  logic ddtp_busy_qs;
-  logic [43:0] ddtp_ppn_qs;
-  logic [43:0] ddtp_ppn_wd;
-  logic ddtp_ppn_we;
+  logic [3:0] 	ddtp_iommu_mode_qs;
+  logic [3:0] 	ddtp_iommu_mode_wd;
+  logic 		ddtp_iommu_mode_we;
+  logic 		ddtp_busy_qs;
+  logic [43:0] 	ddtp_ppn_qs;
+  logic [43:0] 	ddtp_ppn_wd;
+  logic 		ddtp_ppn_we;
 
   // cqb
-  logic [4:0] cqb_log2sz_1_qs;
-  logic [4:0] cqb_log2sz_1_wd;
-  logic cqb_log2sz_1_we;
-  logic [43:0] cqb_ppn_qs;
-  logic [43:0] cqb_ppn_wd;
-  logic cqb_ppn_we;
+  logic [4:0] 	cqb_log2sz_1_qs;
+  logic [4:0] 	cqb_log2sz_1_wd;
+  logic 		cqb_log2sz_1_we;
+  logic [43:0] 	cqb_ppn_qs;
+  logic [43:0] 	cqb_ppn_wd;
+  logic 		cqb_ppn_we;
 
   // cqh
-  logic [31:0] cqh_qs;
+  logic [31:0] 	cqh_qs;
 
   // cqt
-  logic [31:0] cqt_qs;
-  logic [31:0] cqt_wd;
+  logic [31:0] 	cqt_qs;
+  logic [31:0] 	cqt_wd;
   logic cqt_we;
 
   // fqb
-  logic [4:0] fqb_log2sz_1_qs;
-  logic [4:0] fqb_log2sz_1_wd;
-  logic fqb_log2sz_1_we;
-  logic [43:0] fqb_ppn_qs;
-  logic [43:0] fqb_ppn_wd;
-  logic fqb_ppn_we;
+  logic [4:0] 	fqb_log2sz_1_qs;
+  logic [4:0] 	fqb_log2sz_1_wd;
+  logic 		fqb_log2sz_1_we;
+  logic [43:0] 	fqb_ppn_qs;
+  logic [43:0] 	fqb_ppn_wd;
+  logic 		fqb_ppn_we;
 
   // fqh
-  logic [31:0] fqh_qs;
-  logic [31:0] fqh_wd;
+  logic [31:0] 	fqh_qs;
+  logic [31:0] 	fqh_wd;
   logic fqh_we;
 
   // fqt
-  logic [31:0] fqt_qs;
+  logic [31:0] 	fqt_qs;
 
   // cqcsr
-  logic cqcsr_cqen_qs;
-  logic cqcsr_cqen_wd;
-  logic cqcsr_cqen_we;
-  logic cqcsr_cie_qs;
-  logic cqcsr_cie_wd;
-  logic cqcsr_cie_we;
-  logic cqcsr_cqmf_qs;
-  logic cqcsr_cqmf_wd;
-  logic cqcsr_cqmf_we;
-  logic cqcsr_cmd_to_qs;
-  logic cqcsr_cmd_to_wd;
-  logic cqcsr_cmd_to_we;
-  logic cqcsr_cmd_ill_qs;
-  logic cqcsr_cmd_ill_wd;
-  logic cqcsr_cmd_ill_we;
-  logic cqcsr_fence_w_ip_qs;
-  logic cqcsr_fence_w_ip_wd;
-  logic cqcsr_fence_w_ip_we;
-  logic cqcsr_cqon_qs;
-  logic cqcsr_busy_qs;
+  logic 		cqcsr_cqen_qs;
+  logic 		cqcsr_cqen_wd;
+  logic 		cqcsr_cqen_we;
+  logic 		cqcsr_cie_qs;
+  logic 		cqcsr_cie_wd;
+  logic 		cqcsr_cie_we;
+  logic 		cqcsr_cqmf_qs;
+  logic 		cqcsr_cqmf_wd;
+  logic 		cqcsr_cqmf_we;
+  logic 		cqcsr_cmd_to_qs;
+  logic 		cqcsr_cmd_to_wd;
+  logic 		cqcsr_cmd_to_we;
+  logic 		cqcsr_cmd_ill_qs;
+  logic 		cqcsr_cmd_ill_wd;
+  logic 		cqcsr_cmd_ill_we;
+  logic 		cqcsr_fence_w_ip_qs;
+  logic 		cqcsr_fence_w_ip_wd;
+  logic 		cqcsr_fence_w_ip_we;
+  logic 		cqcsr_cqon_qs;
+  logic 		cqcsr_busy_qs;
 
   // fqcsr
-  logic fqcsr_fqen_qs;
-  logic fqcsr_fqen_wd;
-  logic fqcsr_fqen_we;
-  logic fqcsr_fie_qs;
-  logic fqcsr_fie_wd;
-  logic fqcsr_fie_we;
-  logic fqcsr_fqmf_qs;
-  logic fqcsr_fqmf_wd;
-  logic fqcsr_fqmf_we;
-  logic fqcsr_fqof_qs;
-  logic fqcsr_fqof_wd;
-  logic fqcsr_fqof_we;
-  logic fqcsr_fqon_qs;
-  logic fqcsr_busy_qs;
+  logic 		fqcsr_fqen_qs;
+  logic 		fqcsr_fqen_wd;
+  logic 		fqcsr_fqen_we;
+  logic 		fqcsr_fie_qs;
+  logic 		fqcsr_fie_wd;
+  logic 		fqcsr_fie_we;
+  logic 		fqcsr_fqmf_qs;
+  logic 		fqcsr_fqmf_wd;
+  logic 		fqcsr_fqmf_we;
+  logic 		fqcsr_fqof_qs;
+  logic 		fqcsr_fqof_wd;
+  logic 		fqcsr_fqof_we;
+  logic 		fqcsr_fqon_qs;
+  logic 		fqcsr_busy_qs;
 
   // ipsr
-  logic ipsr_cip_qs;
-  logic ipsr_cip_wd;
-  logic ipsr_cip_we;
-  logic ipsr_fip_qs;
-  logic ipsr_fip_wd;
-  logic ipsr_fip_we;
-  logic ipsr_pmip_qs;
-  logic ipsr_pmip_wd;
-  logic ipsr_pmip_we;
-  logic ipsr_pip_qs;
-  logic ipsr_pip_wd;
-  logic ipsr_pip_we;
+  logic 		ipsr_cip_qs;
+  logic 		ipsr_cip_wd;
+  logic 		ipsr_cip_we;
+  logic 		ipsr_fip_qs;
+  logic 		ipsr_fip_wd;
+  logic 		ipsr_fip_we;
+  logic 		ipsr_pmip_qs;
+  logic 		ipsr_pmip_wd;
+  logic 		ipsr_pmip_we;
+  logic 		ipsr_pip_qs;
+  logic 		ipsr_pip_wd;
+  logic 		ipsr_pip_we;
 
   // icvec
-  logic [3:0] icvec_civ_qs;
-  logic [3:0] icvec_civ_wd;
-  logic icvec_civ_we;
-  logic [3:0] icvec_fiv_qs;
-  logic [3:0] icvec_fiv_wd;
-  logic icvec_fiv_we;
-  logic [3:0] icvec_pmiv_qs;
-  logic [3:0] icvec_pmiv_wd;
-  logic icvec_pmiv_we;
-  logic [3:0] icvec_piv_qs;
-  logic [3:0] icvec_piv_wd;
-  logic icvec_piv_we;
+  logic [3:0] 	icvec_civ_qs;
+  logic [3:0] 	icvec_civ_wd;
+  logic 		icvec_civ_we;
+  logic [3:0] 	icvec_fiv_qs;
+  logic [3:0] 	icvec_fiv_wd;
+  logic 		icvec_fiv_we;
+  logic [3:0] 	icvec_pmiv_qs;
+  logic [3:0] 	icvec_pmiv_wd;
+  logic 		icvec_pmiv_we;
+  logic [3:0] 	icvec_piv_qs;
+  logic [3:0] 	icvec_piv_wd;
+  logic 		icvec_piv_we;
 
   // MSI configuration table
-  logic [1:0] msi_addr_0_zero_qs;
   logic [53:0] msi_addr_0_addr_qs;
   logic [53:0] msi_addr_0_addr_wd;
   logic msi_addr_0_addr_we;
@@ -267,7 +243,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_0_qs;
   logic msi_vec_ctl_0_wd;
   logic msi_vec_ctl_0_we;
-  logic [1:0] msi_addr_1_zero_qs;
+
   logic [53:0] msi_addr_1_addr_qs;
   logic [53:0] msi_addr_1_addr_wd;
   logic msi_addr_1_addr_we;
@@ -277,7 +253,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_1_qs;
   logic msi_vec_ctl_1_wd;
   logic msi_vec_ctl_1_we;
-  logic [1:0] msi_addr_2_zero_qs;
+
   logic [53:0] msi_addr_2_addr_qs;
   logic [53:0] msi_addr_2_addr_wd;
   logic msi_addr_2_addr_we;
@@ -287,7 +263,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_2_qs;
   logic msi_vec_ctl_2_wd;
   logic msi_vec_ctl_2_we;
-  logic [1:0] msi_addr_3_zero_qs;
+
   logic [53:0] msi_addr_3_addr_qs;
   logic [53:0] msi_addr_3_addr_wd;
   logic msi_addr_3_addr_we;
@@ -297,7 +273,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_3_qs;
   logic msi_vec_ctl_3_wd;
   logic msi_vec_ctl_3_we;
-  logic [1:0] msi_addr_4_zero_qs;
+
   logic [53:0] msi_addr_4_addr_qs;
   logic [53:0] msi_addr_4_addr_wd;
   logic msi_addr_4_addr_we;
@@ -307,7 +283,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_4_qs;
   logic msi_vec_ctl_4_wd;
   logic msi_vec_ctl_4_we;
-  logic [1:0] msi_addr_5_zero_qs;
+
   logic [53:0] msi_addr_5_addr_qs;
   logic [53:0] msi_addr_5_addr_wd;
   logic msi_addr_5_addr_we;
@@ -317,7 +293,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_5_qs;
   logic msi_vec_ctl_5_wd;
   logic msi_vec_ctl_5_we;
-  logic [1:0] msi_addr_6_zero_qs;
+
   logic [53:0] msi_addr_6_addr_qs;
   logic [53:0] msi_addr_6_addr_wd;
   logic msi_addr_6_addr_we;
@@ -327,7 +303,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_6_qs;
   logic msi_vec_ctl_6_wd;
   logic msi_vec_ctl_6_we;
-  logic [1:0] msi_addr_7_zero_qs;
+
   logic [53:0] msi_addr_7_addr_qs;
   logic [53:0] msi_addr_7_addr_wd;
   logic msi_addr_7_addr_we;
@@ -337,7 +313,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_7_qs;
   logic msi_vec_ctl_7_wd;
   logic msi_vec_ctl_7_we;
-  logic [1:0] msi_addr_8_zero_qs;
+
   logic [53:0] msi_addr_8_addr_qs;
   logic [53:0] msi_addr_8_addr_wd;
   logic msi_addr_8_addr_we;
@@ -347,7 +323,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_8_qs;
   logic msi_vec_ctl_8_wd;
   logic msi_vec_ctl_8_we;
-  logic [1:0] msi_addr_9_zero_qs;
+
   logic [53:0] msi_addr_9_addr_qs;
   logic [53:0] msi_addr_9_addr_wd;
   logic msi_addr_9_addr_we;
@@ -357,7 +333,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_9_qs;
   logic msi_vec_ctl_9_wd;
   logic msi_vec_ctl_9_we;
-  logic [1:0] msi_addr_10_zero_qs;
+
   logic [53:0] msi_addr_10_addr_qs;
   logic [53:0] msi_addr_10_addr_wd;
   logic msi_addr_10_addr_we;
@@ -367,7 +343,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_10_qs;
   logic msi_vec_ctl_10_wd;
   logic msi_vec_ctl_10_we;
-  logic [1:0] msi_addr_11_zero_qs;
+
   logic [53:0] msi_addr_11_addr_qs;
   logic [53:0] msi_addr_11_addr_wd;
   logic msi_addr_11_addr_we;
@@ -377,7 +353,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_11_qs;
   logic msi_vec_ctl_11_wd;
   logic msi_vec_ctl_11_we;
-  logic [1:0] msi_addr_12_zero_qs;
+
   logic [53:0] msi_addr_12_addr_qs;
   logic [53:0] msi_addr_12_addr_wd;
   logic msi_addr_12_addr_we;
@@ -387,7 +363,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_12_qs;
   logic msi_vec_ctl_12_wd;
   logic msi_vec_ctl_12_we;
-  logic [1:0] msi_addr_13_zero_qs;
+
   logic [53:0] msi_addr_13_addr_qs;
   logic [53:0] msi_addr_13_addr_wd;
   logic msi_addr_13_addr_we;
@@ -397,7 +373,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_13_qs;
   logic msi_vec_ctl_13_wd;
   logic msi_vec_ctl_13_we;
-  logic [1:0] msi_addr_14_zero_qs;
+
   logic [53:0] msi_addr_14_addr_qs;
   logic [53:0] msi_addr_14_addr_wd;
   logic msi_addr_14_addr_we;
@@ -407,7 +383,7 @@ module iommu_regmap_top
   logic msi_vec_ctl_14_qs;
   logic msi_vec_ctl_14_wd;
   logic msi_vec_ctl_14_we;
-  logic [1:0] msi_addr_15_zero_qs;
+
   logic [53:0] msi_addr_15_addr_qs;
   logic [53:0] msi_addr_15_addr_wd;
   logic msi_addr_15_addr_we;
@@ -418,17 +394,14 @@ module iommu_regmap_top
   logic msi_vec_ctl_15_wd;
   logic msi_vec_ctl_15_we;
 
-  //* Register instances
+  //# Register instances
   // R[capabilities]: V(False)
-
-  //? Is the sinthesizer smart enough to save flip flops when the D entry is hardwired?
-  //? Should be better to use assign statements for this case?
 
   //   F[version]: 7:0
   // Hardwired register containing the version of the specification implemented by the IOMMU
 
   // iommu_field #(
-  //   .DW      (8),
+  //   .DATA_WIDTH      (8),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (8'h10)
   // ) u_capabilities_version (
@@ -440,7 +413,7 @@ module iommu_regmap_top
 
   //   // from internal hardware
   //   .de     (1'b1),
-  //   .d      (8'h10  ),  // hardwire to 0x10
+  //   .d      (8'h10  ),  // harDATA_WIDTHire to 0x10
 
   //   // to internal hardware
   //   .qe     (),
@@ -456,7 +429,7 @@ module iommu_regmap_top
   //   F[sv32]: 8:8
   // Sv32 should be supported by this implementation
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32 (
@@ -484,7 +457,7 @@ module iommu_regmap_top
   //   F[sv39]: 9:9
   // Sv39 should be supported by this implementation
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39 (
@@ -510,7 +483,7 @@ module iommu_regmap_top
 
   //   F[sv48]: 10:10
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48 (
@@ -537,7 +510,7 @@ module iommu_regmap_top
 
   //   F[sv57]: 11:11
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57 (
@@ -562,36 +535,9 @@ module iommu_regmap_top
   assign capabilities_sv57_qs = 1'h0;
 
 
-  //   F[svnapot]: 14:14
-  // iommu_field #(
-  //   .DW      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_svnapot (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.svnapot.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_svnapot_qs)
-  // );
-  assign reg2hw.capabilities.svnapot.q = 1'h0;
-  assign capabilities_svnapot_qs = 1'h0;
-
-
   //   F[svpbmt]: 15:15
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_svpbmt (
@@ -619,7 +565,7 @@ module iommu_regmap_top
   //   F[sv32x4]: 16:16
   // For G-stage translation
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv32x4 (
@@ -646,7 +592,7 @@ module iommu_regmap_top
 
   //   F[sv39x4]: 17:17
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_sv39x4 (
@@ -673,7 +619,7 @@ module iommu_regmap_top
 
   //   F[sv48x4]: 18:18
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv48x4 (
@@ -700,7 +646,7 @@ module iommu_regmap_top
 
   //   F[sv57x4]: 19:19
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_sv57x4 (
@@ -727,7 +673,7 @@ module iommu_regmap_top
   //   F[msi_flat]: 22:22
   // MSI redirection to Guest interrupt files must be implemented to give support to AIA
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_msi_flat (
@@ -754,7 +700,7 @@ module iommu_regmap_top
 
   //   F[msi_mrif]: 23:23
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_msi_mrif (
@@ -781,7 +727,7 @@ module iommu_regmap_top
 
   //   F[amo]: 24:24
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_amo (
@@ -808,7 +754,7 @@ module iommu_regmap_top
 
   //   F[ats]: 25:25
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_ats (
@@ -835,7 +781,7 @@ module iommu_regmap_top
 
   //   F[t2gpa]: 26:26
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_t2gpa (
@@ -862,7 +808,7 @@ module iommu_regmap_top
 
   //   F[endi]: 27:27
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_endi (
@@ -889,7 +835,7 @@ module iommu_regmap_top
 
   //   F[igs]: 29:28
   // iommu_field #(
-  //   .DW      (2),
+  //   .DATA_WIDTH      (2),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (2'h0)
   // ) u_capabilities_igs (
@@ -916,7 +862,7 @@ module iommu_regmap_top
 
   //   F[hpm]: 30:30
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_hpm (
@@ -943,7 +889,7 @@ module iommu_regmap_top
 
   //   F[dbg]: 31:31
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_dbg (
@@ -970,7 +916,7 @@ module iommu_regmap_top
 
   //   F[pas]: 37:32
   // iommu_field #(
-  //   .DW      (6),
+  //   .DATA_WIDTH      (6),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (6'h22)          // Physical Address Size reset value of 34 for Sv32
   // ) u_capabilities_pas (
@@ -998,7 +944,7 @@ module iommu_regmap_top
   //   F[pd8]: 38:38
   // One level PDT with 8-bit process_id by default
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h1)
   // ) u_capabilities_pd8 (
@@ -1025,7 +971,7 @@ module iommu_regmap_top
 
   //   F[pd17]: 39:39
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd17 (
@@ -1046,13 +992,13 @@ module iommu_regmap_top
   //   // to register interface (read)
   //   .qs     (capabilities_pd17_qs)
   // );
-  assign reg2hw.capabilities.pd17.q = 1'h0;
-  assign capabilities_pd17_qs = 1'h0;
+  assign reg2hw.capabilities.pd17.q = 1'h1;
+  assign capabilities_pd17_qs = 1'h1;
 
 
   //   F[pd20]: 40:40
   // iommu_field #(
-  //   .DW      (1),
+  //   .DATA_WIDTH      (1),
   //   .SwAccess(SwAccessRO),
   //   .RESVAL  (1'h0)
   // ) u_capabilities_pd20 (
@@ -1073,42 +1019,43 @@ module iommu_regmap_top
   //   // to register interface (read)
   //   .qs     (capabilities_pd20_qs)
   // );
-  assign reg2hw.capabilities.pd20.q = 1'h0;
-  assign capabilities_pd20_qs = 1'h0;
+  assign reg2hw.capabilities.pd20.q = 1'h1;
+  assign capabilities_pd20_qs = 1'h1;
 
 
   // R[fctl]: V(False)
 
   //   F[be]: 0:0
-  iommu_field #(
-    .DW      (1),
-    .SwAccess(SwAccessRW),
-    .RESVAL  (1'h0)
-  ) u_fctl_be (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+//   iommu_field #(
+//     .DATA_WIDTH      (1),
+//     .SwAccess(SwAccessRW),
+//     .RESVAL  (1'h0)
+//   ) u_fctl_be (
+//     .clk_i   (clk_i    ),
+//     .rst_ni  (rst_ni  ),
 
-    // from register interface
-    .we     (fctl_be_we),
-    .wd     (fctl_be_wd),
+//     // from register interface
+//     .we     (fctl_be_we),
+//     .wd     (fctl_be_wd),
 
-    // from internal hardware
-    .de     (hw2reg.fctl.be.de),
-    .ds     (),
-    .d      (hw2reg.fctl.be.d ),
+//     // from internal hardware
+//     .de     (hw2reg.fctl.be.de),
+//     .ds     (),
+//     .d      (hw2reg.fctl.be.d ),
 
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.fctl.be.q ),
+//     // to internal hardware
+//     .qe     (),
+//     .q      (reg2hw.fctl.be.q ),
 
-    // to register interface (read)
-    .qs     (fctl_be_qs)
-  );
+//     // to register interface (read)
+//     .qs     (fctl_be_qs)
+//   );
+	assign fctl_be_qs	= 1'b0;
 
 
   //   F[wsi]: 1:1
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_fctl_wsi (
@@ -1120,9 +1067,9 @@ module iommu_regmap_top
     .wd     (fctl_wsi_wd),
 
     // from internal hardware
-    .de     (hw2reg.fctl.wsi.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fctl.wsi.d ),
 
     // to internal hardware
     .qe     (),
@@ -1133,30 +1080,30 @@ module iommu_regmap_top
   );
 
 
-  //   F[adfd]: 2:2
+  //   F[glx]: 2:2
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
-    .RESVAL  (1'h1)
-  ) u_fctl_adfd (
+    .RESVAL  (1'h0)
+  ) u_fctl_glx (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (fctl_adfd_we),
-    .wd     (fctl_adfd_wd),
+    .we     (fctl_glx_we),
+    .wd     (fctl_glx_wd),
 
     // from internal hardware
-    .de     (hw2reg.fctl.adfd.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fctl.adfd.d ),
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.fctl.adfd.q ),
+    .q      (reg2hw.fctl.glx.q ),
 
     // to register interface (read)
-    .qs     (fctl_adfd_qs)
+    .qs     (fctl_glx_qs)
   );
 
 
@@ -1164,7 +1111,7 @@ module iommu_regmap_top
 
   //   F[iommu_mode]: 3:0
   iommu_field #(
-    .DW      (4),
+    .DATA_WIDTH      (4),
     .SwAccess(SwAccessRW),
     .RESVAL  (4'h0)
   ) u_ddtp_iommu_mode (
@@ -1176,9 +1123,9 @@ module iommu_regmap_top
     .wd     (ddtp_iommu_mode_wd),
 
     // from internal hardware
-    .de     (hw2reg.ddtp.iommu_mode.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.ddtp.iommu_mode.d ),
 
     // to internal hardware
     .qe     (),
@@ -1191,7 +1138,7 @@ module iommu_regmap_top
 
   //   F[busy]: 4:4
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRO),
     .RESVAL  (1'h0)
   ) u_ddtp_busy (
@@ -1201,10 +1148,10 @@ module iommu_regmap_top
     .we     (1'b0),
     .wd     ('0  ),
 
-    // from internal hardware
-    .de     (hw2reg.ddtp.busy.de),
+    // from internal hardware   //? don't know if it is not written by IOMMU...
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.ddtp.busy.d ),
 
     // to internal hardware
     .qe     (),
@@ -1217,7 +1164,7 @@ module iommu_regmap_top
 
   //   F[ppn]: 53:10
   iommu_field #(
-    .DW      (44),
+    .DATA_WIDTH      (44),
     .SwAccess(SwAccessRW),
     .RESVAL  (44'h0)
   ) u_ddtp_ppn (
@@ -1229,9 +1176,9 @@ module iommu_regmap_top
     .wd     (ddtp_ppn_wd),
 
     // from internal hardware
-    .de     (hw2reg.ddtp.ppn.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.ddtp.ppn.d ),
 
     // to internal hardware
     .qe     (),
@@ -1246,7 +1193,7 @@ module iommu_regmap_top
 
   //   F[log2sz_1]: 4:0
   iommu_field #(
-    .DW      (5),
+    .DATA_WIDTH      (5),
     .SwAccess(SwAccessRW),
     .RESVAL  (5'h0)
   ) u_cqb_log2sz_1 (
@@ -1258,9 +1205,9 @@ module iommu_regmap_top
     .wd     (cqb_log2sz_1_wd),
 
     // from internal hardware
-    .de     (hw2reg.cqb.log2sz_1.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.cqb.log2sz_1.d ),
 
     // to internal hardware
     .qe     (),
@@ -1273,7 +1220,7 @@ module iommu_regmap_top
 
   //   F[ppn]: 53:10
   iommu_field #(
-    .DW      (44),
+    .DATA_WIDTH      (44),
     .SwAccess(SwAccessRW),
     .RESVAL  (44'h0)
   ) u_cqb_ppn (
@@ -1285,9 +1232,9 @@ module iommu_regmap_top
     .wd     (cqb_ppn_wd),
 
     // from internal hardware
-    .de     (hw2reg.cqb.ppn.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.cqb.ppn.d ),
 
     // to internal hardware
     .qe     (),
@@ -1301,7 +1248,7 @@ module iommu_regmap_top
   // R[cqh]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRO),
     .RESVAL  (32'h0)
   ) u_cqh (
@@ -1328,7 +1275,7 @@ module iommu_regmap_top
   // R[cqt]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_cqt (
@@ -1340,9 +1287,9 @@ module iommu_regmap_top
     .wd     (cqt_wd),
 
     // from internal hardware
-    .de     (hw2reg.cqt.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.cqt.d ),
 
     // to internal hardware
     .qe     (),
@@ -1357,7 +1304,7 @@ module iommu_regmap_top
 
   //   F[log2sz_1]: 4:0
   iommu_field #(
-    .DW      (5),
+    .DATA_WIDTH      (5),
     .SwAccess(SwAccessRW),
     .RESVAL  (5'h0)
   ) fqb_log2sz_1 (
@@ -1369,9 +1316,9 @@ module iommu_regmap_top
     .wd     (fqb_log2sz_1_wd),
 
     // from internal hardware
-    .de     (hw2reg.fqb.log2sz_1.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fqb.log2sz_1.d ),
 
     // to internal hardware
     .qe     (),
@@ -1384,7 +1331,7 @@ module iommu_regmap_top
 
   //   F[ppn]: 53:10
   iommu_field #(
-    .DW      (44),
+    .DATA_WIDTH      (44),
     .SwAccess(SwAccessRW),
     .RESVAL  (44'h0)
   ) fqb_ppn (
@@ -1396,9 +1343,9 @@ module iommu_regmap_top
     .wd     (fqb_ppn_wd),
 
     // from internal hardware
-    .de     (hw2reg.fqb.ppn.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fqb.ppn.d ),
 
     // to internal hardware
     .qe     (),
@@ -1412,7 +1359,7 @@ module iommu_regmap_top
   // R[fqh]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_fqh (
@@ -1424,9 +1371,9 @@ module iommu_regmap_top
     .wd     (fqh_wd),
 
     // from internal hardware
-    .de     (hw2reg.fqh.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fqh.d ),
 
     // to internal hardware
     .qe     (),
@@ -1440,7 +1387,7 @@ module iommu_regmap_top
   // R[fqt]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRO),
     .RESVAL  (32'h0)
   ) u_fqt (
@@ -1468,7 +1415,7 @@ module iommu_regmap_top
 
   //   F[cqen]: 0:0
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_cqcsr_cqen (
@@ -1480,9 +1427,9 @@ module iommu_regmap_top
     .wd     (cqcsr_cqen_wd),
 
     // from internal hardware
-    .de     (hw2reg.cqcsr.cqen.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.cqcsr.cqen.d ),
 
     // to internal hardware
     .qe     (),
@@ -1495,7 +1442,7 @@ module iommu_regmap_top
 
   //   F[cie]: 1:1
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_cqcsr_cie (
@@ -1507,9 +1454,9 @@ module iommu_regmap_top
     .wd     (cqcsr_cie_wd),
 
     // from internal hardware
-    .de     (hw2reg.cqcsr.cie.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.cqcsr.cie.d ),
 
     // to internal hardware
     .qe     (),
@@ -1522,7 +1469,7 @@ module iommu_regmap_top
 
   //   F[cqmf]: 8:8
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_cqcsr_cqmf (
@@ -1549,7 +1496,7 @@ module iommu_regmap_top
 
   //   F[cmd_to]: 9:9
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_to (
@@ -1576,7 +1523,7 @@ module iommu_regmap_top
 
   //   F[cmd_ill]: 10:10
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_cqcsr_cmd_ill (
@@ -1603,7 +1550,7 @@ module iommu_regmap_top
 
   //   F[fence_w_ip]: 11:11
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_cqcsr_fence_w_ip (
@@ -1630,7 +1577,7 @@ module iommu_regmap_top
 
   //   F[cqon]: 16:16
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRO),
     .RESVAL  (1'h0)
   ) u_cqcsr_cqon (
@@ -1656,7 +1603,7 @@ module iommu_regmap_top
 
   //   F[busy]: 17:17
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRO),
     .RESVAL  (1'h0)
   ) u_cqcsr_busy (
@@ -1684,7 +1631,7 @@ module iommu_regmap_top
 
   //   F[fqen]: 0:0
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_fqcsr_fqen (
@@ -1696,9 +1643,9 @@ module iommu_regmap_top
     .wd     (fqcsr_fqen_wd),
 
     // from internal hardware
-    .de     (hw2reg.fqcsr.fqen.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fqcsr.fqen.d ),
 
     // to internal hardware
     .qe     (),
@@ -1711,7 +1658,7 @@ module iommu_regmap_top
 
   //   F[fie]: 1:1
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_fqcsr_fie (
@@ -1723,9 +1670,9 @@ module iommu_regmap_top
     .wd     (fqcsr_fie_wd),
 
     // from internal hardware
-    .de     (hw2reg.fqcsr.fie.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.fqcsr.fie.d ),
 
     // to internal hardware
     .qe     (),
@@ -1738,7 +1685,7 @@ module iommu_regmap_top
 
   //   F[fqmf]: 8:8
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_fqcsr_fqmf (
@@ -1765,7 +1712,7 @@ module iommu_regmap_top
 
   //   F[fqof]: 9:9
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_fqcsr_fqof (
@@ -1792,7 +1739,7 @@ module iommu_regmap_top
 
   //   F[fqon]: 16:16
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRO),
     .RESVAL  (1'h0)
   ) u_fqcsr_fqon (
@@ -1818,7 +1765,7 @@ module iommu_regmap_top
 
   //   F[busy]: 17:17
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRO),
     .RESVAL  (1'h0)
   ) u_fqcsr_busy (
@@ -1846,7 +1793,7 @@ module iommu_regmap_top
 
   //   F[cip]: 0:0
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_ipsr_cip (
@@ -1873,7 +1820,7 @@ module iommu_regmap_top
 
   //   F[fip]: 1:1
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessW1C),
     .RESVAL  (1'h0)
   ) u_ipsr_fip (
@@ -1899,64 +1846,68 @@ module iommu_regmap_top
 
 
   //   F[pmip]: 2:2
-  iommu_field #(
-    .DW      (1),
-    .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h0)
-  ) u_ipsr_pmip (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+  // iommu_field #(
+  //   .DATA_WIDTH      (1),
+  //   .SwAccess(SwAccessW1C),
+  //   .RESVAL  (1'h0)
+  // ) u_ipsr_pmip (
+  //   .clk_i   (clk_i    ),
+  //   .rst_ni  (rst_ni  ),
 
-    // from register interface
-    .we     (ipsr_pmip_we),
-    .wd     (ipsr_pmip_wd),
+  //   // from register interface
+  //   .we     (ipsr_pmip_we),
+  //   .wd     (ipsr_pmip_wd),
 
-    // from internal hardware
-    .de     (hw2reg.ipsr.pmip.de),
-    .ds     (),
-    .d      (hw2reg.ipsr.pmip.d ),
+  //   // from internal hardware
+  //   .de     (hw2reg.ipsr.pmip.de),
+  //   .ds     (),
+  //   .d      (hw2reg.ipsr.pmip.d ),
 
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.ipsr.pmip.q ),
+  //   // to internal hardware
+  //   .qe     (),
+  //   .q      (reg2hw.ipsr.pmip.q ),
 
-    // to register interface (read)
-    .qs     (ipsr_pmip_qs)
-  );
+  //   // to register interface (read)
+  //   .qs     (ipsr_pmip_qs)
+  // );
+
+  assign ipsr_pmip_qs = 1'b0;
 
 
   //   F[pip]: 3:3
-  iommu_field #(
-    .DW      (1),
-    .SwAccess(SwAccessW1C),
-    .RESVAL  (1'h0)
-  ) u_ipsr_pip (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+  // iommu_field #(
+  //   .DATA_WIDTH      (1),
+  //   .SwAccess(SwAccessW1C),
+  //   .RESVAL  (1'h0)
+  // ) u_ipsr_pip (
+  //   .clk_i   (clk_i    ),
+  //   .rst_ni  (rst_ni  ),
 
-    // from register interface
-    .we     (ipsr_pip_we),
-    .wd     (ipsr_pip_wd),
+  //   // from register interface
+  //   .we     (ipsr_pip_we),
+  //   .wd     (ipsr_pip_wd),
 
-    // from internal hardware
-    .de     (hw2reg.ipsr.pip.de),
-    .ds     (),
-    .d      (hw2reg.ipsr.pip.d ),
+  //   // from internal hardware
+  //   .de     (hw2reg.ipsr.pip.de),
+  //   .ds     (),
+  //   .d      (hw2reg.ipsr.pip.d ),
 
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.ipsr.pip.q ),
+  //   // to internal hardware
+  //   .qe     (),
+  //   .q      (reg2hw.ipsr.pip.q ),
 
-    // to register interface (read)
-    .qs     (ipsr_pip_qs)
-  );
+  //   // to register interface (read)
+  //   .qs     (ipsr_pip_qs)
+  // );
+
+  assign ipsr_pip_qs = 1'b0;
 
 
   // R[icvec]: V(False)
 
   //   F[civ]: 3:0
   iommu_field #(
-    .DW      (4),
+    .DATA_WIDTH      (4),
     .SwAccess(SwAccessRW),
     .RESVAL  (4'h0)
   ) u_icvec_civ (
@@ -1968,9 +1919,9 @@ module iommu_regmap_top
     .wd     (icvec_civ_wd),
 
     // from internal hardware
-    .de     (hw2reg.icvec.civ.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.icvec.civ.d ),
 
     // to internal hardware
     .qe     (),
@@ -1983,7 +1934,7 @@ module iommu_regmap_top
 
   //   F[fiv]: 7:4
   iommu_field #(
-    .DW      (4),
+    .DATA_WIDTH      (4),
     .SwAccess(SwAccessRW),
     .RESVAL  (4'h0)
   ) u_icvec_fiv (
@@ -1995,9 +1946,9 @@ module iommu_regmap_top
     .wd     (icvec_fiv_wd),
 
     // from internal hardware
-    .de     (hw2reg.icvec.fiv.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.icvec.fiv.d ),
 
     // to internal hardware
     .qe     (),
@@ -2009,90 +1960,68 @@ module iommu_regmap_top
 
 
   //   F[pmiv]: 11:8
-  iommu_field #(
-    .DW      (4),
-    .SwAccess(SwAccessRW),
-    .RESVAL  (4'h0)
-  ) u_icvec_pmiv (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+  // iommu_field #(
+  //   .DATA_WIDTH      (4),
+  //   .SwAccess(SwAccessRW),
+  //   .RESVAL  (4'h0)
+  // ) u_icvec_pmiv (
+  //   .clk_i   (clk_i    ),
+  //   .rst_ni  (rst_ni  ),
 
-    // from register interface
-    .we     (icvec_pmiv_we),
-    .wd     (icvec_pmiv_wd),
+  //   // from register interface
+  //   .we     (icvec_pmiv_we),
+  //   .wd     (icvec_pmiv_wd),
 
-    // from internal hardware
-    .de     (hw2reg.icvec.pmiv.de),
-    .ds     (),
-    .d      (hw2reg.icvec.pmiv.d ),
+  //   // from internal hardware
+  //   .de     (hw2reg.icvec.pmiv.de),
+  //   .ds     (),
+  //   .d      (hw2reg.icvec.pmiv.d ),
 
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.icvec.pmiv.q ),
+  //   // to internal hardware
+  //   .qe     (),
+  //   .q      (reg2hw.icvec.pmiv.q ),
 
-    // to register interface (read)
-    .qs     (icvec_pmiv_qs)
-  );
+  //   // to register interface (read)
+  //   .qs     (icvec_pmiv_qs)
+  // );
+  
+  assign icvec_pmiv_qs = '0;
 
 
   //   F[piv]: 15:12
-  iommu_field #(
-    .DW      (4),
-    .SwAccess(SwAccessRW),
-    .RESVAL  (4'h0)
-  ) u_icvec_piv (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
+  // iommu_field #(
+  //   .DATA_WIDTH      (4),
+  //   .SwAccess(SwAccessRW),
+  //   .RESVAL  (4'h0)
+  // ) u_icvec_piv (
+  //   .clk_i   (clk_i    ),
+  //   .rst_ni  (rst_ni  ),
 
-    // from register interface
-    .we     (icvec_piv_we),
-    .wd     (icvec_piv_wd),
+  //   // from register interface
+  //   .we     (icvec_piv_we),
+  //   .wd     (icvec_piv_wd),
 
-    // from internal hardware
-    .de     (hw2reg.icvec.piv.de),
-    .ds     (),
-    .d      (hw2reg.icvec.piv.d ),
+  //   // from internal hardware
+  //   .de     (hw2reg.icvec.piv.de),
+  //   .ds     (),
+  //   .d      (hw2reg.icvec.piv.d ),
 
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.icvec.piv.q ),
+  //   // to internal hardware
+  //   .qe     (),
+  //   .q      (reg2hw.icvec.piv.q ),
 
-    // to register interface (read)
-    .qs     (icvec_piv_qs)
-  );
+  //   // to register interface (read)
+  //   .qs     (icvec_piv_qs)
+  // );
+
+  assign icvec_piv_qs = '0;
 
 
   // R[msi_addr_0]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_0_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_0.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_0_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_0_addr (
@@ -2120,7 +2049,7 @@ module iommu_regmap_top
   // R[msi_data_0]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_0 (
@@ -2148,7 +2077,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_0]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_0 (
@@ -2175,35 +2104,9 @@ module iommu_regmap_top
 
   // R[msi_addr_1]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_1_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_1.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_1_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_1_addr (
@@ -2231,7 +2134,7 @@ module iommu_regmap_top
   // R[msi_data_1]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_1 (
@@ -2259,7 +2162,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_1]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_1 (
@@ -2286,35 +2189,9 @@ module iommu_regmap_top
 
   // R[msi_addr_2]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_2_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_2.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_2_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_2_addr (
@@ -2342,7 +2219,7 @@ module iommu_regmap_top
   // R[msi_data_2]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_2 (
@@ -2370,7 +2247,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_2]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_2 (
@@ -2397,35 +2274,9 @@ module iommu_regmap_top
 
   // R[msi_addr_3]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_3_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_3.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_3_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_3_addr (
@@ -2453,7 +2304,7 @@ module iommu_regmap_top
   // R[msi_data_3]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_3 (
@@ -2481,7 +2332,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_3]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_3 (
@@ -2508,35 +2359,9 @@ module iommu_regmap_top
 
   // R[msi_addr_4]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_4_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_4.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_4_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_4_addr (
@@ -2564,7 +2389,7 @@ module iommu_regmap_top
   // R[msi_data_4]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_4 (
@@ -2593,7 +2418,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_4]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_4 (
@@ -2620,35 +2445,9 @@ module iommu_regmap_top
 
   // R[msi_addr_5]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_5_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_5.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_5_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_5_addr (
@@ -2676,7 +2475,7 @@ module iommu_regmap_top
   // R[msi_data_5]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_5 (
@@ -2704,7 +2503,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_5]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_5 (
@@ -2731,35 +2530,9 @@ module iommu_regmap_top
 
   // R[msi_addr_6]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_6_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_6.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_6_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_6_addr (
@@ -2787,7 +2560,7 @@ module iommu_regmap_top
   // R[msi_data_6]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_6 (
@@ -2815,7 +2588,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_6]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_6 (
@@ -2842,35 +2615,9 @@ module iommu_regmap_top
 
   // R[msi_addr_7]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_7_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_7.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_7_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_7_addr (
@@ -2898,7 +2645,7 @@ module iommu_regmap_top
   // R[msi_data_7]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_7 (
@@ -2926,7 +2673,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_7]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_7 (
@@ -2953,35 +2700,9 @@ module iommu_regmap_top
 
   // R[msi_addr_8]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_8_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_8.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_8_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_8_addr (
@@ -3009,7 +2730,7 @@ module iommu_regmap_top
   // R[msi_data_8]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_8 (
@@ -3037,7 +2758,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_8]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_8 (
@@ -3064,35 +2785,9 @@ module iommu_regmap_top
 
   // R[msi_addr_9]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_9_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_9.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_9_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_9_addr (
@@ -3120,7 +2815,7 @@ module iommu_regmap_top
   // R[msi_data_9]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_9 (
@@ -3148,7 +2843,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_9]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_9 (
@@ -3175,35 +2870,9 @@ module iommu_regmap_top
 
   // R[msi_addr_10]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_10_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_10.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_10_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_10_addr (
@@ -3231,7 +2900,7 @@ module iommu_regmap_top
   // R[msi_data_10]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_10 (
@@ -3259,7 +2928,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_10]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_10 (
@@ -3286,35 +2955,9 @@ module iommu_regmap_top
 
   // R[msi_addr_11]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_11_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_11.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_11_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_11_addr (
@@ -3342,7 +2985,7 @@ module iommu_regmap_top
   // R[msi_data_11]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_11 (
@@ -3370,7 +3013,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_11]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_11 (
@@ -3397,35 +3040,9 @@ module iommu_regmap_top
 
   // R[msi_addr_12]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_12_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_12.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_12_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_12_addr (
@@ -3453,7 +3070,7 @@ module iommu_regmap_top
   // R[msi_data_12]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_12 (
@@ -3481,7 +3098,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_12]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_12 (
@@ -3508,35 +3125,9 @@ module iommu_regmap_top
 
   // R[msi_addr_13]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_13_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_13.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_13_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_13_addr (
@@ -3564,7 +3155,7 @@ module iommu_regmap_top
   // R[msi_data_13]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_13 (
@@ -3592,7 +3183,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_13]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_13 (
@@ -3619,35 +3210,9 @@ module iommu_regmap_top
 
   // R[msi_addr_14]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_14_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_14.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_14_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_14_addr (
@@ -3675,7 +3240,7 @@ module iommu_regmap_top
   // R[msi_data_14]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_14 (
@@ -3703,7 +3268,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_14]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_14 (
@@ -3730,35 +3295,9 @@ module iommu_regmap_top
 
   // R[msi_addr_15]: V(False)
 
-  //   F[zero]: 1:0
-  iommu_field #(
-    .DW      (2),
-    .SwAccess(SwAccessRO),
-    .RESVAL  (2'h0)
-  ) u_msi_addr_15_zero (
-    .clk_i   (clk_i    ),
-    .rst_ni  (rst_ni  ),
-
-    .we     (1'b0),
-    .wd     ('0  ),
-
-    // from internal hardware
-    .de     (1'b0),
-    .ds     (),
-    .d      ('0  ),
-
-    // to internal hardware
-    .qe     (),
-    .q      (reg2hw.msi_addr_15.zero.q ),
-
-    // to register interface (read)
-    .qs     (msi_addr_15_zero_qs)
-  );
-
-
   //   F[addr]: 55:2
   iommu_field #(
-    .DW      (54),
+    .DATA_WIDTH      (54),
     .SwAccess(SwAccessRW),
     .RESVAL  (54'h0)
   ) u_msi_addr_15_addr (
@@ -3786,7 +3325,7 @@ module iommu_regmap_top
   // R[msi_data_15]: V(False)
 
   iommu_field #(
-    .DW      (32),
+    .DATA_WIDTH      (32),
     .SwAccess(SwAccessRW),
     .RESVAL  (32'h0)
   ) u_msi_data_15 (
@@ -3814,7 +3353,7 @@ module iommu_regmap_top
   // R[msi_vec_ctl_15]: V(False)
 
   iommu_field #(
-    .DW      (1),
+    .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
   ) u_msi_vec_ctl_15 (
@@ -3838,7 +3377,7 @@ module iommu_regmap_top
     .qs     (msi_vec_ctl_15_qs)
   );
 
-  // * Address hit logic
+  // # Address hit logic
   // EXP: A RD/WR access is signaled by comparing the input reg_addr to the defined registers offsets
   logic [60:0] addr_hit;
   always_comb begin
@@ -3975,15 +3514,16 @@ module iommu_regmap_top
                (addr_hit[60] & (|(IOMMU_PERMIT[60] & ~reg_be)))));
   end
 
-  // * Write data logic
+  //# Write data logic
   //
   // EXP: The WE signal for each FIELD is set if global WE is set, and the corresponding REG addr_hit flag is set, and there is no error
   //      The WD for each FIELD is connected to the correspondind bits of the reg_wdata input signal
   // NOTE:  Writes are performed by REG, not by FIELD. It is up to the software to maintain the same values in the other fields when it is desired
   //        to write to a particular field
 
-  assign fctl_be_we = addr_hit[1] & reg_we & !reg_error;
-  assign fctl_be_wd = reg_wdata[0];
+	// Hardwire fctl.BE since we are only using little-endian processing
+	// assign fctl_be_we = addr_hit[1] & reg_we & !reg_error;
+	// assign fctl_be_wd = reg_wdata[0];
 
   // Interrupts can not be generated as MSI (0) if caps.IGS != {0,2}, and can not be generated as WSI (1) if caps.IGS != {1,2}
   // always_comb begin
@@ -3997,8 +3537,8 @@ module iommu_regmap_top
     (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10});
   assign fctl_wsi_wd = reg_wdata[1];
 
-  assign fctl_adfd_we = addr_hit[1] & reg_we & !reg_error;
-  assign fctl_adfd_wd = reg_wdata[2];
+  assign fctl_glx_we = addr_hit[1] & reg_we & !reg_error;
+  assign fctl_glx_wd = reg_wdata[2];
 
   // Only values less or equal than 4 can be written to ddtp.iommu_mode
   assign ddtp_iommu_mode_we = addr_hit[2] & reg_we & !reg_error & (reg_wdata[3:0] <= 4);
@@ -4225,7 +3765,7 @@ module iommu_regmap_top
   assign msi_vec_ctl_15_we = addr_hit[60] & reg_we & !reg_error;
   assign msi_vec_ctl_15_wd = reg_wdata[0];
 
-  // * Read data logic
+  // # Read data logic
   // EXP: addr_hit contains one bit per register that is set when the corresponging register address matches the one in the input bus
   //      This means that a read/write is being performed, so the current register data is placed in the reg interface read bus
   always_comb begin
@@ -4237,12 +3777,13 @@ module iommu_regmap_top
         reg_rdata_next[9] = capabilities_sv39_qs;
         reg_rdata_next[10] = capabilities_sv48_qs;
         reg_rdata_next[11] = capabilities_sv57_qs;
-        reg_rdata_next[14] = capabilities_svnapot_qs;
+        reg_rdata_next[14:12] = '0;
         reg_rdata_next[15] = capabilities_svpbmt_qs;
         reg_rdata_next[16] = capabilities_sv32x4_qs;
         reg_rdata_next[17] = capabilities_sv39x4_qs;
         reg_rdata_next[18] = capabilities_sv48x4_qs;
         reg_rdata_next[19] = capabilities_sv57x4_qs;
+        reg_rdata_next[21:20] = '0;
         reg_rdata_next[22] = capabilities_msi_flat_qs;
         reg_rdata_next[23] = capabilities_msi_mrif_qs;
         reg_rdata_next[24] = capabilities_amo_qs;
@@ -4263,7 +3804,7 @@ module iommu_regmap_top
       addr_hit[1]: begin
         reg_rdata_next[0] = fctl_be_qs;
         reg_rdata_next[1] = fctl_wsi_qs;
-        reg_rdata_next[2] = fctl_adfd_qs;
+        reg_rdata_next[2] = fctl_glx_qs;
         reg_rdata_next[15:3] = '0;
         reg_rdata_next[31:16] = '0;
         reg_rdata_next[63:32] = '0;
@@ -4358,7 +3899,7 @@ module iommu_regmap_top
       end
 
       addr_hit[13]: begin
-        reg_rdata_next[1:0] = msi_addr_0_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_0_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4374,7 +3915,7 @@ module iommu_regmap_top
       end
 
       addr_hit[16]: begin
-        reg_rdata_next[1:0] = msi_addr_1_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_1_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4390,7 +3931,7 @@ module iommu_regmap_top
       end
 
       addr_hit[19]: begin
-        reg_rdata_next[1:0] = msi_addr_2_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_2_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4406,7 +3947,7 @@ module iommu_regmap_top
       end
 
       addr_hit[22]: begin
-        reg_rdata_next[1:0] = msi_addr_3_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_3_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4422,7 +3963,7 @@ module iommu_regmap_top
       end
 
       addr_hit[25]: begin
-        reg_rdata_next[1:0] = msi_addr_4_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_4_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4438,7 +3979,7 @@ module iommu_regmap_top
       end
 
       addr_hit[28]: begin
-        reg_rdata_next[1:0] = msi_addr_5_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_5_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4454,7 +3995,7 @@ module iommu_regmap_top
       end
 
       addr_hit[31]: begin
-        reg_rdata_next[1:0] = msi_addr_6_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_6_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4470,7 +4011,7 @@ module iommu_regmap_top
       end
 
       addr_hit[34]: begin
-        reg_rdata_next[1:0] = msi_addr_7_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_7_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4486,7 +4027,7 @@ module iommu_regmap_top
       end
 
       addr_hit[37]: begin
-        reg_rdata_next[1:0] = msi_addr_8_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_8_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4502,7 +4043,7 @@ module iommu_regmap_top
       end
 
       addr_hit[40]: begin
-        reg_rdata_next[1:0] = msi_addr_9_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_9_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4518,7 +4059,7 @@ module iommu_regmap_top
       end
 
       addr_hit[43]: begin
-        reg_rdata_next[1:0] = msi_addr_10_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_10_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4534,7 +4075,7 @@ module iommu_regmap_top
       end
 
       addr_hit[46]: begin
-        reg_rdata_next[1:0] = msi_addr_11_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_11_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4550,7 +4091,7 @@ module iommu_regmap_top
       end
 
       addr_hit[49]: begin
-        reg_rdata_next[1:0] = msi_addr_12_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_12_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4566,7 +4107,7 @@ module iommu_regmap_top
       end
 
       addr_hit[52]: begin
-        reg_rdata_next[1:0] = msi_addr_13_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_13_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4582,7 +4123,7 @@ module iommu_regmap_top
       end
 
       addr_hit[55]: begin
-        reg_rdata_next[1:0] = msi_addr_14_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_14_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
@@ -4598,7 +4139,7 @@ module iommu_regmap_top
       end
 
       addr_hit[58]: begin
-        reg_rdata_next[1:0] = msi_addr_15_zero_qs;
+        reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_15_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
