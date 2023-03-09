@@ -856,9 +856,24 @@ module iommu_regmap_wrapper #(
   //   // to register interface (read)
   //   .qs     (capabilities_igs_qs)
   // );
-  assign reg2hw.capabilities.igs.q = 2'h0;
-  assign capabilities_igs_qs = 2'h0;
 
+  // MSI support only
+  if (InclMSI_IG && !InclWSI_IG) begin
+      assign reg2hw.capabilities.igs.q = 2'h0;
+      assign capabilities_igs_qs = 2'h0;
+  end
+
+  // WSI support only
+  else if (!InclMSI_IG && InclWSI_IG) begin
+      assign reg2hw.capabilities.igs.q = 2'h1;
+      assign capabilities_igs_qs = 2'h1;
+  end
+
+  // MSI and WSI support
+  else if (!InclMSI_IG && InclWSI_IG) begin
+      assign reg2hw.capabilities.igs.q = 2'h2;
+      assign capabilities_igs_qs = 2'h2;
+  end
 
   //   F[hpm]: 30:30
   // iommu_field #(
@@ -1057,7 +1072,7 @@ module iommu_regmap_wrapper #(
   iommu_field #(
     .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
-    .RESVAL  (1'h0)
+    .RESVAL  (1'h1)
   ) u_fctl_wsi (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),

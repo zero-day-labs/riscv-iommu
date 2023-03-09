@@ -505,19 +505,17 @@ module cq_handler import ariane_pkg::*; #(
         if (~rst_ni) begin
             state_q         <= IDLE;
             wr_state_q      <= AW_REQ;
-            data_rdata_q    <= '0;
-            data_rvalid_q   <= 1'b0;
             cq_en_q         <= 1'b0;
             cmd_q           <= '0;
+            cq_pptr_q       <= '0;
         end
 
         else begin
             state_q         <= state_n;
             wr_state_q      <= wr_state_n;
-            data_rdata_q    <= mem_resp_i.data_rdata;
-            data_rvalid_q   <= mem_resp_i.data_rvalid;
             cq_en_q         <= cq_en_n;
             cmd_q           <= cmd_n;
+            cq_pptr_q       <= cq_pptr_n;
         end
     end
     
