@@ -14,7 +14,7 @@
     Author: Manuel Rodríguez, University of Minho
     Date: 02/03/2023
 
-    Description: RISC-V IOMMU Wrapper Module.
+    Description: RISC-V IOMMU Top Module.
 */
 
 module riscv_iommu #(
@@ -44,7 +44,9 @@ module riscv_iommu #(
 
     // Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
     input  ariane_axi_soc_pkg::req_t        prog_req_i,
-    output ariane_axi_soc_pkg::resp_t       prog_resp_o
+    output ariane_axi_soc_pkg::resp_t       prog_resp_o,
+
+    output logic                            wsi_wires_o[16]
 );
 
     // To trigger an address translation. Do NOT set if the requested AXI transaction exceeds a 4kiB address boundary
@@ -215,6 +217,30 @@ module riscv_iommu #(
 
     // R
     assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
+
+    logic [3:0] int_vector_array[16]
+
+    always_comb begin : wsi_generation
+        // If WSI generation supported and enabled
+        if (^capabilities_i.igs.q & fctl_i.wsi.q) begin
+            wsi_wires_o[0 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd0 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd0 )));
+            wsi_wires_o[1 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd1 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd1 )));
+            wsi_wires_o[2 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd2 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd2 )));
+            wsi_wires_o[3 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd3 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd3 )));
+            wsi_wires_o[4 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd4 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd4 )));
+            wsi_wires_o[5 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd5 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd5 )));
+            wsi_wires_o[6 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd6 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd6 )));
+            wsi_wires_o[7 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd7 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd7 )));
+            wsi_wires_o[8 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd8 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd8 )));
+            wsi_wires_o[9 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd9 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd9 )));
+            wsi_wires_o[10] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd10)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd10)));
+            wsi_wires_o[11] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd11)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd11)));
+            wsi_wires_o[12] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd12)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd12)));
+            wsi_wires_o[13] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd13)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd13)));
+            wsi_wires_o[14] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd14)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd14)));
+            wsi_wires_o[15] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd15)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd15)));
+        end
+    end
 
     iommu_translation_wrapper #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES),
@@ -451,25 +477,25 @@ module riscv_iommu #(
     end
 
     axi_demux #(
-        .AxiIdWidth (ariane_soc::IdWidth),
+        .AxiIdWidth     (ariane_soc::IdWidth),
         // AXI channel structs
-        .aw_chan_t  ( ariane_axi_soc::aw_chan_t ),
-        .w_chan_t   ( ariane_axi_soc::w_chan_t  ),
-        .b_chan_t   ( ariane_axi_soc::b_chan_t  ),
-        .ar_chan_t  ( ariane_axi_soc::ar_chan_t ),
-        .r_chan_t   ( ariane_axi_soc::r_chan_t  ),
+        .aw_chan_t      ( ariane_axi_soc::aw_chan_t ),
+        .w_chan_t       ( ariane_axi_soc::w_chan_t  ),
+        .b_chan_t       ( ariane_axi_soc::b_chan_t  ),
+        .ar_chan_t      ( ariane_axi_soc::ar_chan_t ),
+        .r_chan_t       ( ariane_axi_soc::r_chan_t  ),
         // AXI request/response
-        .req_t      ( ariane_axi_soc::req_t     ),
-        .resp_t     ( ariane_axi_soc::resp_t    ),
-        .NoMstPorts (2),
-        .MaxTrans   (32'd2),                //? Not quite sure these values are right
-        .AxiLookBits(ariane_soc::IdWidth),  // Assuming same value as AXI ID width
-        .FallThrough(1'b0),
-        .SpillAw    (1'b0),
-        .SpillW     (1'b0),
-        .SpillB     (1'b0),
-        .SpillAr    (1'b0),
-        .SpillR     (1'b0)
+        .req_t          ( ariane_axi_soc::req_t     ),
+        .resp_t         ( ariane_axi_soc::resp_t    ),
+        .NoMstPorts     (2),
+        .MaxTrans       (32'd2),                //? Not quite sure these values are right
+        .AxiLookBits    (ariane_soc::IdWidth),  // Assuming same value as AXI ID width
+        .FallThrough    (1'b0),
+        .SpillAw        (1'b0),
+        .SpillW         (1'b0),
+        .SpillB         (1'b0),
+        .SpillAr        (1'b0),
+        .SpillR         (1'b0)
     ) axi_demux (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
