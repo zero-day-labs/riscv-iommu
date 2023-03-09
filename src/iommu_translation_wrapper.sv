@@ -91,9 +91,18 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        fq_of_o,
     output logic                        fq_on_o,
     output logic                        fq_busy_o,
-    //ipsr
+    // ipsr
+    input  logic                        cq_ip_i,
+    input  logic                        fq_ip_i,
     output logic                        cq_ip_o,
     output logic                        fq_ip_o,
+    // icvec
+    input  logic                        civ_i,
+    input  logic                        fiv_i,
+    // MSI config table
+    input  logic [53:0]                 msi_addr_x_i[16],
+    input  logic [31:0]                 msi_data_x_i[16],
+    input  logic                        msi_vec_masked_x_i[16],
 
     // To enable write of error bits to cqcsr and fqcsr
     output logic                        cq_error_wen_o,
@@ -230,6 +239,10 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic   wsi_en;
     assign  wsi_en = (^capabilities_i.igs.q & fctl_i.wsi.q);
 
+    // To indicate if the IOMMU supports and uses MSI as interrupt generation mechanism
+    logic   msi_ig_en;
+    assign  msi_ig_en = (!capabilities_i.igs.q[0] & !fctl_i.wsi.q);
+
     // Update wires
     logic                           ddtc_update;
     logic [DEVICE_ID_WIDTH-1:0]     ddtc_up_did;
@@ -276,13 +289,17 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     ariane_axi_pkg::req_t   cq_axi_req;
     ariane_axi_pkg::resp_t  fq_axi_resp;
     ariane_axi_pkg::req_t   fq_axi_req;
+    ariane_axi_pkg::resp_t  ig_axi_resp;
+    ariane_axi_pkg::req_t   ig_axi_req;
+
 
     // More wires
     logic                   ptw_error_stage2;   // Set when a guest page fault occurs
     logic                   ptw_bad_gpaddr;
+    logic                   msi_write_error;
 
     //# Arbitration and mux logic to assign AXI4 Master IF to a module
-    mem_if_wrapper memory_if (
+    mem_if_wrapper i_mem_if_wrapper (
         // External ports: To AXI Bus
         .mem_resp_i     (mem_resp_i),
         .mem_req_o      (mem_req_o),
@@ -301,14 +318,17 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
         // From FQ
         .fq_resp_o      (fq_axi_resp),
-        .fq_req_i       (fq_axi_req)
+        .fq_req_i       (fq_axi_req),
+
+        .ig_resp_o      (ig_axi_resp),
+        .ig_req_i       (ig_axi_req)
     );
 
     //# Device Directory Table Cache
     iommu_ddtc #(
         .DDTC_ENTRIES       (DDTC_ENTRIES),
         .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH)
-    ) ddtc (
+    ) i_iommu_ddtc (
         .clk_i              (clk_i),            // Clock
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
@@ -333,7 +353,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .PDTC_ENTRIES       (PDTC_ENTRIES),
         .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
         .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH)
-    ) pdtc (
+    ) i_iommu_pdtc (
         .clk_i              (clk_i),            // Clock
         .rst_ni             (rst_ni),           // Asynchronous reset active low
 
@@ -363,7 +383,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES),
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH)
-    ) iotlb (
+    ) i_iommu_iotlb_sv39x4 (
         .clk_i              (clk_i),    // Clock
         .rst_ni             (rst_ni),   // Asynchronous reset active low
 
@@ -413,7 +433,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH),
         .ArianeCfg          (ArianeCfg)
-    ) ptw (
+    ) i_iommu_ptw_sv39x4 (
         .clk_i              (clk_i),                  // Clock
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
         
@@ -483,7 +503,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
         .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
         .ArianeCfg              (ArianeCfg)
-    ) cdw (
+    ) i_iommu_cdw (
         .clk_i                  (clk_i),                // Clock
         .rst_ni                 (rst_ni),               // Asynchronous reset active low
         
@@ -563,13 +583,14 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .bad_paddr_o            ()    // to return the SPA in case of access error
     );
 
+    //# Command Queue
     cq_handler #(
             .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
             .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
             .PSCID_WIDTH        (PSCID_WIDTH),
             .GSCID_WIDTH        (GSCID_WIDTH),
             .ArianeCfg          (ArianeCfg)
-    ) (
+    ) i_cq_handler (
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
@@ -627,11 +648,12 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .mem_req_o              (cq_axi_req)
     );
 
+    //# Fault/Event Queue
     fq_handler #(
         .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
         .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
         .ArianeCfg              (ArianeCfg)
-    ) ( 
+    ) i_fq_handler ( 
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
@@ -660,9 +682,9 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
         // Event data
         .event_valid_i          (report_fault),     // a fault/event has occurred
-        .trans_type_i           (trans_type_i),     // transaction type
+        .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),     // transaction type
         .cause_code_i           (cause_code),       // Fault code as defined by IOMMU and Priv Spec
-        .iova_i                 (iova_i),           // to report if transaction has an IOVA
+        .iova_i                 ((msi_write_error) ? (iova_i) : (ig_axi_req.aw.addr[55:2])),  // to report if transaction has an IOVA
         .gpaddr_i               (ptw_bad_gpaddr),   // to report bits [63:2] of the GPA in case of a Guest Page Fault
         .did_i                  (device_id_i),      // device_id associated with the transaction
         .pv_i                   (pid_v_i),          // to indicate if transaction has a valid process_id
@@ -675,6 +697,30 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .mem_resp_i             (fq_axi_resp),
         .mem_req_o              (fq_axi_req)
     );
+
+    //# Interrupt Generation
+    iommu_ig i_iommu_ig (
+        .clk_i              (clk_i),
+        .rst_ni             (rst_ni),
+
+        .msi_ig_enabled_i   (msi_ig_en),
+
+        .cip_i              (cq_ip_i),
+        .fip_i              (fq_ip_i),
+
+        .civ_i              (civ_i),
+        .fiv_i              (fiv_i),
+
+        .msi_addr_x_i       (msi_addr_x_i),
+        .msi_data_x_i       (msi_data_x_i),
+        .msi_vec_masked_x_i (msi_vec_masked_x_i),
+
+        .msi_write_error_o  (msi_write_error),
+
+        .mem_resp_i         (ig_axi_resp),
+        .mem_req_o          (ig_axi_req)
+    );
+
 
     //# Translation logic
 
@@ -918,12 +964,19 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
             end
         end
 
-        //# Check PTW/CDW errors
+        //# Check for errors
         // If we had to walk memory is because we had a miss. As we had an exception,
         // the corresponding cache/TLB was not updated, and translation was never set to valid
         if (ptw_error || ptw_access_error || cdw_error) begin
             cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
             trans_error   = 1'b1;
+        end
+
+        // This error always happens after another error that triggered the FQ, and thus, an MSI generation
+        else if (msi_write_error) begin
+            cause_code      = iommu_pkg::MSI_ST_ACCESS_FAULT;
+            trans_error     = 1'b1;
+            report_always   = 1'b1;
         end
     end
 

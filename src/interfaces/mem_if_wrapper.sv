@@ -37,12 +37,16 @@ module mem_if_wrapper
 
     // From FQ
     output ariane_axi_pkg::resp_t       fq_resp_o,
-    input  ariane_axi_pkg::req_t        fq_req_i
+    input  ariane_axi_pkg::req_t        fq_req_i,
+
+    // From MSI IG
+    output ariane_axi_pkg::resp_t       ig_resp_o,
+    input  ariane_axi_pkg::req_t        ig_req_i
 );
 
     logic w_select, w_select_fifo;
 
-    // AR Channel (PTW, CDW, CQ)
+    //# AR Channel (PTW, CDW, CQ)
     stream_arbiter #(
         .DATA_T ( ariane_axi::ar_chan_t ),
         .N_INP  ( 3                     )
@@ -57,38 +61,40 @@ module mem_if_wrapper
         .oup_ready_i    ( mem_resp_i.ar_ready )
     );
 
-    // AW Channel (CQ, FQ)
+    //# AW Channel (CQ, FQ, MSI IG)
     stream_arbiter #(
         .DATA_T ( ariane_axi::aw_chan_t ),
-        .N_INP  ( 2                     )
+        .N_INP  ( 3                     )
     ) i_stream_arbiter_aw (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
-        .inp_data_i     ( {cq_req_i.aw, fq_req_i.aw} ),
-        .inp_valid_i    ( {cq_req_i.aw_valid, fq_req_i.aw_valid} ),
-        .inp_ready_o    ( {cq_resp_o.aw_ready, fq_resp_o.aw_ready} ),
+        .inp_data_i     ( {cq_req_i.aw, fq_req_i.aw, ig_req_i.aw} ),
+        .inp_valid_i    ( {cq_req_i.aw_valid, fq_req_i.aw_valid, ig_req_i.aw_valid} ),
+        .inp_ready_o    ( {cq_resp_o.aw_ready, fq_resp_o.aw_ready, ig_resp_o.aw_ready} ),
         .oup_data_o     ( mem_req_o.aw        ),
         .oup_valid_o    ( mem_req_o.aw_valid  ),
         .oup_ready_i    ( mem_resp_i.aw_ready )
     );
 
+    //# W Channel
     // Control signal to select accepted AWID for writing data to W Channel
     always_comb begin
         w_select = 0;
         unique case (mem_req_o.aw.id)   // Selected AWID
             4'b0000:                            w_select = 0; // CQ
             4'b0001:                            w_select = 1; // FQ
+            4'b0010:                            w_select = 2; // MSI IG
             default:                            w_select = 0; // none
         endcase
     end
 
     // Save AWID whenever a transaction is accepted in AW Channel.
     // While writing data to W Channel, another AW transaction may be accepted, so we need to queue the AWIDs
-    // Only CQ and FQ perform writes to memory, so we can have max 2 outstanding transactions
+    // Only CQ, FQ and MSI IG perform writes to memory, so we can have max 3 outstanding transactions
     fifo_v3 #(
       .DATA_WIDTH   ( 2    ),
       // we can have a maximum of 2 oustanding transactions as each port is blocking
-      .DEPTH        ( 2    )
+      .DEPTH        ( 3    )
     ) i_fifo_w_channel (
       .clk_i      ( clk_i           ),
       .rst_ni     ( rst_ni          ),
@@ -97,7 +103,7 @@ module mem_if_wrapper
       .full_o     (                 ),
       .empty_o    (                 ),
       .usage_o    (                 ),
-      .data_i     ( w_select        ),      // w_select should never be 0
+      .data_i     ( w_select        ),
       .push_i     ( mem_req_o.aw_valid & mem_resp_i.aw_ready ), // a new AW transaction was requested and granted
       .data_o     ( w_select_fifo   ),                          // WID to select the W MUX
       .pop_i      ( mem_req_o.w_valid & mem_resp_i.w_ready & mem_req_o.w.last ) // W transaction has finished
@@ -106,11 +112,11 @@ module mem_if_wrapper
     // For invalid AWIDs for which the request was accepted, or when AW FIFO is empty, CQ channel is selected
     stream_mux #(
         .DATA_T ( ariane_axi::w_chan_t ),
-        .N_INP  ( 2                    )
+        .N_INP  ( 3                    )
     ) i_stream_mux_w (
-        .inp_data_i  ( {cq_req_i.w, fq_req_i.w} ),
-        .inp_valid_i ( {cq_req_i.w_valid, fq_req_i.w_valid} ),
-        .inp_ready_o ( {cq_resp_o.w_ready, fq_resp_o.w_ready} ),
+        .inp_data_i  ( {cq_req_i.w, fq_req_i.w, ig_req_i.w} ),
+        .inp_valid_i ( {cq_req_i.w_valid, fq_req_i.w_valid, ig_req_i.w_valid} ),
+        .inp_ready_o ( {cq_resp_o.w_ready, fq_resp_o.w_ready, ig_resp_o.w_ready} ),
         .inp_sel_i   ( w_select_fifo        ),
         .oup_data_o  ( mem_req_o.w          ),
         .oup_valid_o ( mem_req_o.w_valid    ),
@@ -121,7 +127,7 @@ module mem_if_wrapper
     // 0000         -> PTW
     // 0001         -> CDW
     // 0010         -> CQ
-    // R Channel: We only demux RVALID/RREADY signals
+    //# R Channel: We only demux RVALID/RREADY signals
     assign ptw_resp_o.r = mem_resp_i.r;
     assign cdw_resp_o.r = mem_resp_i.r;
     assign cq_resp_o.r  = mem_resp_i.r;
@@ -149,29 +155,31 @@ module mem_if_wrapper
         .oup_ready_i ( {ptw_req_i.r_ready, cdw_req_i.r_ready, cq_req_i.r_ready} )
     );
 
-    // B Channel: We only demux BVALID/BREADY signals
-    logic b_select;
+    //# B Channel: We only demux BVALID/BREADY signals
+    logic [1:0] b_select;
 
     assign cq_resp_o.b = mem_resp_i.b;
     assign fq_resp_o.b = mem_resp_i.b;
+    assign ig_resp_o.b = mem_resp_i.b;
 
     always_comb begin
         b_select = 0;
         unique case (mem_resp_i.b.id)
             4'b0000:                        b_select = 0; // CQ
             4'b0001:                        b_select = 1; // FQ
+            4'b0010:                        b_select = 2; // MSI IG
             default:                        b_select = 0;
         endcase
     end
 
     stream_demux #(
-        .N_OUP ( 2 )
+        .N_OUP ( 3 )
     ) i_stream_demux_b (
         .inp_valid_i ( mem_resp_i.b_valid ),
         .inp_ready_o ( mem_req_o.b_ready  ),
         .oup_sel_i   ( b_select           ),
-        .oup_valid_o ( {cq_resp_o.b_valid, fq_resp_o.b_valid} ),
-        .oup_ready_i ( {cq_req_i.b_ready, fq_req_i.b_ready} )
+        .oup_valid_o ( {cq_resp_o.b_valid, fq_resp_o.b_valid, ig_resp_o.b_valid} ),
+        .oup_ready_i ( {cq_req_i.b_ready,  fq_req_i.b_ready, ig_req_i.b_ready} )
     );
     
 endmodule

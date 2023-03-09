@@ -58,15 +58,15 @@ module fq_handler import ariane_pkg::*; #(
     input logic                     fq_mf_i,             
     input logic                     fq_of_i,  
 
-    output logic                    error_wen_o,            // To enable write of corresponding error bit to regmap
+    output logic                    error_wen_o,        // To enable write of corresponding error bit to regmap
     output logic                    fq_mf_o,            // Set when a memory fault occurred during FQ access
     output logic                    fq_of_o,            // The execution of a command lead to a timeout 
     output logic                    fq_ip_o,            // To set ipsr.fip register if a fault occurs and fq_ie is set
 
     // Event data
-    input  logic                                event_valid_i,    // a fault/event has occurred
-    input  logic [iommu_pkg::TTYP_LEN-1:0]      trans_type_i,   // transaction type
-    input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,   // Fault code as defined by IOMMU and Priv Spec
+    input  logic                                event_valid_i,      // a fault/event has occurred
+    input  logic [iommu_pkg::TTYP_LEN-1:0]      trans_type_i,       // transaction type
+    input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,       // Fault code as defined by IOMMU and Priv Spec
     //? complete VLEN for IOVA? Offset required?
     input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
     input  logic [riscv::SVX-1:0]               gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
@@ -226,6 +226,11 @@ module fq_handler import ariane_pkg::*; #(
                             fq_entry_n.pv       = pv_i;
 
                             if (trans_type_i != iommu_pkg::PCIE_MSG_REQ)
+                                fq_entry_n.iotval   = iova_i;
+                        end
+
+                        // The only case where TTYP = 0 known until now is for an IOMMU-generated MSI write access fault
+                        else begin
                                 fq_entry_n.iotval   = iova_i;
                         end
                         
