@@ -79,6 +79,84 @@ module riscv_iommu #(
     iommu_reg_pkg::iommu_reg2hw_t   reg2hw;
     iommu_reg_pkg::iommu_hw2reg_t   hw2reg;
 
+    logic                           cq_error_wen;
+    logic                           fq_error_wen;
+    logic [53:0]                    msi_addr_x[16];
+    logic [31:0]                    msi_data_x[16];
+    logic                           msi_vec_masked_x[16];
+
+    assign  hw2reg.cqh.de               = 1'b1;
+    assign  hw2reg.fqt.de               = 1'b1;
+    assign  hw2reg.cqcsr.cqmf.de        = cq_error_wen;
+    assign  hw2reg.cqcsr.cmd_to.de      = cq_error_wen;
+    assign  hw2reg.cqcsr.cmd_ill.de     = cq_error_wen;
+    assign  hw2reg.cqcsr.fence_w_ip.de  = cq_error_wen;
+    assign  hw2reg.cqcsr.cqon.de        = 1'b1;
+    assign  hw2reg.cqcsr.busy.de        = 1'b1;
+    assign  hw2reg.cqcsr.fqmf.de        = fq_error_wen; 
+    assign  hw2reg.cqcsr.fqof.de        = fq_error_wen;
+    assign  hw2reg.cqcsr.fqon.de        = 1'b1;
+    assign  hw2reg.cqcsr.busy.de        = 1'b1;
+    assign  hw2reg.ipsr.cip.de          = hw2reg.ipsr.cip.d;
+    assign  hw2reg.ipsr.fip.de          = hw2reg.ipsr.fip.d;
+
+    assign  msi_addr_x = '{
+        reg2hw.msi_addr_0.addr.q,
+        reg2hw.msi_addr_1.addr.q,
+        reg2hw.msi_addr_2.addr.q,
+        reg2hw.msi_addr_3.addr.q,
+        reg2hw.msi_addr_4.addr.q,
+        reg2hw.msi_addr_5.addr.q,
+        reg2hw.msi_addr_6.addr.q,
+        reg2hw.msi_addr_7.addr.q,
+        reg2hw.msi_addr_8.addr.q,
+        reg2hw.msi_addr_9.addr.q,
+        reg2hw.msi_addr_10.addr.q,
+        reg2hw.msi_addr_11.addr.q,
+        reg2hw.msi_addr_12.addr.q,
+        reg2hw.msi_addr_13.addr.q,
+        reg2hw.msi_addr_14.addr.q,
+        reg2hw.msi_addr_15.addr.q
+    };
+
+    assign  msi_data_x = '{
+        reg2hw.msi_data_0.q,
+        reg2hw.msi_data_1.q,
+        reg2hw.msi_data_2.q,
+        reg2hw.msi_data_3.q,
+        reg2hw.msi_data_4.q,
+        reg2hw.msi_data_5.q,
+        reg2hw.msi_data_6.q,
+        reg2hw.msi_data_7.q,
+        reg2hw.msi_data_8.q,
+        reg2hw.msi_data_9.q,
+        reg2hw.msi_data_10.q,
+        reg2hw.msi_data_11.q,
+        reg2hw.msi_data_12.q,
+        reg2hw.msi_data_13.q,
+        reg2hw.msi_data_14.q,
+        reg2hw.msi_data_15.q
+    };
+
+    assign  msi_vec_masked_x = '{
+        reg2hw.msi_vec_ctl_0.q,
+        reg2hw.msi_vec_ctl_1.q,
+        reg2hw.msi_vec_ctl_2.q,
+        reg2hw.msi_vec_ctl_3.q,
+        reg2hw.msi_vec_ctl_4.q,
+        reg2hw.msi_vec_ctl_5.q,
+        reg2hw.msi_vec_ctl_6.q,
+        reg2hw.msi_vec_ctl_7.q,
+        reg2hw.msi_vec_ctl_8.q,
+        reg2hw.msi_vec_ctl_9.q,
+        reg2hw.msi_vec_ctl_10.q,
+        reg2hw.msi_vec_ctl_11.q,
+        reg2hw.msi_vec_ctl_12.q,
+        reg2hw.msi_vec_ctl_13.q,
+        reg2hw.msi_vec_ctl_14.q,
+        reg2hw.msi_vec_ctl_15.q
+    };
+
     // Error slave AXI bus
     ariane_axi_soc_pkg::req_t       error_req;
     ariane_axi_soc_pkg::resp_t      error_rsp;
@@ -138,7 +216,6 @@ module riscv_iommu #(
     // R
     assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
 
-    // TODO: Check whether the IOMMU writes to icvec and msi_cfg_tbl. If not, hardwire inputs to zero
     iommu_translation_wrapper #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES),
         .DDTC_ENTRIES       (DDTC_ENTRIES),
@@ -175,14 +252,14 @@ module riscv_iommu #(
         .cqb_ppn_i      (reg2hw.cqb.ppn.q),
         .cqb_size_i     (reg2hw.cqb.log2sz_1.q),
         .cqh_i          (reg2hw.cqh.q),
-        .cqh_o          (hw2reg.cqh.d),
+        .cqh_o          (hw2reg.cqh.d),     // WE always set to 1
         .cqt_i          (reg2hw.cqt.q),
         // FQ
         .fqb_ppn_i      (reg2hw.fqb.ppn.q),
         .fqb_size_i     (reg2hw.fqb.log2sz_1.q),
         .fqh_i          (reg2hw.fqh.q),
         .fqt_i          (reg2hw.fqt.q),
-        .fqt_o          (hw2reg.fqt.d),
+        .fqt_o          (hw2reg.fqt.d),     // WE always set to 1
         // cqcsr
         .cq_en_i        (reg2hw.cqcsr.cqen.q),
         .cq_ie_i        (reg2hw.cqcsr.cie.q),
@@ -190,28 +267,37 @@ module riscv_iommu #(
         .cq_cmd_to_i    (reg2hw.cqcsr.cmd_to.q),    
         .cq_cmd_ill_i   (reg2hw.cqcsr.cmd_ill.q),
         .cq_fence_w_ip_i(reg2hw.cqcsr.fence_w_ip.q),
-        .cq_mf_o        (hw2reg.cqcsr.cqmf.d),
+        .cq_mf_o        (hw2reg.cqcsr.cqmf.d),      // WE driven by cq_error_wen
         .cq_cmd_to_o    (hw2reg.cqcsr.cmd_to.d),
         .cq_cmd_ill_o   (hw2reg.cqcsr.cmd_ill.d),
         .cq_fence_w_ip_o(hw2reg.cqcsr.fence_w_ip.d),
-        .cq_on_o        (hw2reg.cqcsr.cqon.d),
+        .cq_on_o        (hw2reg.cqcsr.cqon.d),      // WE always set to 1
         .cq_busy_o      (hw2reg.cqcsr.busy.d),
         // fqcsr
         .fq_en_i        (reg2hw.fqcsr.fqen.q),
         .fq_ie_i        (reg2hw.fqcsr.fie.q),
         .fq_mf_i        (reg2hw.fqcsr.fqmf.q),
         .fq_of_i        (reg2hw.fqcsr.fqof.q),
-        .fq_mf_o        (hw2reg.cqcsr.fqmf.d),
+        .fq_mf_o        (hw2reg.cqcsr.fqmf.d),      // WE driven by fq_error_wen
         .fq_of_o        (hw2reg.cqcsr.fqof.d),
-        .fq_on_o        (hw2reg.cqcsr.fqon.d),
+        .fq_on_o        (hw2reg.cqcsr.fqon.d),      // WE always set to 1
         .fq_busy_o      (hw2reg.cqcsr.busy.d),
-        //ipsr
-        .cq_ip_o        (hw2reg.ipsr.cip.d),
-        .fq_ip_o        (hw2reg.ipsr.fip.d),
+        // ipsr
+        .cq_ip_i        (reg2hw.ipsr.cip.q),
+        .fq_ip_i        (reg2hw.ipsr.fip.q),
+        .cq_ip_o        (hw2reg.ipsr.cip.d),        // WE driven by itself
+        .fq_ip_o        (hw2reg.ipsr.fip.d),        // WE driven by itself
+        // icvec
+        .civ_i          (reg2hw.icvec.civ.q),
+        .fiv_i          (reg2hw.icvec.fiv.q),
+        // msi_cfg_tbl
+        .msi_addr_x_i       (msi_addr_x),
+        .msi_data_x_i       (msi_data_x),
+        .msi_vec_masked_x_i (msi_vec_masked_x),
 
         // To enable write of error bits to cqcsr and fqcsr
-        .cq_error_wen_o (),
-        .fq_error_wen_o (),
+        .cq_error_wen_o (cq_error_wen),
+        .fq_error_wen_o (fq_error_wen),
 
         .trans_valid_o      (trans_valid),  // Translation successfully completed
         .is_msi_o           (),             // Indicate whether the translated address is an MSI address
@@ -240,7 +326,7 @@ module riscv_iommu #(
         .prog_resp_o    (prog_resp_o),
 
         .reg2hw_o       (reg2hw),
-        .hw2reg_i       (hw2reg)    // TODO: Check WE signals!
+        .hw2reg_i       (hw2reg)
     );
 
     //# Channel selection

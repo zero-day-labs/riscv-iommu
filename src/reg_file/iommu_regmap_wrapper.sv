@@ -2027,9 +2027,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_0_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_0.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_0.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2055,9 +2055,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_0_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_0.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_0.d ),
 
     // to internal hardware
     .qe     (),
@@ -2083,9 +2083,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_0_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_0.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_0.d ),
 
     // to internal hardware
     .qe     (),
@@ -2112,9 +2112,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_1_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_1.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_1.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2140,9 +2140,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_1_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_1.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_1.d ),
 
     // to internal hardware
     .qe     (),
@@ -2168,9 +2168,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_1_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_1.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_1.d ),
 
     // to internal hardware
     .qe     (),
@@ -2197,9 +2197,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_2_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_2.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_2.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2225,9 +2225,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_2_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_2.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_2.d ),
 
     // to internal hardware
     .qe     (),
@@ -2253,9 +2253,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_2_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_2.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_2.d ),
 
     // to internal hardware
     .qe     (),
@@ -2282,9 +2282,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_3_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_3.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_3.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2310,9 +2310,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_3_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_3.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_3.d ),
 
     // to internal hardware
     .qe     (),
@@ -2338,9 +2338,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_3_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_3.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_3.d ),
 
     // to internal hardware
     .qe     (),
@@ -2367,9 +2367,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_4_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_4.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_4.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2395,9 +2395,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_4_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_4.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_4.d ),
 
     // to internal hardware
     .qe     (),
@@ -2424,9 +2424,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_4_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_4.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_4.d ),
 
     // to internal hardware
     .qe     (),
@@ -2453,9 +2453,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_5_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_5.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_5.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2481,9 +2481,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_5_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_5.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_5.d ),
 
     // to internal hardware
     .qe     (),
@@ -2509,9 +2509,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_5_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_5.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_5.d ),
 
     // to internal hardware
     .qe     (),
@@ -2538,9 +2538,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_6_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_6.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_6.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2566,9 +2566,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_6_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_6.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_6.d ),
 
     // to internal hardware
     .qe     (),
@@ -2594,9 +2594,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_6_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_6.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_6.d ),
 
     // to internal hardware
     .qe     (),
@@ -2623,9 +2623,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_7_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_7.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_7.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2651,9 +2651,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_7_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_7.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_7.d ),
 
     // to internal hardware
     .qe     (),
@@ -2679,9 +2679,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_7_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_7.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_7.d ),
 
     // to internal hardware
     .qe     (),
@@ -2708,9 +2708,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_8_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_8.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_8.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2736,9 +2736,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_8_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_8.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_8.d ),
 
     // to internal hardware
     .qe     (),
@@ -2764,9 +2764,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_8_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_8.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_8.d ),
 
     // to internal hardware
     .qe     (),
@@ -2793,9 +2793,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_9_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_9.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_9.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2821,9 +2821,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_9_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_9.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_9.d ),
 
     // to internal hardware
     .qe     (),
@@ -2849,9 +2849,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_9_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_9.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_9.d ),
 
     // to internal hardware
     .qe     (),
@@ -2878,9 +2878,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_10_addr_wd),
 
     // from internal hardware
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .de     (hw2reg.msi_addr_10.addr.de),
-    .d      (hw2reg.msi_addr_10.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2906,9 +2906,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_10_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_10.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_10.d ),
 
     // to internal hardware
     .qe     (),
@@ -2934,9 +2934,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_10_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_10.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_10.d ),
 
     // to internal hardware
     .qe     (),
@@ -2963,9 +2963,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_11_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_11.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_11.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -2991,9 +2991,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_11_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_11.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_11.d ),
 
     // to internal hardware
     .qe     (),
@@ -3019,9 +3019,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_11_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_11.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_11.d ),
 
     // to internal hardware
     .qe     (),
@@ -3048,9 +3048,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_12_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_12.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_12.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -3076,9 +3076,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_12_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_12.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_12.d ),
 
     // to internal hardware
     .qe     (),
@@ -3104,9 +3104,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_12_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_12.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_12.d ),
 
     // to internal hardware
     .qe     (),
@@ -3133,9 +3133,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_13_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_13.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_13.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -3161,9 +3161,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_13_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_13.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_13.d ),
 
     // to internal hardware
     .qe     (),
@@ -3189,9 +3189,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_13_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_13.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_13.d ),
 
     // to internal hardware
     .qe     (),
@@ -3218,9 +3218,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_14_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_14.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_14.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -3246,9 +3246,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_14_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_14.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_14.d ),
 
     // to internal hardware
     .qe     (),
@@ -3274,9 +3274,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_14_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_14.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_14.d ),
 
     // to internal hardware
     .qe     (),
@@ -3303,9 +3303,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_addr_15_addr_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_addr_15.addr.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_addr_15.addr.d ),
 
     // to internal hardware
     .qe     (),
@@ -3331,9 +3331,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_data_15_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_data_15.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_data_15.d ),
 
     // to internal hardware
     .qe     (),
@@ -3359,9 +3359,9 @@ module iommu_regmap_wrapper #(
     .wd     (msi_vec_ctl_15_wd),
 
     // from internal hardware
-    .de     (hw2reg.msi_vec_ctl_15.de),
+    .de     ('0),
+    .d      ('0),
     .ds     (),
-    .d      (hw2reg.msi_vec_ctl_15.d ),
 
     // to internal hardware
     .qe     (),
