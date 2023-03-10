@@ -14,7 +14,7 @@
     Author: Manuel Rodríguez, University of Minho
     Date: 08/03/2023
 
-    Description: RISC-V IOMMU Interrupt Generation Module.
+    Description: RISC-V IOMMU MSI Interrupt Generation Module.
 */
 
 //! NOTES:
@@ -29,7 +29,7 @@
         can be used by different sources. That's why we can have more than one pending message per vector).
 */
 
-module iommu_ig (
+module iommu_msi_ig (
     input  logic clk_i,
     input  logic rst_ni,
 

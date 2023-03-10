@@ -26,13 +26,16 @@
 
 module iommu_translation_wrapper import ariane_pkg::*; #(
 
-    parameter int unsigned IOTLB_ENTRIES = 4,
-    parameter int unsigned DDTC_ENTRIES = 4,
-    parameter int unsigned PDTC_ENTRIES = 4,
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20,
-    parameter int unsigned PSCID_WIDTH = 20,
-    parameter int unsigned GSCID_WIDTH = 16,
+    parameter int unsigned  IOTLB_ENTRIES       = 4,
+    parameter int unsigned  DDTC_ENTRIES        = 4,
+    parameter int unsigned  PDTC_ENTRIES        = 4,
+    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
+    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
+    parameter int unsigned  PSCID_WIDTH         = 20,
+    parameter int unsigned  GSCID_WIDTH         = 16,
+
+    parameter bit           InclMSI_IG          = 0,
+
     parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic    clk_i,
@@ -698,28 +701,37 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .mem_req_o              (fq_axi_req)
     );
 
-    //# Interrupt Generation
-    iommu_ig i_iommu_ig (
-        .clk_i              (clk_i),
-        .rst_ni             (rst_ni),
+    //# MSI Interrupt Generation
+    if (InclMSI_IG) begin : gen_msi_ig_support
 
-        .msi_ig_enabled_i   (msi_ig_en),
+        iommu_msi_ig i_iommu_msi_ig (
+            .clk_i              (clk_i),
+            .rst_ni             (rst_ni),
 
-        .cip_i              (cq_ip_i),
-        .fip_i              (fq_ip_i),
+            .msi_ig_enabled_i   (msi_ig_en),
 
-        .civ_i              (civ_i),
-        .fiv_i              (fiv_i),
+            .cip_i              (cq_ip_i),
+            .fip_i              (fq_ip_i),
 
-        .msi_addr_x_i       (msi_addr_x_i),
-        .msi_data_x_i       (msi_data_x_i),
-        .msi_vec_masked_x_i (msi_vec_masked_x_i),
+            .civ_i              (civ_i),
+            .fiv_i              (fiv_i),
 
-        .msi_write_error_o  (msi_write_error),
+            .msi_addr_x_i       (msi_addr_x_i),
+            .msi_data_x_i       (msi_data_x_i),
+            .msi_vec_masked_x_i (msi_vec_masked_x_i),
 
-        .mem_resp_i         (ig_axi_resp),
-        .mem_req_o          (ig_axi_req)
-    );
+            .msi_write_error_o  (msi_write_error),
+
+            .mem_resp_i         (ig_axi_resp),
+            .mem_req_o          (ig_axi_req)
+        );
+    end
+
+    // Hardwire outputs to zero
+    else begin
+        assign  msi_write_error = 1'b0;
+        assign  ig_axi_req      = '0;
+    end
 
 
     //# Translation logic

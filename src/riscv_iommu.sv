@@ -18,13 +18,17 @@
 */
 
 module riscv_iommu #(
-    parameter int unsigned IOTLB_ENTRIES = 4,
-    parameter int unsigned DDTC_ENTRIES = 4,
-    parameter int unsigned PDTC_ENTRIES = 4,
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20,
-    parameter int unsigned PSCID_WIDTH = 20,
-    parameter int unsigned GSCID_WIDTH = 16,
+    parameter int unsigned  IOTLB_ENTRIES       = 4,
+    parameter int unsigned  DDTC_ENTRIES        = 4,
+    parameter int unsigned  PDTC_ENTRIES        = 4,
+    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
+    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
+    parameter int unsigned  PSCID_WIDTH         = 20,
+    parameter int unsigned  GSCID_WIDTH         = 16,
+
+    parameter bit           InclWSI_IG          = 1,
+    parameter bit           InclMSI_IG          = 0,
+
     parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic clk_i,
@@ -46,7 +50,7 @@ module riscv_iommu #(
     input  ariane_axi_soc_pkg::req_t        prog_req_i,
     output ariane_axi_soc_pkg::resp_t       prog_resp_o,
 
-    output logic                            wsi_wires_o[16]
+    output logic [15:0]                     wsi_wires_o
 );
 
     // To trigger an address translation. Do NOT set if the requested AXI transaction exceeds a 4kiB address boundary
@@ -218,28 +222,29 @@ module riscv_iommu #(
     // R
     assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
 
-    logic [3:0] int_vector_array[16]
+    //# WSI Interrupt Generation
+    if (InclWSI_IG) begin : gen_wsi_ig_support
+        
+        iommu_wsi_ig i_iommu_wsi_ig (
+            // fctl.wsi
+            .wsi_en_i       (reg2hw.fctl.wsi.q),
 
-    always_comb begin : wsi_generation
-        // If WSI generation supported and enabled
-        if (^capabilities_i.igs.q & fctl_i.wsi.q) begin
-            wsi_wires_o[0 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd0 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd0 )));
-            wsi_wires_o[1 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd1 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd1 )));
-            wsi_wires_o[2 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd2 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd2 )));
-            wsi_wires_o[3 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd3 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd3 )));
-            wsi_wires_o[4 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd4 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd4 )));
-            wsi_wires_o[5 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd5 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd5 )));
-            wsi_wires_o[6 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd6 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd6 )));
-            wsi_wires_o[7 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd7 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd7 )));
-            wsi_wires_o[8 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd8 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd8 )));
-            wsi_wires_o[9 ] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd9 )) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd9 )));
-            wsi_wires_o[10] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd10)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd10)));
-            wsi_wires_o[11] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd11)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd11)));
-            wsi_wires_o[12] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd12)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd12)));
-            wsi_wires_o[13] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd13)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd13)));
-            wsi_wires_o[14] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd14)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd14)));
-            wsi_wires_o[15] = ((reg2hw.ipsr.cip.q & (reg2hw.icvec.civ == 4'd15)) | (reg2hw.ipsr.fip.q & (reg2hw.icvec.fiv == 4'd15)));
-        end
+            // ipsr
+            .cip_i          (reg2hw.ipsr.cip.q),
+            .fip_i          (reg2hw.ipsr.fip.q),
+
+            // icvec
+            .civ_i          (reg2hw.icvec.civ.q),
+            .fiv_i          (reg2hw.icvec.fiv.q),
+
+            // interrupt wires
+            .wsi_wires_o    (wsi_wires_o)
+        );
+    end
+
+    // Hardwire WSI wires to 0
+    else begin
+        assign wsi_wires_o  = '0;
     end
 
     iommu_translation_wrapper #(
@@ -250,6 +255,7 @@ module riscv_iommu #(
         .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH),
+        .InclMSI_IG         (InclMSI_IG),
         .ArianeCfg          (ArianeCfg)
     ) translation_wrapper (
         .clk_i          (clk_i),
