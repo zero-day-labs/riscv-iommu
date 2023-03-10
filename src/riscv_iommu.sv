@@ -91,6 +91,7 @@ module riscv_iommu #(
     logic [31:0]                    msi_data_x[16];
     logic                           msi_vec_masked_x[16];
 
+    // WE signals
     assign  hw2reg.cqh.de               = 1'b1;
     assign  hw2reg.fqt.de               = 1'b1;
     assign  hw2reg.cqcsr.cqmf.de        = cq_error_wen;
@@ -173,7 +174,7 @@ module riscv_iommu #(
         On success, the AXI demux connects the AXI bus to the Master IF. Since the translation is 
         triggered by the original AWVALID signal (when bound check is passed), it will remain set 
         until a handshake occurs. After the handshake, the translation request signal (driven by AWVALID)
-        is cleared, and thus, the translation success will also go low.
+        is cleared, and thus, the translation success bit will also go low.
 
         If a translation error occurs, or an address boundary violation is detected, AWVALID is set in the
         aux bus, but the demux is connected to the error slave, so this will respond to the device with an error msg.
