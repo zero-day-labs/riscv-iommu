@@ -24,6 +24,9 @@
       a stronger implementation (+ HW cost).
 */
 
+// TODO: Check MSI translation when second-stage is Bare
+// TODO: Modify checks to avoid comparing PDTC data if we are not using PCs or the request has no PC
+
 module iommu_translation_wrapper import ariane_pkg::*; #(
 
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -225,13 +228,14 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // Set for faults occurred before DDTC lookup
     logic   report_always;
     // Error/fault signaling according to the spec
-    // TODO: Ariane pkg has an exception_t struct
     logic                               trans_error;
     logic [(iommu_pkg::CAUSE_LEN-1):0]  cause_code;       // Fault code as defined by IOMMU and Priv Spec
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
     logic   report_fault;
-    assign  report_fault    = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | (report_always | (cdw_error & is_ddt_walk)) & trans_error);
+    logic   msi_write_error;
+    assign  report_fault    = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | 
+                               (report_always | msi_write_error | (cdw_error & is_ddt_walk)) & trans_error);
     assign  trans_error_o   = trans_error;  // The requesting device needs to know if an error occurred
 
     logic   is_implicit;
@@ -299,7 +303,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // More wires
     logic                   ptw_error_stage2;   // Set when a guest page fault occurs
     logic                   ptw_bad_gpaddr;
-    logic                   msi_write_error;
 
     //# Arbitration and mux logic to assign AXI4 Master IF to a module
     mem_if_wrapper i_mem_if_wrapper (
@@ -686,8 +689,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         // Event data
         .event_valid_i          (report_fault),     // a fault/event has occurred
         .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),     // transaction type
-        .cause_code_i           (cause_code),       // Fault code as defined by IOMMU and Priv Spec
-        .iova_i                 ((msi_write_error) ? (iova_i) : (ig_axi_req.aw.addr[55:2])),  // to report if transaction has an IOVA
+        .cause_code_i           ((msi_write_error) ? (iommu_pkg::MSI_ST_ACCESS_FAULT) : (cause_code)), // Fault code as defined by IOMMU and Priv Spec
+        .iova_i                 ((msi_write_error) ? (ig_axi_req.aw.addr[55:2]) : (iova_i)),  // to report if transaction has an IOVA
         .gpaddr_i               (ptw_bad_gpaddr),   // to report bits [63:2] of the GPA in case of a Guest Page Fault
         .did_i                  (device_id_i),      // device_id associated with the transaction
         .pv_i                   (pid_v_i),          // to indicate if transaction has a valid process_id
@@ -982,13 +985,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         if (ptw_error || ptw_access_error || cdw_error) begin
             cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
             trans_error   = 1'b1;
-        end
-
-        // This error always happens after another error that triggered the FQ, and thus, an MSI generation
-        else if (msi_write_error) begin
-            cause_code      = iommu_pkg::MSI_ST_ACCESS_FAULT;
-            trans_error     = 1'b1;
-            report_always   = 1'b1;
         end
     end
 
