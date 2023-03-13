@@ -100,7 +100,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     riscv::pte_t pte;
     // register to perform context switch between stages
-    riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store GPA to be updated in the IOTLB
+    riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store final GPA to be updated in the IOTLB
     assign pte = riscv::pte_t'(mem_resp_i.r.data);
 
     iommu_pkg::msi_wt_pte_t msi_pte;
@@ -357,11 +357,11 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                     // Stage 2 only
                     else if ((!en_stage1_i && en_stage2_i)) begin
                         
-                        // IOVA is a valid GPA
+                        // Save the GPA in all cases to report if an error occurs
                         if (!cdw_implicit_access_i) gpaddr_n = req_iova_i[riscv::SVX-1:0];
                         else                        gpaddr_n = {pdt_gppn_i[riscv::GPPNW-1:0], 12'b0};
 
-                        // MSI Address translation
+                        // MSI Address translation ( //? Exclude CDW translations? These should not trigger an MSI translation)
                         if (iova_is_imsic_addr) begin
                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
                             msi_translation_n = 1'b1;   // signal next cycle

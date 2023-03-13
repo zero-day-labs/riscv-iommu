@@ -19,8 +19,10 @@
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_cdw import ariane_pkg::*; #(
-        parameter int unsigned DEVICE_ID_WIDTH = 24,
-        parameter int unsigned PROCESS_ID_WIDTH  = 20,
+        parameter int unsigned  DEVICE_ID_WIDTH     = 24,
+        parameter int unsigned  PROCESS_ID_WIDTH    = 20,
+
+        parameter bit           InclPID             = 0,
         parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic                    clk_i,                  // Clock
@@ -250,10 +252,10 @@ module iommu_cdw import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0001;                          //? Can we define any value for AR.ID?
+        mem_req_o.ar.id         = 4'b0001;                         
         mem_req_o.ar.addr       = cdw_pptr_q;                       // Physical address to access
-        // Number of beats per burst (1 for non-leaf entries, 2 for PC, 8 for DC)
-        mem_req_o.ar.len        = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (8'd7) : (8'd1)) : (8'd0);
+        // Number of beats per burst (1 for non-leaf entries, 2 for PC, 7 for DC)
+        mem_req_o.ar.len        = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (8'd6) : (8'd1)) : (8'd0);
         mem_req_o.ar.size       = 3'b011;                           // 64 bits (8 bytes) per beat
         mem_req_o.ar.burst      = axi_pkg::BURST_INCR;              // Incremental start address
         mem_req_o.ar.lock       = '0;
@@ -326,23 +328,26 @@ module iommu_cdw import ariane_pkg::*; #(
                 end
 
                 // check for PDTC misses
-                else if (pdtc_access_i && ~pdtc_hit_i) begin
+                else if (InclPID) begin
+                
+                    if (pdtc_access_i && ~pdtc_hit_i) begin
                     
-                    process_id_n    = req_pid_i;
-                    state_n         = MEM_ACCESS;
-                    cdw_lvl_n       = level_t'(pdtp_mode_i + 1);    // level enconding is different for PDT
-                    // pdtc_miss_o        = 1'b1;     // to HPM
+                        process_id_n    = req_pid_i;
+                        state_n         = MEM_ACCESS;
+                        cdw_lvl_n       = level_t'(pdtp_mode_i + 1);    // level enconding is different for PDT
+                        // pdtc_miss_o        = 1'b1;     // to HPM
 
-                    // load pptr according to pdtp.MODE
-                    // PD20
-                    if (pdtp_mode_i == 4'b0011)
-                        cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_pid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
-                    // PD17
-                    else if (pdtp_mode_i == 4'b0010)
-                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
-                    // PD8
-                    else if (pdtp_mode_i == 4'b0001)
-                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
+                        // load pptr according to pdtp.MODE
+                        // PD20
+                        if (pdtp_mode_i == 4'b0011)
+                            cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_pid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
+                        // PD17
+                        else if (pdtp_mode_i == 4'b0010)
+                            cdw_pptr_n = {pdtp_ppn_i, req_pid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
+                        // PD8
+                        else if (pdtp_mode_i == 4'b0001)
+                            cdw_pptr_n = {pdtp_ppn_i, req_pid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
+                    end
                 end
             end
 
@@ -360,7 +365,6 @@ module iommu_cdw import ariane_pkg::*; #(
                         - Is a DDT lookup?
                         - Is Stage-2 enabled?
                         - Is the last level of the DDT/PDT?
-                        - Is the DC/PC fully loaded?
                     */
                     case ({en_stage2_i, is_ddt_walk_q, is_last_cdw_lvl})
                         // rdata will hold the PPN of a non-leaf PDT/DDT entry
@@ -475,7 +479,6 @@ module iommu_cdw import ariane_pkg::*; #(
 
                     mem_req_o.r_ready   = 1'b1;
                     entry_cnt_n         = entry_cnt_q + 1;
-                    state_n = LEAF;
                     // Address is automatically incremented by AXI Bus
 
                     case ({is_ddt_walk_q, entry_cnt_q})
@@ -502,7 +505,6 @@ module iommu_cdw import ariane_pkg::*; #(
                         //PC.fsc (last DW)
                         4'b0001: begin
                             pc_n.fsc = pc_fsc;
-                            state_n = LEAF;
 
                             // Config checks
                             if ((|pc_fsc.reserved) ||
@@ -624,7 +626,6 @@ module iommu_cdw import ariane_pkg::*; #(
                             // only if DC have an associated PC and Stage-2 is enabled, pdtp.PPN must be translated before being stored
                             // otherwise, fsc.PPN holds iosatp field, which must be saved as a GPA
                             if (en_stage2_i && dc_q.tc.pdtv) state_n = GUEST_TR;
-                            else state_n = LEAF;
 
                             // Config checks
                             if ((|dc_msi_addr_patt.reserved)) begin
@@ -712,8 +713,9 @@ module iommu_cdw import ariane_pkg::*; #(
 
         // Check for AXI transmission errors
         if (mem_resp_i.r_valid && mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
-            update_dc_o = 1'b0;
-            update_pc_o = 1'b0;
+            update_dc_o     = 1'b0;
+            update_pc_o     = 1'b0;
+            wait_rlast_n    = ~mem_resp_i.r.last;
 
             // set cause code
             if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_DATA_CORRUPTION;

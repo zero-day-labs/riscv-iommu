@@ -24,6 +24,7 @@ module riscv_iommu #(
     parameter int unsigned  PSCID_WIDTH         = 20,
     parameter int unsigned  GSCID_WIDTH         = 16,
 
+    parameter bit           InclPID             = 0,
     parameter bit           InclWSI_IG          = 1,
     parameter bit           InclMSI_IG          = 0,
 
@@ -254,6 +255,7 @@ module riscv_iommu #(
         .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
         .PSCID_WIDTH        (PSCID_WIDTH),
         .GSCID_WIDTH        (GSCID_WIDTH),
+        .InclPID            (InclPID),
         .InclMSI_IG         (InclMSI_IG),
         .ArianeCfg          (ArianeCfg)
     ) translation_wrapper (

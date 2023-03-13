@@ -183,7 +183,7 @@ module iommu_pdtc import ariane_pkg::*; #(
         for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
             automatic int unsigned idx_base, shift, new_index;
             // we got a hit so update the pointer as it was least recently used
-            if ((lu_hit[i] && lookup_i) || (replace[i] && update_i)) begin      // LRU updated on LU hits and updates
+            if ((lu_hit[i] && lookup_i) || (replace[i] && update_i)) begin      // LRU updated on hits and updates
                 // Set the nodes to the values we would expect
                 for (int unsigned lvl = 0; lvl < $clog2(PDTC_ENTRIES); lvl++) begin  // 3 for 8 entries
                     idx_base = $unsigned((2**lvl)-1);     // 0 for lvl0, 1 for lvl1, 3 for lvl2
