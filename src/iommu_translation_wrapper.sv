@@ -24,9 +24,6 @@
       a stronger implementation (+ HW cost).
 */
 
-// TODO: Check MSI translation when second-stage is Bare
-// TODO: Modify checks to avoid comparing PDTC data if we are not using PCs or the request has no PC
-
 module iommu_translation_wrapper import ariane_pkg::*; #(
 
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -37,6 +34,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     parameter int unsigned  PSCID_WIDTH         = 20,
     parameter int unsigned  GSCID_WIDTH         = 16,
 
+    parameter bit           InclPID             = 0,
     parameter bit           InclMSI_IG          = 0,
 
     parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
@@ -355,34 +353,42 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     );
 
     //# Process Directory Table Cache
-    iommu_pdtc #(
-        .PDTC_ENTRIES       (PDTC_ENTRIES),
-        .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
-        .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH)
-    ) i_iommu_pdtc (
-        .clk_i              (clk_i),            // Clock
-        .rst_ni             (rst_ni),           // Asynchronous reset active low
+    if (InclPID) begin : gen_pid_support
+        iommu_pdtc #(
+            .PDTC_ENTRIES       (PDTC_ENTRIES),
+            .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
+            .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH)
+        ) i_iommu_pdtc (
+            .clk_i              (clk_i),            // Clock
+            .rst_ni             (rst_ni),           // Asynchronous reset active low
 
-        // Flush signals
-        .flush_i            (flush_pdtc),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
-        .flush_dv_i         (flush_dv),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
-        .flush_pv_i         (flush_pv),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
-        .flush_did_i        (flush_did),                 // device_id to be flushed
-        .flush_pid_i        (flush_pid),                 // process_id to be flushed (if flush_pv_i = 1)
+            // Flush signals
+            .flush_i            (flush_pdtc),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
+            .flush_dv_i         (flush_dv),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
+            .flush_pv_i         (flush_pv),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
+            .flush_did_i        (flush_did),                 // device_id to be flushed
+            .flush_pid_i        (flush_pid),                 // process_id to be flushed (if flush_pv_i = 1)
 
-        // Update signals
-        .update_i           (pdtc_update),      // update flag
-        .up_did_i           (ddtc_up_did),      // device ID to be inserted
-        .up_pid_i           (pdtc_up_pid),      // process ID to be inserted
-        .up_content_i       (pdtc_up_content),  // PC to be inserted
+            // Update signals
+            .update_i           (pdtc_update),      // update flag
+            .up_did_i           (ddtc_up_did),      // device ID to be inserted
+            .up_pid_i           (pdtc_up_pid),      // process ID to be inserted
+            .up_content_i       (pdtc_up_content),  // PC to be inserted
 
-        // Lookup signals
-        .lookup_i           (pdtc_access),      // lookup flag
-        .lu_did_i           (device_id_i),      // device_id to tag PDTC
-        .lu_pid_i           (process_id),       // process_id to tag PDTC
-        .lu_content_o       (pdtc_lu_content),  // PC found in PDTC
-        .lu_hit_o           (pdtc_lu_hit)       // hit flag
-    );
+            // Lookup signals
+            .lookup_i           (pdtc_access),      // lookup flag
+            .lu_did_i           (device_id_i),      // device_id to tag PDTC
+            .lu_pid_i           (process_id),       // process_id to tag PDTC
+            .lu_content_o       (pdtc_lu_content),  // PC found in PDTC
+            .lu_hit_o           (pdtc_lu_hit)       // hit flag
+        );
+    end
+    // No process_id support
+    else begin
+        assign pdtc_lu_content  = '0;
+        assign pdtc_lu_hit      = 1'b0;
+    end
+
 
     //# IOTLB: Address Translation Cache
     iommu_iotlb_sv39x4 #(
@@ -508,6 +514,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     iommu_cdw #(
         .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
         .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
+        .InclPID                (InclPID),
         .ArianeCfg              (ArianeCfg)
     ) i_iommu_cdw (
         .clk_i                  (clk_i),                // Clock
@@ -851,7 +858,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                     end
 
                     // Process Context associated
-                    else begin
+                    else if (InclPID) begin
                         
                         // "If DPE is 0 and there is no process_id associated with the transaction, or if pdtp.MODE = Bare"
                         // "perform first-stage translation in Bare mode"
@@ -870,23 +877,25 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                 end
             end
 
-            //# PDTC Lookup
-            if (pdtc_lu_hit) begin
-                
-                // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
-                if (is_s_priv && !pdtc_lu_content.ta.ens) begin
-                    cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
-                    trans_error   = 1'b1;
-                end
+            if (InclPID) begin
+                //# PDTC Lookup
+                if (pdtc_lu_hit) begin
+                    
+                    // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
+                    if (is_s_priv && !pdtc_lu_content.ta.ens) begin
+                        cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                        trans_error   = 1'b1;
+                    end
 
-                else begin
-                    en_stage1       = ~first_stage_is_bare;
-                    en_stage2       = ~second_stage_is_bare;
-                    gscid           = ddtc_lu_content.iohgatp.gscid;
-                    pscid           = pdtc_lu_content.ta.pscid;
-                    iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
-                    iosatp_ppn      = pdtc_lu_content.fsc.ppn;
-                    iotlb_access    = 1'b1;
+                    else begin
+                        en_stage1       = ~first_stage_is_bare;
+                        en_stage2       = ~second_stage_is_bare;
+                        gscid           = ddtc_lu_content.iohgatp.gscid;
+                        pscid           = pdtc_lu_content.ta.pscid;
+                        iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
+                        iosatp_ppn      = pdtc_lu_content.fsc.ppn;
+                        iotlb_access    = 1'b1;
+                    end
                 end
             end
 

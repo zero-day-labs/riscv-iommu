@@ -53,7 +53,7 @@ module iommu_ddtc import ariane_pkg::*; #(
 
     //* DDTC entries: Device Contexts
     struct packed {
-        iommu_pkg::dc_ext_t dc;     // S/VS
+        iommu_pkg::dc_ext_t dc;
     } [DDTC_ENTRIES-1:0] content_q, content_n;
 
     logic [DDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
