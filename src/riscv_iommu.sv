@@ -24,32 +24,64 @@ module riscv_iommu #(
     parameter int unsigned  PSCID_WIDTH         = 20,
     parameter int unsigned  GSCID_WIDTH         = 16,
 
+    // Include process_id
     parameter bit           InclPID             = 0,
+    // Include IOMMU WSI generation support
     parameter bit           InclWSI_IG          = 1,
+    // Include IOMMU MSI generation support
     parameter bit           InclMSI_IG          = 0,
 
-    parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
+    /// AXI Bus Addr width.
+    parameter int   ADDR_WIDTH      = -1,
+    /// AXI Bus data width.
+    parameter int   DATA_WIDTH      = -1,
+    /// AXI ID width
+    parameter int   ID_WIDTH        = -1,
+    /// AXI user width
+    parameter int   USER_WIDTH      = -1,
+    /// AXI AW Channel struct type
+    parameter type aw_chan_t        = logic,
+    /// AXI W Channel struct type
+    parameter type w_chan_t         = logic,
+    /// AXI B Channel struct type
+    parameter type b_chan_t         = logic,
+    /// AXI AR Channel struct type
+    parameter type ar_chan_t        = logic,
+    /// AXI R Channel struct type
+    parameter type r_chan_t         = logic,
+    /// AXI Full request struct type
+    parameter type  axi_req_t       = logic,
+    /// AXI Full response struct type
+    parameter type  axi_rsp_t       = logic,
+    /// AXI-Lite request struct type.
+    parameter type  axi_lite_req_t  = logic,
+    /// AXI-Lite response struct type.
+    parameter type  axi_lite_rsp_t  = logic,
+    /// Regbus request struct type.
+    parameter type  reg_req_t       = logic,
+    /// Regbus response struct type.
+    parameter type  reg_rsp_t       = logic
 ) (
     input  logic clk_i,
-    input  logic rst_ni
+    input  logic rst_ni,
 
     // Translation Request Interface (Slave)
-    input  ariane_axi_soc_pkg::req_t        dev_tr_req_i,
-    output ariane_axi_soc_pkg::resp_t       dev_tr_resp_o,
+    input  axi_req_t    dev_tr_req_i,
+    output axi_rsp_t    dev_tr_resp_o,
 
     // Translation Completion Interface (Master)
-    input  ariane_axi_soc_pkg::resp_t       dev_comp_resp_i,
-    output ariane_axi_soc_pkg::req_t        dev_comp_req_o,
+    input  axi_req_t    dev_comp_resp_i,
+    output axi_rsp_t    dev_comp_req_o,
 
     // Implicit Memory Accesses Interface (Master)
-    input  ariane_axi_soc_pkg::resp_t       mem_resp_i,
-    output ariane_axi_soc_pkg::req_t        mem_req_o,
+    input  axi_req_t    mem_resp_i,
+    output axi_rsp_t    mem_req_o,
 
     // Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
-    input  ariane_axi_soc_pkg::req_t        prog_req_i,
-    output ariane_axi_soc_pkg::resp_t       prog_resp_o,
+    input  axi_req_t    prog_req_i,
+    output axi_rsp_t    prog_resp_o,
 
-    output logic [15:0]                     wsi_wires_o
+    output logic [15:0] wsi_wires_o
 );
 
     // To trigger an address translation. Do NOT set if the requested AXI transaction exceeds a 4kiB address boundary
@@ -258,7 +290,7 @@ module riscv_iommu #(
         .InclPID            (InclPID),
         .InclMSI_IG         (InclMSI_IG),
         .ArianeCfg          (ArianeCfg)
-    ) translation_wrapper (
+    ) i_translation_wrapper (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
 
@@ -339,27 +371,27 @@ module riscv_iommu #(
     );
 
     iommu_regmap_if #(
-        .ADDR_WIDTH     (ariane_axi_soc::AddrWidth),
-        .DATA_WIDTH     (ariane_axi_soc::DataWidth),
-        .ID_WIDTH       (ariane_soc::IdWidth      ),
-        .USER_WIDTH     (ariane_axi_soc::UserWidth),
+        .ADDR_WIDTH     (ADDR_WIDTH     ),
+        .DATA_WIDTH     (DATA_WIDTH     ),
+        .ID_WIDTH       (ID_WIDTH       ),
+        .USER_WIDTH     (USER_WIDTH     ),
         .BUFFER_DEPTH   (), // ?
         .DECOUPLE_W     (), // ?
-        .axi_req_t      (ariane_axi_soc_pkg::req_t),
-        .axi_rsp_t      (ariane_axi_soc_pkg::resp_t),
-        .axi_lite_req_t (axi_lite_req_t),
-        .axi_lite_rsp_t (axi_lite_rsp_t),
-        .reg_req_t      (reg_req_t),
-        .reg_rsp_t      (reg_rsp_t)
+        .axi_req_t      (axi_req_t      ),
+        .axi_rsp_t      (axi_rsp_t      ),
+        .axi_lite_req_t (axi_lite_req_t ),
+        .axi_lite_rsp_t (axi_lite_rsp_t ),
+        .reg_req_t      (reg_req_t      ),
+        .reg_rsp_t      (reg_rsp_t      )
     ) i_iommu_regmap_if (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
+        .clk_i          (clk_i      ),
+        .rst_ni         (rst_ni     ),
 
-        .prog_req_i     (prog_req_i),
+        .prog_req_i     (prog_req_i ),
         .prog_resp_o    (prog_resp_o),
 
-        .reg2hw_o       (reg2hw),
-        .hw2reg_i       (hw2reg)
+        .reg2hw_o       (reg2hw     ),
+        .hw2reg_i       (hw2reg     )
     );
 
     //# Channel selection
@@ -484,52 +516,52 @@ module riscv_iommu #(
     end
 
     axi_demux #(
-        .AxiIdWidth     (ariane_soc::IdWidth),
+        .AxiIdWidth     (ID_WIDTH       ),
         // AXI channel structs
-        .aw_chan_t      ( ariane_axi_soc::aw_chan_t ),
-        .w_chan_t       ( ariane_axi_soc::w_chan_t  ),
-        .b_chan_t       ( ariane_axi_soc::b_chan_t  ),
-        .ar_chan_t      ( ariane_axi_soc::ar_chan_t ),
-        .r_chan_t       ( ariane_axi_soc::r_chan_t  ),
+        .aw_chan_t      ( aw_chan_t     ),
+        .w_chan_t       ( w_chan_t      ),
+        .b_chan_t       ( b_chan_t      ),
+        .ar_chan_t      ( ar_chan_t     ),
+        .r_chan_t       ( r_chan_t      ),
         // AXI request/response
-        .req_t          ( ariane_axi_soc::req_t     ),
-        .resp_t         ( ariane_axi_soc::resp_t    ),
-        .NoMstPorts     (2),
-        .MaxTrans       (32'd2),                //? Not quite sure these values are right
-        .AxiLookBits    (ariane_soc::IdWidth),  // Assuming same value as AXI ID width
-        .FallThrough    (1'b0),
-        .SpillAw        (1'b0),
-        .SpillW         (1'b0),
-        .SpillB         (1'b0),
-        .SpillAr        (1'b0),
-        .SpillR         (1'b0)
+        .req_t          ( axi_req_t     ),
+        .resp_t         ( axi_rsp_t    ),
+        .NoMstPorts     (2              ),
+        .MaxTrans       (32'd2          ),  //? Not quite sure these values are right
+        .AxiLookBits    (ID_WIDTH       ),  // Assuming same value as AXI ID width
+        .FallThrough    (1'b0           ),
+        .SpillAw        (1'b0           ),
+        .SpillW         (1'b0           ),
+        .SpillB         (1'b0           ),
+        .SpillAr        (1'b0           ),
+        .SpillR         (1'b0           )
     ) axi_demux (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
-        .test_i         (1'b0),         // if 1, explicit error return for unmapped register access
-        .slv_aw_select_i(trans_valid & aw_request),
-        .slv_ar_select_i(trans_valid & ar_request),
-        .slv_req_i      (axi_aux_req),
-        .slv_resp_o     (dev_tr_resp_o),
-        .mst_reqs_o     ({dev_comp_req_o, error_req}),  // { 1: mst, 0: error }
-        .mst_resps_i    ({dev_comp_resp_i, error_rsp})   // { 1: mst, 0: error }
+        .clk_i          ( clk_i  ),
+        .rst_ni         ( rst_ni ),
+        .test_i         ( 1'b0   ),         // if 1, explicit error return for unmapped register access
+        .slv_aw_select_i( trans_valid & aw_request     ),
+        .slv_ar_select_i( trans_valid & ar_request     ),
+        .slv_req_i      ( axi_aux_req                  ),
+        .slv_resp_o     ( dev_tr_resp_o                ),
+        .mst_reqs_o     ( {dev_comp_req_o, error_req}  ),  // { 1: mst, 0: error }
+        .mst_resps_i    ( {dev_comp_resp_i, error_rsp} )   // { 1: mst, 0: error }
     );
 
     axi_err_slv #(
-      .AxiIdWidth   (ariane_soc::IdWidth),
-      .req_t        (ariane_axi_soc::req_t),
-      .resp_t       (ariane_axi_soc::resp_t),
-      .Resp         (axi_pkg::RESP_SLVERR),         // error generated by this slave
-      .RespWidth    (ariane_axi_soc::DataWidth),    // data response width, gets zero extended or truncated to r.data.
-      .RespData     (64'hCA11AB1EBADCAB1E),         // hexvalue for data return value
+      .AxiIdWidth   (ID_WIDTH               ),
+      .req_t        (axi_req_t              ),
+      .resp_t       (axi_rsp_t              ),
+      .Resp         (axi_pkg::RESP_SLVERR   ),      // error generated by this slave
+      .RespWidth    (DATA_WIDTH             ),      // data response width, gets zero extended or truncated to r.data.
+      .RespData     (64'hCA11AB1EBADCAB1E   ),      // hexvalue for data return value
       .ATOPs        (1'b1),                         // Activate support for ATOPs.
       .MaxTrans     (1)                             // Maximum # of accepted transactions before stalling
   ) i_axi_err_slv (
-      .clk_i        (clk_i),
-      .rst_ni       (rst_ni),
-      .test_i       (1'b0),
-      .slv_req_i    (error_req),
-      .slv_resp_o   (error_rsp)
+      .clk_i        (clk_i      ),
+      .rst_ni       (rst_ni     ),
+      .test_i       (1'b0       ),
+      .slv_req_i    (error_req  ),
+      .slv_resp_o   (error_rsp  )
   );
     
 endmodule

@@ -77,14 +77,13 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic [3:0]              ddtp_mode_i,    // DDT levels and IOMMU mode
 
     // from DC (for PC walks)
-    //! Similarly to the PTW, we only want to know if second stage is enabled. External logic should verify the scheme...
     input  logic                    en_stage2_i,    // Second-stage translation is enabled
     input  logic [riscv::PPNW-1:0]  pdtp_ppn_i,     // PPN from DC.fsc.PPN
     input  logic [3:0]              pdtp_mode_i,    // PDT levels from DC.fsc.MODE
 
     // CDW implicit translations (Second-stage only)
     input  logic                        ptw_done_i,
-    input  logic                        flush_i,    //! This signal may be externally OR'ed with an overall flush signal
+    input  logic                        flush_i,
     input  logic [riscv::PPNW-1:0]      pdt_ppn_i,
     output logic                        cdw_implicit_access_o,
     output logic                        is_ddt_walk_o,

@@ -38,7 +38,6 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic [PSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
     input  logic [GSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
-    // TODO: If flush and update operations are mutually exclusive, some signals may be shared
     // Update signals
     // input  tlb_update_sv39x4_t      update_i,
     input  logic                    update_i,
@@ -117,9 +116,9 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     riscv::pte_t   g_content;
 
     //-------------
-    //* Translation
+    //# Lookup
     //-------------
-    always_comb begin : translation
+    always_comb begin : lookup
         automatic logic [riscv::GPPN2:0] mask_pn2;
         mask_pn2 = s_stg_en_i ? ((2**(riscv::VPN2+1))-1) : ((2**(riscv::GPPN2+1))-1);  // 2^9 - 1 : 2^11 - 1 
         vpn0 = lu_iova_i[20:12];

@@ -109,10 +109,10 @@ module fq_handler import ariane_pkg::*; #(
 
     /* 
         INFO: When the fqon bit reads 0, the IOMMU guarantees:
-              (i)  That there are no in-flight implicit writes to the FQ in progress;
-              (ii) No new fault records will be written to the fault-queue.
+            (i)  That there are no in-flight implicit writes to the FQ in progress;
+            (ii) No new fault records will be written to the fault-queue.
     */
-    assign fq_on_o = ~(!fq_en_q && !fq_en_i);
+    assign fq_on_o = (fq_en_q | fq_en_i);
 
     // To check if any error bit was cleared by SW
     logic   error_vector;

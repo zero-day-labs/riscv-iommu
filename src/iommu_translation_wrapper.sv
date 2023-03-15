@@ -877,8 +877,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                 end
             end
 
+            //# PDTC Lookup
             if (InclPID) begin
-                //# PDTC Lookup
                 if (pdtc_lu_hit) begin
                     
                     // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
