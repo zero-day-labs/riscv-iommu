@@ -28,12 +28,12 @@ module riscv_iommu #(
 
     parameter bit           InclPID             = 0,
     parameter bit           InclWSI_IG          = 1,
-    parameter bit           InclMSI_IG          = 0,
+    parameter bit           InclMSI_IG          = 0
 
     parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
 ) (
     input  logic clk_i,
-    input  logic rst_ni
+    input  logic rst_ni,
 
     // Translation Request Interface (Slave)
     input  ariane_axi_soc_pkg::req_t        dev_tr_req_i,

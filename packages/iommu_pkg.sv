@@ -185,7 +185,7 @@ package iommu_pkg;
     // Opcodes
     localparam logic [6:0] IOTINVAL = 6'd1;
     localparam logic [6:0] IOFENCE  = 6'd2;
-    localparam logic [6:0] IOTDIR   = 6'd3;
+    localparam logic [6:0] IODIR    = 6'd3;
     localparam logic [6:0] ATS      = 6'd4;
 
     // Func3

@@ -119,6 +119,7 @@ module iommu_ddtc import ariane_pkg::*; #(
 
             // normal replacement
             // only valid entries can be cached
+            //? We should give priority to invalid entries (if present) to be evicted in an update. Else we can evict the LRU
             else if (update_i && replace_en[i] && up_content_i.tc.v) begin
                 
                 // update tags

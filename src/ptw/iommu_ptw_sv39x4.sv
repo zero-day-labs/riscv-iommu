@@ -96,7 +96,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // (IO)PMP
     input  riscv::pmpcfg_t [15:0]           conf_reg_i,
     input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
-    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of access error
+    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
 
     // input registers to receive data from memory
@@ -235,7 +235,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     logic allow_access;
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
-    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : 'b0;
+    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : '0;
 
     // TODO: Insert functional IOPMP.
     pmp #(

@@ -9,7 +9,7 @@
 //
 // Changes: Regtool/reggen does not allow to specify some particular details of the register map structure.
 // Thus, it was necessary to edit some parts of the code:
-//    - HarDATA_WIDTHired registers/fields
+//    - Hardwired registers/fields
 //    - Write external arbiter logic to check illegal values
 
 
@@ -44,14 +44,14 @@ module iommu_regmap_wrapper #(
 
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
-  logic           			reg_we;
-  logic           			reg_re;
-  logic [ADDR_WIDTH-1:0]  	reg_addr;
-  logic [DATA_WIDTH-1:0]  	reg_wdata;
+  logic           			  reg_we;
+  logic           			  reg_re;
+  logic [ADDR_WIDTH-1:0]  reg_addr;
+  logic [DATA_WIDTH-1:0]  reg_wdata;
   logic [STRB_WIDTH-1:0] 	reg_be;
-  logic [DATA_WIDTH-1:0]  	reg_rdata;
-  logic           			reg_error;
-  logic           			reg_ready;
+  logic [DATA_WIDTH-1:0]  reg_rdata;
+  logic           			  reg_error;
+  logic           			  reg_ready;
 
   logic addrmiss, wr_err;
   logic [DATA_WIDTH-1:0] reg_rdata_next;
@@ -3535,12 +3535,6 @@ module iommu_regmap_wrapper #(
 	// assign fctl_be_wd = reg_wdata[0];
 
   // Interrupts can not be generated as MSI (0) if caps.IGS != {0,2}, and can not be generated as WSI (1) if caps.IGS != {1,2}
-  // always_comb begin
-  //   if((addr_hit[1] & reg_we & !reg_error) & 
-  //       (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
-  //       (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10}))
-  //     fctl_wsi_we = 1'b1;
-  // end
   assign fctl_wsi_we = (addr_hit[1] & reg_we & !reg_error) & 
     (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
     (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10});

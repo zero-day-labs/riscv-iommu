@@ -116,7 +116,7 @@ module cq_handler import ariane_pkg::*; #(
               (i)  That no implicit memory accesses to the command queue are in-flight;
               (ii) The command-queue will not generate new implicit loads to the queue memory.
     */
-    assign cq_on_o = ~(!cq_en_q && !cq_en_i);
+    assign cq_on_o = (cq_en_q | cq_en_i);
 
     // To check if any error bit was cleared by SW
     logic   error_vector;
@@ -380,7 +380,6 @@ module cq_handler import ariane_pkg::*; #(
                         A IOFENCE.C command completion, as determined by cqh advancing past the index of the IOFENCE.C
                         command in the CQ, guarantees that all previous commands fetched from the CQ have been
                         completed and committed.
-
                     */
                     IOFENCE: begin
                         /*
@@ -428,7 +427,7 @@ module cq_handler import ariane_pkg::*; #(
                         IODIR.INVAL_PDT guarantees that any previous stores made by a RISC-V hart to the PDT are observed
                         before all subsequent implicit reads from IOMMU to PDT.
                     */
-                    IOTDIR: begin
+                    IODIR: begin
 
                         flush_dv_o  = cmd_iodirinval.dv;
                         flush_did_o = cmd_iodirinval.did;
