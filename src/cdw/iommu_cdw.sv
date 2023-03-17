@@ -33,7 +33,6 @@ module iommu_cdw import ariane_pkg::*; #(
     output logic                                cdw_active_o,           // Set when PTW is walking memory
     output logic                                cdw_error_o,            // set when an error occurred
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,           // Fault code as defined by IOMMU and Priv Spec
-    // TODO: Integrate functional IOPMP
 
     // Leaf checks
     // DC checks
@@ -96,11 +95,6 @@ module iommu_cdw import ariane_pkg::*; #(
     // // Performance counters
     // output logic                    itlb_miss_o,
     // output logic                    dtlb_miss_o,
-
-    // (IO)PMP
-    input  riscv::pmpcfg_t [15:0]           conf_reg_i,
-    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
-    output logic [riscv::PLEN-1:0]         bad_paddr_o    // to return the SPA in case of access error
 );
 
     // DC/PC Update register
@@ -128,10 +122,6 @@ module iommu_cdw import ariane_pkg::*; #(
     assign dc_msi_addr_patt = iommu_pkg::msi_addr_pattern_t'(mem_resp_i.r.data);
     assign pc_ta = iommu_pkg::pc_ta_t'(mem_resp_i.r.data);
     assign pc_fsc = iommu_pkg::fsc_t'(mem_resp_i.r.data);
-
-    //! Nope, DC is 8-DW wide, PC is 2-DW wide, and CVA6 read bursts are 64-bits wide. Read is performed sequentially in the FSM
-    // assign dc = iommu_pkg::dc_ext_t'(data_rdata_q);
-    // assign pc = iommu_pkg::pc_t'(data_rdata_q);
 
     assign nl = iommu_pkg::nl_entry_t'(mem_resp_i.r.data);
 
@@ -200,25 +190,6 @@ module iommu_cdw import ariane_pkg::*; #(
     assign up_pid_o = process_id_q;
     assign up_pc_content_o = pc_q;
 
-    // # IOPMP
-    logic allow_access;
-    logic is_access_err_q, is_access_err_n;
-
-    // TODO: Insert functional IOPMP. Only PMP and PMP entry modules are actually considered
-    pmp #(
-        .PLEN       ( riscv::PLEN            ),
-        .PMP_LEN    ( riscv::PLEN - 2        ),
-        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )  // 8 entries by default
-    ) i_pmp_ptw (
-        .addr_i         ( cdw_pptr_q         ),
-        .priv_lvl_i     ( riscv::PRIV_LVL_S  ), // PTW access are always checked as if in S-Mode
-        .access_type_i  ( riscv::ACCESS_READ ), // PTW only reads
-        // Configuration
-        .addr_reg_i     ( addr_reg_i         ), // address register
-        .conf_reg_i     ( conf_reg_i         ), // config register
-        .allow_o        ( allow_access       )
-    );
-
     //# Context Directory Walker
     always_comb begin : cdw
 
@@ -273,7 +244,6 @@ module iommu_cdw import ariane_pkg::*; #(
 
         cdw_error_o             = 1'b0;
         cause_code_o            = '0;
-        bad_paddr_o             = '0;
         update_dc_o             = 1'b0;
         update_pc_o             = 1'b0;
         pdt_gppn_o              = '0;
@@ -285,7 +255,6 @@ module iommu_cdw import ariane_pkg::*; #(
         state_n                 = state_q;
         is_ddt_walk_n           = is_ddt_walk_q;
         entry_cnt_n             = entry_cnt_q;
-        is_access_err_n         = is_access_err_q;
         cause_n                 = cause_q;
         wait_rlast_n            = wait_rlast_q;
         device_id_n             = device_id_q;
@@ -694,9 +663,6 @@ module iommu_cdw import ariane_pkg::*; #(
                 cdw_error_o         = 1'b1;
                 mem_req_o.r_ready   = 1'b1;     // Set RREADY to finish all transactions
 
-                // Return SPA for access errors
-                if (is_access_err_q) bad_paddr_o = cdw_pptr_q;
-
                 // Set cause code
                 cause_code_o = cause_q;
 
@@ -726,20 +692,13 @@ module iommu_cdw import ariane_pkg::*; #(
             state_n = ERROR;
         end
 
-        // Check if mem access was actually allowed from a PMP perspective
-        if (!allow_access && (state_q == NON_LEAF || state_q == LEAF || state_q == GUEST_TR)) begin
-            update_dc_o = 1'b0;
-            update_pc_o = 1'b0;
-            is_access_err_n'= 1'b1;
-
-            // set cause code
-            if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_ENTRY_LD_ACCESS_FAULT;
-            else cause_n = iommu_pkg::PDT_ENTRY_LD_ACCESS_FAULT;
-
-            // return faulting address in bad_addr
-            cdw_pptr_n = cdw_pptr_q;
-            state_n = ERROR;
-        end
+        /*
+            # Note about IOPMP faults for CDW accesses:
+            IOPMP access faults are reported as failing AXI transactions. If accessing (reading) a DC/PC
+            violates an IOPMP check, the read transaction is responded with an AXI error in the R channel.
+            Custom data can be placed in the RDATA bus to differentiate IOPMP access faults from other 
+            AXI errors.
+        */
     end
 
     // sequential process
@@ -772,7 +731,6 @@ module iommu_cdw import ariane_pkg::*; #(
             device_id_q             <= device_id_n;
             process_id_q            <= process_id_n;
             cause_q                 <= cause_n;
-            is_access_err_q         <= is_access_err_n;
             is_ddt_walk_q           <= is_ddt_walk_n;
             dc_q                    <= dc_n;
             pc_q                    <= pc_n;

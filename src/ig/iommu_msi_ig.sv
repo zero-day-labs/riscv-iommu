@@ -243,7 +243,8 @@ module iommu_msi_ig (
                             state_n             = IDLE;
                             wr_state_n  = AW_REQ;
 
-                            // TODO: Here we also need to check for access errors.
+                            // TODO: IOPMP access faults are reported as AXI faults. We need a way to
+                            // TODO: differentiate these faults from normal AXI faults.
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
                                 // AXI error
                                 state_n = ERROR;

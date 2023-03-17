@@ -288,6 +288,7 @@ module fq_handler import ariane_pkg::*; #(
                     end
 
                     // Check response code
+                    // Here we can also receive IOPMP access faults. However, these are considered as AXI errors.
                     B_RESP: begin
                         if (mem_resp_i.b_valid) begin
                             

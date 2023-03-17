@@ -29,7 +29,7 @@ module iommu_regmap_if #(
     /// AXI-Lite request struct type.
     parameter type  axi_lite_req_t = logic,
     /// AXI-Lite response struct type.
-    parameter type  axi_lite_rsp_t = logic,
+    parameter type  axi_lite_resp_t = logic,
     /// Regbus request struct type.
     parameter type  reg_req_t = logic,
     /// Regbus response struct type.
@@ -53,7 +53,7 @@ module iommu_regmap_if #(
 
     // connection between AXI-Lite slave connector and protocol conversion module
     axi_lite_req_t  axi_lite_req;
-    axi_lite_rsp_t  axi_lite_rsp;
+    axi_lite_resp_t axi_lite_rsp;
 
     // Connection between protocol conversion module and regmap RegIF
     reg_req_t cfg_req;
@@ -73,7 +73,7 @@ module iommu_regmap_if #(
         .full_req_t         (axi_req_t),
         .full_resp_t        (axi_rsp_t),
         .lite_req_t         (axi_lite_req_t),
-        .lite_resp_t        (axi_lite_rsp_t)
+        .lite_resp_t        (axi_lite_resp_t)
     ) i_axi_to_axi_lite (
         .clk_i      (clk_i),    // Clock
         .rst_ni     (rst_ni),   // Asynchronous reset active low
@@ -89,24 +89,24 @@ module iommu_regmap_if #(
     //
     // AXI Lite to Register Interface
     //
-    axi_lite_to_reg_intf #(
-        .DATA_WIDTH     (DATA_WIDTH),
-        .ADDR_WIDTH     (ADDR_WIDTH),
-        .BUFFER_DEPTH   (BUFFER_DEPTH), //? What is the correct value for this?
-        .DECOUPLE_W     (DECOUPLE_W),   //? What is the correct value for this?
-        .axi_lite_req_t (axi_lite_req_t),
-        .axi_lite_rsp_t (axi_lite_rsp_t),
-        .reg_req_t      (reg_req_t),
-        .reg_rsp_t      (reg_rsp_t)
-    ) i_axi_lite_to_reg_intf (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
+    axi_lite_to_reg #(
+        .DATA_WIDTH      (DATA_WIDTH),
+        .ADDR_WIDTH      (ADDR_WIDTH),
+        .BUFFER_DEPTH    (BUFFER_DEPTH), //? What is the correct value for this?
+        .DECOUPLE_W      (DECOUPLE_W),   //? What is the correct value for this?
+        .axi_lite_req_t  (axi_lite_req_t),
+        .axi_lite_rsp_t  (axi_lite_resp_t),
+        .reg_req_t       (reg_req_t),
+        .reg_rsp_t       (reg_rsp_t)
+    ) i_axi_lite_to_reg (
+        .clk_i           (clk_i),
+        .rst_ni          (rst_ni),
 
-        .axi_lite_req_i (axi_lite_req),
-        .axi_lite_rsp_o (axi_lite_rsp),
+        .axi_lite_req_i  (axi_lite_req),
+        .axi_lite_rsp_o  (axi_lite_rsp),
 
-        .reg_req_o      (cfg_req),
-        .reg_rsp_i      (cfg_resp)
+        .reg_req_o       (cfg_req),
+        .reg_rsp_i       (cfg_resp)
     );
 
     //

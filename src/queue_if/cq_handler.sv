@@ -289,6 +289,7 @@ module cq_handler import ariane_pkg::*; #(
                     end
 
                     // Check response code
+                    // Here we can also receive IOPMP faults. However, these are considered as AXI errors.
                     B_RESP: begin
                         if (mem_resp_i.b_valid) begin
                             
@@ -321,6 +322,7 @@ module cq_handler import ariane_pkg::*; #(
                     else cmd_n[63:0]    = mem_resp_i.r.data;
 
                     // Check for AXI transmission errors
+                    // Here we can also receive IOPMP faults. However, these are considered as AXI errors.
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
 
                         state_n         = ERROR;

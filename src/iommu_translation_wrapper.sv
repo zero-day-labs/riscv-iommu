@@ -117,10 +117,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
     output logic [riscv::PLEN-1:0]      translated_addr_o,  // Translated address
     output logic                        trans_error_o,
-
-    // SPA IOPMP
-    input  riscv::pmpcfg_t [15:0]           conf_reg_i,
-    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i
 );
 
     // DDTC
@@ -149,7 +145,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic is_bare_translation;
 
     // PTW error
-    logic ptw_error, ptw_access_error;
+    logic ptw_error;
     logic [(iommu_pkg::CAUSE_LEN-1):0]  ptw_cause_code;
 
     // CDW error
@@ -208,11 +204,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // To determine if transaction has supervisor privilege
     logic   is_s_priv;
     assign  is_s_priv   = (priv_lvl_i == riscv::PRIV_LVL_S);
-
-    // PMP
-    riscv::pmp_access_t pmp_access_type;
-    logic pmp_data_allow;
-    assign pmp_access_type = is_store ? riscv::ACCESS_WRITE : riscv::ACCESS_READ;
 
     // Efective iohgatp.ppn field to introduce in the PTW. May need to be forwarded by the CDW
     logic [riscv::PPNW-1:0] ptw_iohgatp_ppn;
@@ -453,8 +444,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .ptw_active_o           (),                     // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
         .ptw_error_stage2_o     (ptw_error_stage2),     // set when the fault occurred in stage 2
-        .ptw_error_stage2_int_o (ptw_error_stage2_int),                     // set when fault occurred during an implicit access for 1st-stage translation
-        .ptw_iopmp_excep_o      (ptw_access_error),     // set when an (IO)PMP access exception occured
+        .ptw_error_stage2_int_o (ptw_error_stage2_int), // set when fault occurred during an implicit access for 1st-stage translation
         .cause_code_o           (ptw_cause_code),
 
         .en_stage1_i            (ptw_en_stage1),        // Enable signal for stage 1 translation. Defined by DC/PC
@@ -504,9 +494,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .iosatp_ppn_i           (iosatp_ppn),       // ppn from iosatp
         .iohgatp_ppn_i          (ptw_iohgatp_ppn),  // ppn from iohgatp (may be forwarded by the CDW)
 
-        // (IO)PMP
-        .conf_reg_i             (),
-        .addr_reg_i             (),
         .bad_gpaddr_o           (ptw_bad_gpaddr)    // to return the GPA in case of guest page fault
     );
 
@@ -583,17 +570,12 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
         // CDW implicit translations (Second-stage only)
         .ptw_done_i             (cdw_done),
-        .flush_i                (flush_cdw),    //! This signal may be externally OR'ed with an overall flush signal
+        .flush_i                (flush_cdw),
         .pdt_ppn_i              (iotlb_up_g_content.ppn),
         .cdw_implicit_access_o  (cdw_implicit_access),
         .is_ddt_walk_o          (is_ddt_walk),
         .pdt_gppn_o             (pdt_gppn),
-        .iohgatp_ppn_fw_o       (iohgatp_ppn_fw), // to forward iohgatp.PPN to PTW when translating pdtp.PPN
-
-        // (IO)PMP
-        .conf_reg_i             (),
-        .addr_reg_i             (),
-        .bad_paddr_o            ()    // to return the SPA in case of access error
+        .iohgatp_ppn_fw_o       (iohgatp_ppn_fw)  // to forward iohgatp.PPN to PTW when translating pdtp.PPN
     );
 
     //# Command Queue
@@ -972,11 +954,13 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                     end
                 end
 
-                if(!pmp_data_allow) begin
-                    trans_valid_o   = 1'b0;
-                    cause_code    = (is_store) ? iommu_pkg::ST_ACCESS_FAULT : iommu_pkg::LD_ACCESS_FAULT;
-                    trans_error   = 1'b1;
-                end
+                /*
+                    # Note about IOPMP faults for translated IOVAs:
+                    IOPMP access faults are reported as failing AXI transactions. After translating the IOVA,
+                    the AXI transaction continues without IOMMU intervention (data is opaque to the IOMMU).
+                    If the translated physical address violates an IOPMP check, the requesting device will be
+                    responded by the IOPMP with an AXI error.
+                */
             end
 
             // No stage is enabled and input address does not correspond to a MSI address
@@ -991,25 +975,10 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         //# Check for errors
         // If we had to walk memory is because we had a miss. As we had an exception,
         // the corresponding cache/TLB was not updated, and translation was never set to valid
-        if (ptw_error || ptw_access_error || cdw_error) begin
+        if (ptw_error || cdw_error) begin
             cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
             trans_error   = 1'b1;
         end
     end
-
-    // Load/store PMP check
-    pmp #(
-        .PLEN       ( riscv::PLEN            ),
-        .PMP_LEN    ( riscv::PLEN - 2        ),
-        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )
-    ) i_pmp_data (
-        .addr_i        ( translated_addr_o   ),
-        .priv_lvl_i    ( priv_lvl_i          ),
-        .access_type_i ( pmp_access_type     ),
-        // Configuration
-        .conf_addr_i   ( pmpaddr_i           ),
-        .conf_i        ( pmpcfg_i            ),
-        .allow_o       ( pmp_data_allow      )
-    );
 
 endmodule

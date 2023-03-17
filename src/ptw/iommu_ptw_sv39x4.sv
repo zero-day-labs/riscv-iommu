@@ -38,7 +38,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
     output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
     output logic                                ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
-    output logic                                ptw_iopmp_excep_o,      // set when an (IO)PMP access exception occured
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
     // TODO: Integrate functional IOPMP
 
@@ -93,9 +92,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // output logic                    itlb_miss_o,
     // output logic                    dtlb_miss_o,
 
-    // (IO)PMP
-    input  riscv::pmpcfg_t [15:0]           conf_reg_i,
-    input  logic [15:0][riscv::PLEN-3:0]    addr_reg_i,
     output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
 
@@ -116,8 +112,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
       IDLE,
       WAIT_GRANT,
       PTE_LOOKUP,
-      PROPAGATE_ERROR,
-      PROPAGATE_ACCESS_ERROR
+      PROPAGATE_ERROR
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -236,21 +231,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : '0;
-
-    // TODO: Insert functional IOPMP.
-    pmp #(
-        .PLEN       ( riscv::PLEN            ),
-        .PMP_LEN    ( riscv::PLEN - 2        ),
-        .NR_ENTRIES ( ArianeCfg.NrPMPEntries )  // 8 entries by default
-    ) i_pmp_ptw (
-        .addr_i         ( ptw_pptr_q         ),
-        .priv_lvl_i     ( riscv::PRIV_LVL_S  ), // PTW access are always checked as if in S-Mode
-        .access_type_i  ( riscv::ACCESS_READ ), // PTW only reads
-        // Configuration
-        .addr_reg_i     ( addr_reg_i         ), // address register
-        .conf_reg_i     ( conf_reg_i         ), // config register
-        .allow_o        ( allow_access       )
-    );
 
     //# Page table walker
     always_comb begin : ptw
@@ -672,25 +652,13 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         end
                     end
                     
-                    // Check if this access was actually allowed from a PMP perspective
-                    if (!allow_access) begin
-                        
-                        // Normal address translation
-                        if(!msi_translation_q) begin
-                            // "If accessing pte violates a PMA or PMP check, raise an access-fault exception corresponding to the original access type."
-                            if (is_store_i) cause_n = iommu_pkg::ST_ACCESS_FAULT;
-                            else            cause_n = iommu_pkg::LD_ACCESS_FAULT;
-                        end
-
-                        // MSI address translation
-                        else cause_n = iommu_pkg::MSI_PTE_LD_ACCESS_FAULT;
-
-                        // we have to return the failed address in bad_addr
-                        ptw_pptr_n  = ptw_pptr_q;
-                        update_o    = 1'b0;
-                        cdw_done_o  = 1'b0;
-                        state_n     = PROPAGATE_ACCESS_ERROR;
-                    end
+                    /*
+                        # Note about IOPMP faults for PTW accesses:
+                        IOPMP access faults are reported as failing AXI transactions. If accessing (reading) a PTE
+                        violates an IOPMP check, the read transaction is responded with an AXI error in the R channel.
+                        Custom data can be placed in the RDATA bus to differentiate IOPMP access faults from other 
+                        AXI errors.
+                    */
 
                     // Check for AXI errors
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
@@ -723,13 +691,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 end
                 else cause_code_o = cause_q;
                 ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
-                flush_cdw_o = cdw_implicit_access_q;
-            end
-
-            PROPAGATE_ACCESS_ERROR: begin
-                state_n     = IDLE;
-                ptw_iopmp_excep_o = 1'b1;
-                cause_code_o = cause_q;
                 flush_cdw_o = cdw_implicit_access_q;
             end
 

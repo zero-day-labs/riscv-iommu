@@ -58,7 +58,7 @@ module riscv_iommu #(
     /// AXI-Lite request struct type.
     parameter type  axi_lite_req_t  = logic,
     /// AXI-Lite response struct type.
-    parameter type  axi_lite_rsp_t  = logic,
+    parameter type  axi_lite_resp_t = logic,
     /// Regbus request struct type.
     parameter type  reg_req_t       = logic,
     /// Regbus response struct type.
@@ -373,27 +373,27 @@ module riscv_iommu #(
     );
 
     iommu_regmap_if #(
-        .ADDR_WIDTH     (ADDR_WIDTH     ),
-        .DATA_WIDTH     (DATA_WIDTH     ),
-        .ID_WIDTH       (ID_WIDTH       ),
-        .USER_WIDTH     (USER_WIDTH     ),
-        .BUFFER_DEPTH   (), // ?
-        .DECOUPLE_W     (), // ?
-        .axi_req_t      (axi_req_t      ),
-        .axi_rsp_t      (axi_rsp_t      ),
-        .axi_lite_req_t (axi_lite_req_t ),
-        .axi_lite_rsp_t (axi_lite_rsp_t ),
-        .reg_req_t      (reg_req_t      ),
-        .reg_rsp_t      (reg_rsp_t      )
+        .ADDR_WIDTH      (ADDR_WIDTH      ),
+        .DATA_WIDTH      (DATA_WIDTH      ),
+        .ID_WIDTH        (ID_WIDTH        ),
+        .USER_WIDTH      (USER_WIDTH      ),
+        .BUFFER_DEPTH    (4               ), // Max 4 outstanding transaction at the programming interface
+        .DECOUPLE_W      (1               ), // Channel W is decoupled with registers
+        .axi_req_t       (axi_req_t       ),
+        .axi_rsp_t       (axi_rsp_t       ),
+        .axi_lite_req_t  (axi_lite_req_t  ),
+        .axi_lite_resp_t (axi_lite_resp_t ),
+        .reg_req_t       (reg_req_t       ),
+        .reg_rsp_t       (reg_rsp_t       )
     ) i_iommu_regmap_if (
-        .clk_i          (clk_i      ),
-        .rst_ni         (rst_ni     ),
+        .clk_i           (clk_i           ),
+        .rst_ni          (rst_ni          ),
 
-        .prog_req_i     (prog_req_i ),
-        .prog_resp_o    (prog_resp_o),
+        .prog_req_i      (prog_req_i      ),
+        .prog_resp_o     (prog_resp_o     ),
 
-        .reg2hw_o       (reg2hw     ),
-        .hw2reg_i       (hw2reg     )
+        .reg2hw_o        (reg2hw          ),
+        .hw2reg_i        (hw2reg          )
     );
 
     //# Channel selection
@@ -527,9 +527,8 @@ module riscv_iommu #(
         .r_chan_t       ( r_chan_t      ),
         // AXI request/response
         .req_t          ( axi_req_t     ),
-        .resp_t         ( axi_rsp_t    ),
+        .resp_t         ( axi_rsp_t     ),
         .NoMstPorts     (2              ),
-        .MaxTrans       (32'd2          ),  //? Not quite sure these values are right
         .AxiLookBits    (ID_WIDTH       ),  // Assuming same value as AXI ID width
         .FallThrough    (1'b0           ),
         .SpillAw        (1'b0           ),
