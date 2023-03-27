@@ -1,0 +1,3 @@
+[submodule "src/test_framework"]
+	path = src/test_framework
+	url = git@github.com:malejo97/riscv-hyp-tests.git
