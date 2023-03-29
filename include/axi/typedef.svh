@@ -172,7 +172,7 @@
     logic          ar_valid;                                                               \
     logic          r_ready;                                                                \
   } req_lite_t;
-`define AXI_LITE_TYPEDEF_RSP_T(resp_lite_t, b_chan_lite_t, r_chan_lite_t)   \
+`define AXI_LITE_TYPEDEF_RESP_T(resp_lite_t, b_chan_lite_t, r_chan_lite_t)  \
   typedef struct packed {                                                   \
     logic          aw_ready;                                                \
     logic          w_ready;                                                 \
@@ -204,7 +204,7 @@
   `AXI_LITE_TYPEDEF_AR_CHAN_T(__name``_ar_chan_t, __addr_t)                                           \
   `AXI_LITE_TYPEDEF_R_CHAN_T(__name``_r_chan_t, __data_t)                                             \
   `AXI_LITE_TYPEDEF_REQ_T(__name``_req_t, __name``_aw_chan_t, __name``_w_chan_t, __name``_ar_chan_t)  \
-  `AXI_LITE_TYPEDEF_RSP_T(__name``_rsp_t, __name``_b_chan_t, __name``_r_chan_t)
+  `AXI_LITE_TYPEDEF_RESP_T(__name``_resp_t, __name``_b_chan_t, __name``_r_chan_t)
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 `endif

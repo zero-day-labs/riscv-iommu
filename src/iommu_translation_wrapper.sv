@@ -35,9 +35,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     parameter int unsigned  GSCID_WIDTH         = 16,
 
     parameter bit           InclPID             = 0,
-    parameter bit           InclMSI_IG          = 0,
-
-    parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
+    parameter bit           InclMSI_IG          = 0
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
@@ -54,8 +52,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     input  riscv::priv_lvl_t                priv_lvl_i,             // Privilege mode associated with the transaction
 
     // Memory Bus
-    input  ariane_axi_pkg::resp_t       mem_resp_i,
-    output ariane_axi_pkg::req_t        mem_req_o,
+    input  ariane_axi::resp_t       mem_resp_i,
+    output ariane_axi::req_t        mem_req_o,
 
     // From Regmap
     input  iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities_i,
@@ -101,8 +99,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        cq_ip_o,
     output logic                        fq_ip_o,
     // icvec
-    input  logic                        civ_i,
-    input  logic                        fiv_i,
+    input  logic [3:0]                  civ_i,
+    input  logic [3:0]                  fiv_i,
     // MSI config table
     input  logic [53:0]                 msi_addr_x_i[16],
     input  logic [31:0]                 msi_data_x_i[16],
@@ -116,7 +114,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        trans_valid_o,      // Translation completed
     output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
     output logic [riscv::PLEN-1:0]      translated_addr_o,  // Translated address
-    output logic                        trans_error_o,
+    output logic                        trans_error_o
 );
 
     // DDTC
@@ -277,24 +275,28 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic [PSCID_WIDTH-1:0]         flush_pscid;
 
     // AXI interfaces
-    ariane_axi_pkg::resp_t  ptw_axi_resp;
-    ariane_axi_pkg::req_t   ptw_axi_req;
-    ariane_axi_pkg::resp_t  cdw_axi_resp;
-    ariane_axi_pkg::req_t   cdw_axi_req;
-    ariane_axi_pkg::resp_t  cq_axi_resp;
-    ariane_axi_pkg::req_t   cq_axi_req;
-    ariane_axi_pkg::resp_t  fq_axi_resp;
-    ariane_axi_pkg::req_t   fq_axi_req;
-    ariane_axi_pkg::resp_t  ig_axi_resp;
-    ariane_axi_pkg::req_t   ig_axi_req;
+    ariane_axi::resp_t  ptw_axi_resp;
+    ariane_axi::req_t   ptw_axi_req;
+    ariane_axi::resp_t  cdw_axi_resp;
+    ariane_axi::req_t   cdw_axi_req;
+    ariane_axi::resp_t  cq_axi_resp;
+    ariane_axi::req_t   cq_axi_req;
+    ariane_axi::resp_t  fq_axi_resp;
+    ariane_axi::req_t   fq_axi_req;
+    ariane_axi::resp_t  ig_axi_resp;
+    ariane_axi::req_t   ig_axi_req;
 
 
     // More wires
-    logic                   ptw_error_stage2;   // Set when a guest page fault occurs
-    logic                   ptw_bad_gpaddr;
+    logic                       ptw_error_stage2;   // Set when a guest page fault occurs
+    logic [riscv::GPLEN-1:0]    ptw_bad_gpaddr;
 
     //# Arbitration and mux logic to assign AXI4 Master IF to a module
     mem_if_wrapper i_mem_if_wrapper (
+
+        .clk_i          (clk_i),
+        .rst_ni         (rst_ni),
+
         // External ports: To AXI Bus
         .mem_resp_i     (mem_resp_i),
         .mem_req_o      (mem_req_o),
@@ -434,8 +436,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     //# Page Table Walker
     iommu_ptw_sv39x4 #(
         .PSCID_WIDTH        (PSCID_WIDTH),
-        .GSCID_WIDTH        (GSCID_WIDTH),
-        .ArianeCfg          (ArianeCfg)
+        .GSCID_WIDTH        (GSCID_WIDTH)
     ) i_iommu_ptw_sv39x4 (
         .clk_i              (clk_i),                  // Clock
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
@@ -450,6 +451,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .en_stage1_i            (ptw_en_stage1),        // Enable signal for stage 1 translation. Defined by DC/PC
         .en_stage2_i            (ptw_en_stage2),        // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
+        .is_rx_i                (is_rx),                // Read-for-execute
 
         // PTW AXI Master memory interface
         .mem_resp_i             (ptw_axi_resp),           // Response port from memory
@@ -501,8 +503,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     iommu_cdw #(
         .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
         .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
-        .InclPID                (InclPID),
-        .ArianeCfg              (ArianeCfg)
+        .InclPID                (InclPID)
     ) i_iommu_cdw (
         .clk_i                  (clk_i),                // Clock
         .rst_ni                 (rst_ni),               // Asynchronous reset active low
@@ -522,7 +523,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .caps_sv39_i            (capabilities_i.sv39.q),
         .caps_sv48_i            (capabilities_i.sv48.q), 
         .caps_sv57_i            (capabilities_i.sv57.q),
-        .fctl_glx_i             (fctl_i.gxl.q), 
+        .fctl_gxl_i             (fctl_i.gxl.q),
         .caps_sv32x4_i          (capabilities_i.sv32x4.q),
         .caps_sv39x4_i          (capabilities_i.sv39x4.q),
         .caps_sv48x4_i          (capabilities_i.sv48x4.q),
@@ -583,15 +584,14 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
             .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
             .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
             .PSCID_WIDTH        (PSCID_WIDTH),
-            .GSCID_WIDTH        (GSCID_WIDTH),
-            .ArianeCfg          (ArianeCfg)
+            .GSCID_WIDTH        (GSCID_WIDTH)
     ) i_cq_handler (
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
         // Regmap
         .cq_base_ppn_i          (cqb_ppn_i),        // Base address of the CQ in memory (Should be aligned. See Spec)
-        .cq_size_i              (cq_size_i),        // Size of the CQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+        .cq_size_i              (cqb_size_i),        // Size of the CQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
 
         .cq_en_i                (cq_en_i),          // CQ enable bit from cqcsr, handled by SW
         .cq_ie_i                (cq_ie_i),          // CQ interrupt enable bit from cqcsr, handled by SW
@@ -643,18 +643,18 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .mem_req_o              (cq_axi_req)
     );
 
+    /* verilator lint_off WIDTH */
     //# Fault/Event Queue
     fq_handler #(
         .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
-        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
-        .ArianeCfg              (ArianeCfg)
+        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH)
     ) i_fq_handler ( 
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
         // Regmap
         .fq_base_ppn_i          (fqb_ppn_i),        // Base address of the FQ in memory (Should be aligned. See Spec)
-        .fq_size_i              (fq_size_i),        // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+        .fq_size_i              (fqb_size_i),        // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
 
         .fq_en_i                (fq_en_i),          // FQ enable bit from fqcsr, handled by SW
         .fq_ie_i                (fq_ie_i),          // FQ interrupt enable bit from fqcsr, handled by SW
@@ -692,6 +692,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .mem_resp_i             (fq_axi_resp),
         .mem_req_o              (fq_axi_req)
     );
+    /* verilator lint_on WIDTH */
 
     //# MSI Interrupt Generation
     if (InclMSI_IG) begin : gen_msi_ig_support
@@ -940,7 +941,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
                                 // 1-S: 2M | 2-S: 1G:   {PPN[2], GPPN[1], VPN[0],  OFF}
                                 4'b1001:    translated_addr_o[29:12] = {iotlb_lu_content.ppn[29:21], iova_i[20:12]};
-                                default: 
+                                
+                                default:;
                                     // 1-S: 4k | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
                                     // 1-S: 2M | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
                                     // 1-S: 1G | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}

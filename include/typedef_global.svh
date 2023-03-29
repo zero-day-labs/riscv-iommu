@@ -2,9 +2,9 @@
 // Created for particular use in development process
 //
 
-`include "include/typedef_reg.svh"
-`include "include/typedef_axi.svh"
-`include "packages/axi_pkg.sv"
+`include "register_interface/typedef.svh"
+`include "axi/typedef.svh"
+`include "axi_pkg.sv"
 
 `ifndef GLOBAL_TYPEDEF_SVH
 `define GLOBAL_TYPEDEF_SVH

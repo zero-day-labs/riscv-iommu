@@ -15,13 +15,15 @@
  * Description: Contains Ariane's AXI ports, does not contain user ports
  */
 
+ `include "ariane_pkg.sv"
+
 package ariane_axi;
 
     // used in axi_adapter.sv
     typedef enum logic { SINGLE_REQ, CACHE_LINE_REQ } ad_req_t;
 
     localparam IdWidth   = 4; // Recommended by AXI standard
-    localparam UserWidth = 1;
+    localparam UserWidth = ariane_pkg::AXI_USER_WIDTH;
     localparam AddrWidth = 64;
     localparam DataWidth = 64;
     localparam StrbWidth = DataWidth / 8;
@@ -65,7 +67,7 @@ package ariane_axi;
 
     // AR Channel
     typedef struct packed {
-        id_t              id;
+        id_t             id;
         addr_t            addr;
         axi_pkg::len_t    len;
         axi_pkg::size_t   size;
