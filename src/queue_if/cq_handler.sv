@@ -7,9 +7,9 @@
 
 //! NOTES:
 /*
-    -   I think the verification of the base_ppn alignment must be performed at initialization, and not by this module.
-        For Nº of entries <= 7, the base PPN must be aligned to 4KiB, so bits [11:0] must be 0.
-        For Nº of entries  > 7, the MSB index increases by one for each level (for 8 -> [12:0]; for 9 -> [13:0]; etc).
+    -   SW must ensure that the CQ is properly aligned according to its size:
+        For log2(N)-1 <= 7, the base PPN must be aligned to 4KiB, so bits [11:0] must be 0.
+        For log2(N)-1  > 7, the MSB index increases by one for each level (for 8 -> [12:0]; for 9 -> [13:0]; etc).
     -   Invalidations are performed by the TLBs through combinational logic in one single cycle.
     -   Registers that are handled both by SW and HW have an input port and an output port.
     !-   IOMMU support for WSI (caps.IGS) and enable of WSI (fctl.WSI) must be checked externally before setting cqcsr.fence_w_ip
@@ -18,12 +18,13 @@
         Signal is only cleared by SW.
 */
 
+/* verilator lint_off WIDTH */
+
 module cq_handler import ariane_pkg::*; #(
     parameter int unsigned DEVICE_ID_WIDTH = 24,
     parameter int unsigned PROCESS_ID_WIDTH  = 20,
     parameter int unsigned PSCID_WIDTH = 20,
-    parameter int unsigned GSCID_WIDTH = 16,
-    parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
+    parameter int unsigned GSCID_WIDTH = 16
 ) (
     input  logic clk_i,
     input  logic rst_ni,
@@ -79,8 +80,8 @@ module cq_handler import ariane_pkg::*; #(
     output logic [PSCID_WIDTH-1:0]      flush_pscid_o,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
     // Memory Bus
-    input  ariane_axi_pkg::resp_t   mem_resp_i,
-    output ariane_axi_pkg::req_t    mem_req_o
+    input  ariane_axi_soc::resp_t   mem_resp_i,
+    output ariane_axi_soc::req_t    mem_req_o
 );
 
     // FSM states
@@ -146,18 +147,18 @@ module cq_handler import ariane_pkg::*; #(
         // Default values
         // AXI parameters
         // AW
-        mem_req_o.aw.id         = 4'b0000;
-        mem_req_o.aw.addr       = cq_pptr_q;
-        mem_req_o.aw.len        = 8'b0;
-        mem_req_o.aw.size       = 3'b011;
-        mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
-        mem_req_o.aw.lock       = '0;
-        mem_req_o.aw.cache      = '0;
-        mem_req_o.aw.prot       = '0;
-        mem_req_o.aw.qos        = '0;
-        mem_req_o.aw.region     = '0;
-        mem_req_o.aw.atop       = '0;
-        mem_req_o.aw.user       = '0;
+        mem_req_o.aw.id                     = 4'b0000;
+        mem_req_o.aw.addr[riscv::PLEN-1:0]  = cq_pptr_q;
+        mem_req_o.aw.len                    = 8'b0;
+        mem_req_o.aw.size                   = 3'b011;
+        mem_req_o.aw.burst                  = axi_pkg::BURST_FIXED;
+        mem_req_o.aw.lock                   = '0;
+        mem_req_o.aw.cache                  = '0;
+        mem_req_o.aw.prot                   = '0;
+        mem_req_o.aw.qos                    = '0;
+        mem_req_o.aw.region                 = '0;
+        mem_req_o.aw.atop                   = '0;
+        mem_req_o.aw.user                   = '0;
 
         mem_req_o.aw_valid      = 1'b0;                 // IOMMU may write to memory when executing IOFENCE.C
 
@@ -173,18 +174,17 @@ module cq_handler import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0010;              //? Can we define any value for AR.ID?
-        mem_req_o.ar.addr       = cq_pptr_q;            // Physical address to access
-        mem_req_o.ar.len        = 8'd1;                 // CQ entries are 16-bytes wide (2 beats)
-        mem_req_o.ar.size       = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst      = axi_pkg::BURST_INCR;  // Incremental start address
-        mem_req_o.ar.lock       = '0;
-        mem_req_o.ar.cache      = '0;
-        mem_req_o.ar.prot       = '0;
-        mem_req_o.ar.qos        = '0;
-        mem_req_o.ar.region     = '0;
-        mem_req_o.ar.atop       = '0;
-        mem_req_o.ar.user       = '0;
+        mem_req_o.ar.id                     = 4'b0010;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.addr[riscv::PLEN-1:0]  = cq_pptr_q;            // Physical address to access
+        mem_req_o.ar.len                    = 8'd1;                 // CQ entries are 16-bytes wide (2 beats)
+        mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst                  = axi_pkg::BURST_INCR;  // Incremental start address
+        mem_req_o.ar.lock                   = '0;
+        mem_req_o.ar.cache                  = '0;
+        mem_req_o.ar.prot                   = '0;
+        mem_req_o.ar.qos                    = '0;
+        mem_req_o.ar.region                 = '0;
+        mem_req_o.ar.user                   = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
 
@@ -243,9 +243,7 @@ module cq_handler import ariane_pkg::*; #(
                     else if (cq_tail_i != masked_head) begin
 
                         // Set pptr with the paddr of the next entry
-                        if (cq_size_i <= 7) cq_pptr_n = {cq_base_ppn_i, 12'b0} | {masked_head, 4'b0};
-                        else                cq_pptr_n = {cq_base_ppn_i << (cq_size_i+5)} | {masked_head, 4'b0};
-
+                        cq_pptr_n = {cq_base_ppn_i, 12'b0} | {masked_head, 4'b0};
                         state_n = FETCH;
                     end
                 end
@@ -345,7 +343,7 @@ module cq_handler import ariane_pkg::*; #(
                         IOTINVAL.GVMA ensures that previous stores made to the second-stage page tables are observed
                         before all subsequent implicit reads from IOMMU to the corresponding second-stage page tables.
                     */
-                    IOTINVAL: begin
+                    iommu_pkg::IOTINVAL: begin
 
                         flush_av_o      = cmd_iotinval.av;
                         flush_gv_o      = cmd_iotinval.gv;
@@ -383,7 +381,7 @@ module cq_handler import ariane_pkg::*; #(
                         command in the CQ, guarantees that all previous commands fetched from the CQ have been
                         completed and committed.
                     */
-                    IOFENCE: begin
+                    iommu_pkg::IOFENCE: begin
                         /*
                             INFO:
                             I think this command makes sense when implementing ATS commands, or any other command that
@@ -407,7 +405,7 @@ module cq_handler import ariane_pkg::*; #(
 
                             // "If AV=1, the IOMMU writes DATA to memory at a 4-byte aligned address ADDR[63:2] * 4"
                             if(cmd_iofence.av) begin
-                                cq_pptr_n   = {cmd_iofence.addr, 2'b0};
+                                cq_pptr_n   = {cmd_iofence.addr[riscv::PLEN-1-2:0], 2'b0};
                                 wr_state_n  = AW_REQ;
                                 state_n     = WRITE;
                             end
@@ -429,7 +427,7 @@ module cq_handler import ariane_pkg::*; #(
                         IODIR.INVAL_PDT guarantees that any previous stores made by a RISC-V hart to the PDT are observed
                         before all subsequent implicit reads from IOMMU to PDT.
                     */
-                    IODIR: begin
+                    iommu_pkg::IODIR: begin
 
                         flush_dv_o  = cmd_iodirinval.dv;
                         flush_did_o = cmd_iodirinval.did;
@@ -460,7 +458,7 @@ module cq_handler import ariane_pkg::*; #(
                         end
                     end
 
-                    ATS: begin
+                    iommu_pkg::ATS: begin
                         // TODO: Future Work
                     end
 
@@ -470,6 +468,7 @@ module cq_handler import ariane_pkg::*; #(
                         error_wen_o = 1'b1;
                         state_n     = ERROR;
                     end
+                    
                 endcase
             end
 
@@ -509,3 +508,5 @@ module cq_handler import ariane_pkg::*; #(
     end
     
 endmodule
+
+/* verilator lint_on WIDTH */

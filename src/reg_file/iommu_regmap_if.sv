@@ -5,23 +5,27 @@
 // the Slave AXILite interface.
 //
 
-`include "packages/iommu_reg_pkg_exp.sv"
+`include "packages/iommu_reg_pkg.sv"
 `include "include/typedef_global.svh"
 
 module iommu_regmap_if #(
     /// The width of the address.
-    parameter int   ADDR_WIDTH = -1,
+    parameter int   ADDR_WIDTH = 64,
     /// The width of the data.
-    parameter int   DATA_WIDTH = -1,
+    parameter int   DATA_WIDTH = 64,
     /// AXI ID width
-    parameter int   ID_WIDTH  = -1,
+    parameter int   ID_WIDTH  = 4,
     /// AXI user width
-    parameter int   USER_WIDTH  = -1,
+    parameter int   USER_WIDTH  = 0,
     /// Buffer depth (how many outstanding transactions do we allow)
     parameter int   BUFFER_DEPTH = 2,
     /// Whether the AXI-Lite W channel should be decoupled with a register. This
     /// can help break long paths at the expense of registers.
     parameter bit   DECOUPLE_W = 1,
+    // Include IOMMU WSI generation support
+    parameter bit   InclWSI_IG = 1,
+    // Include IOMMU MSI generation support
+    parameter bit   InclMSI_IG = 0,
     /// AXI Full request struct type
     parameter type  axi_req_t = logic,
     /// AXI Full response struct type
@@ -115,6 +119,8 @@ module iommu_regmap_if #(
     iommu_regmap_wrapper #(
         .ADDR_WIDTH (ADDR_WIDTH),
         .DATA_WIDTH (DATA_WIDTH),
+        .InclWSI_IG (InclWSI_IG),
+        .InclMSI_IG (InclMSI_IG),
         .reg_req_t  (reg_req_t),
         .reg_rsp_t  (reg_rsp_t)
     ) i_iommu_regmap_wrapper (

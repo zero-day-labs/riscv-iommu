@@ -14,14 +14,19 @@
 
 
 `include "include/assertions.svh"
-`include "packages/iommu_reg_pkg_exp.sv"
+`include "packages/iommu_reg_pkg.sv"
 `include "packages/iommu_field_pkg.sv"
-`include "include/typedef_reg.svh"
-`include "include/typedef_global.svh"
+`include "register_interface/typedef.svh"
 
 module iommu_regmap_wrapper #(
     parameter int 			ADDR_WIDTH = 64,
     parameter int 			DATA_WIDTH = 64,
+
+    // Include IOMMU WSI generation support
+    parameter bit       InclWSI_IG = 1,
+    // Include IOMMU MSI generation support
+    parameter bit       InclMSI_IG = 0,
+
     parameter type 			reg_req_t = logic,
     parameter type 			reg_rsp_t = logic,
 	  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8)
@@ -46,7 +51,7 @@ module iommu_regmap_wrapper #(
   // EXP: Register signals to connect the SW register interface port to the register file.
   logic           			  reg_we;
   logic           			  reg_re;
-  logic [ADDR_WIDTH-1:0]  reg_addr;
+  logic [12-1:0]          reg_addr;
   logic [DATA_WIDTH-1:0]  reg_wdata;
   logic [STRB_WIDTH-1:0] 	reg_be;
   logic [DATA_WIDTH-1:0]  reg_rdata;
@@ -116,9 +121,9 @@ module iommu_regmap_wrapper #(
   logic 		fctl_wsi_qs;
   logic 		fctl_wsi_wd;
   logic 		fctl_wsi_we;
-  logic 		fctl_glx_qs;
-  logic 		fctl_glx_wd;
-  logic 		fctl_glx_we;
+  logic 		fctl_gxl_qs;
+  logic 		fctl_gxl_wd;
+  logic 		fctl_gxl_we;
 
   // ddtp
   logic [3:0] 	ddtp_iommu_mode_qs;
@@ -1089,18 +1094,18 @@ module iommu_regmap_wrapper #(
   );
 
 
-  //   F[glx]: 2:2
+  //   F[gxl]: 2:2
   iommu_field #(
     .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
     .RESVAL  (1'h0)
-  ) u_fctl_glx (
+  ) u_fctl_gxl (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (fctl_glx_we),
-    .wd     (fctl_glx_wd),
+    .we     (fctl_gxl_we),
+    .wd     (fctl_gxl_wd),
 
     // from internal hardware
     .de     ('0),
@@ -1109,10 +1114,10 @@ module iommu_regmap_wrapper #(
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.fctl.glx.q ),
+    .q      (reg2hw.fctl.gxl.q ),
 
     // to register interface (read)
-    .qs     (fctl_glx_qs)
+    .qs     (fctl_gxl_qs)
   );
 
 
@@ -3540,8 +3545,8 @@ module iommu_regmap_wrapper #(
     (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10});
   assign fctl_wsi_wd = reg_wdata[1];
 
-  assign fctl_glx_we = addr_hit[1] & reg_we & !reg_error;
-  assign fctl_glx_wd = reg_wdata[2];
+  assign fctl_gxl_we = addr_hit[1] & reg_we & !reg_error;
+  assign fctl_gxl_wd = reg_wdata[2];
 
   // Only values less or equal than 4 can be written to ddtp.iommu_mode
   assign ddtp_iommu_mode_we = addr_hit[2] & reg_we & !reg_error & (reg_wdata[3:0] <= 4);
@@ -3807,7 +3812,7 @@ module iommu_regmap_wrapper #(
       addr_hit[1]: begin
         reg_rdata_next[0] = fctl_be_qs;
         reg_rdata_next[1] = fctl_wsi_qs;
-        reg_rdata_next[2] = fctl_glx_qs;
+        reg_rdata_next[2] = fctl_gxl_qs;
         reg_rdata_next[15:3] = '0;
         reg_rdata_next[31:16] = '0;
         reg_rdata_next[63:32] = '0;

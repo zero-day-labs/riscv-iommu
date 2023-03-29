@@ -15,12 +15,18 @@
  * Description: Common RISC-V definitions.
  */
 
+`ifndef RISCV_PKG
+`define RISCV_PKG
+
+ `include "cv64a6_imafdc_sv39_config_pkg.sv"
+
 package riscv;
 
     // ----------------------
     // Import cva6 config from cva6_config_pkg
     // ----------------------
     localparam XLEN = cva6_config_pkg::CVA6ConfigXlen;
+    localparam FPU_EN = cva6_config_pkg::CVA6ConfigFpuEn;
 
     // ----------------------
     // Data and Address length
@@ -36,24 +42,23 @@ package riscv;
 
     // Warning: When using STD_CACHE, configuration must be PLEN=56 and VLEN=64
     // Warning: VLEN must be superior or equal to PLEN
-    localparam VLEN       = (XLEN == 32) ? 32 : 64;    // virtual address length
-    localparam PLEN       = (XLEN == 32) ? 34 : 56;    // (supervisor) physical address length (PPN + offset)
-    localparam GPLEN      = (XLEN == 32) ? 34 : 41;    // guest physical address length, widened by 2 bits (39 + 2)
+    localparam VLEN             = (XLEN == 32) ? 32 : 64;    // virtual address length
+    localparam PLEN             = (XLEN == 32) ? 34 : 56;    // physical address length
+    localparam GPLEN            = (XLEN == 32) ? 34 : 41;    // guest physical address length
 
-    localparam IS_XLEN32  = (XLEN == 32) ? 1'b1 : 1'b0;
-    localparam IS_XLEN64  = (XLEN == 32) ? 1'b0 : 1'b1;
-    localparam ModeW      = (XLEN == 32) ? 1 : 4;
-    localparam ASIDW      = (XLEN == 32) ? 9 : 16;
-    localparam VMIDW      = (XLEN == 32) ? 7 : 14;
-    localparam PPNW       = (XLEN == 32) ? 22 : 44;     // G-stage PTE's PPN (final PPN)
-    localparam GPPNW      = (XLEN == 32) ? 22 : 29;     // S/VS-stage PTE's PPN (actually VPN)
-    localparam vm_mode_t MODE_SV = (XLEN == 32) ? ModeSv32 : ModeSv39;
-    localparam SV         = (MODE_SV == ModeSv32) ? 32 : 39;
-    localparam SVX        = (MODE_SV == ModeSv32) ? 34 : 41;
-    localparam VPN2       = (VLEN-31 < 8) ? 9 : 8;    // 9 for XLEN 32, 8 for XLEN 64
-    localparam GPPN2      = (XLEN == 32) ? 11 : 10; // 11 for XLEN 32, 10 for XLEN 64
-
-    localparam  FPU_EN     = 1'b1; // This bit is to select FPU in the design, FPU_EN = 1'b0 disables FPU in the design
+    localparam IS_XLEN32        = (XLEN == 32) ? 1'b1 : 1'b0;
+    localparam IS_XLEN64        = (XLEN == 32) ? 1'b0 : 1'b1;
+    localparam ModeW            = (XLEN == 32) ? 1 : 4;
+    localparam ASIDW            = (XLEN == 32) ? 9 : 16;
+    localparam VMIDW            = (XLEN == 32) ? 7 : 14;
+    localparam PPNW             = (XLEN == 32) ? 22 : 44;
+    localparam GPPNW            = (XLEN == 32) ? 22 : 29;
+    localparam vm_mode_t        MODE_SV = (XLEN == 32) ? ModeSv32 : ModeSv39;
+    localparam SV               = (MODE_SV == ModeSv32) ? 32 : 39;
+    localparam SVX              = (MODE_SV == ModeSv32) ? 34 : 41;
+    localparam VPN2             = (VLEN-31 < 8) ? VLEN-31 : 8;
+    localparam GPPN2            = (XLEN == 32) ? riscv::VLEN-33 : 10;
+    localparam XLEN_ALIGN_BYTES = $clog2(XLEN/8);
 
     typedef logic [XLEN-1:0] xlen_t;
 
@@ -318,7 +323,6 @@ package riscv;
     // Virtual Memory
     // ----------------------
     // memory management, pte for sv39
-    // TODO: Include Svnapot and Svpbmt support in subsequent iterations
     typedef struct packed {
         logic [9:0]  reserved;
         logic [44-1:0] ppn; // PPN length for
@@ -393,6 +397,7 @@ package riscv;
     localparam logic [XLEN-1:0] MIP_MEIP  = 1 << IRQ_M_EXT;
     localparam logic [XLEN-1:0] MIP_SGEIP = 1 << IRQ_HS_EXT;
 
+    /* verilator lint_off WIDTH */
     localparam logic [XLEN-1:0] S_SW_INTERRUPT     = (1 << (XLEN-1)) | IRQ_S_SOFT;
     localparam logic [XLEN-1:0] VS_SW_INTERRUPT    = (1 << (XLEN-1)) | IRQ_VS_SOFT;
     localparam logic [XLEN-1:0] M_SW_INTERRUPT     = (1 << (XLEN-1)) | IRQ_M_SOFT;
@@ -403,6 +408,7 @@ package riscv;
     localparam logic [XLEN-1:0] VS_EXT_INTERRUPT   = (1 << (XLEN-1)) | IRQ_VS_EXT;
     localparam logic [XLEN-1:0] M_EXT_INTERRUPT    = (1 << (XLEN-1)) | IRQ_M_EXT;
     localparam logic [XLEN-1:0] HS_EXT_INTERRUPT   = (1 << (XLEN-1)) | IRQ_HS_EXT;
+    
 
     // ----------------------
     // PseudoInstructions Codes
@@ -411,6 +417,7 @@ package riscv;
     localparam logic [XLEN-1:0] WRITE_32_PSEUDOINSTRUCTION = 32'h00002020;
     localparam logic [XLEN-1:0] READ_64_PSEUDOINSTRUCTION  = 64'h00003000;
     localparam logic [XLEN-1:0] WRITE_64_PSEUDOINSTRUCTION = 64'h00003020;
+    /* verilator lint_on WIDTH */
 
     // -----
     // CSRs
@@ -504,7 +511,9 @@ package riscv;
         CSR_MHARTID        = 12'hF14,
         CSR_MCONFIGPTR     = 12'hF15,
         CSR_MCYCLE         = 12'hB00,
+        CSR_MCYCLEH        = 12'hB80,
         CSR_MINSTRET       = 12'hB02,
+        CSR_MINSTRETH      = 12'hB82,
         // Performance counters (Machine Mode)
         CSR_ML1_ICACHE_MISS = 12'hB03,  // L1 Instr Cache Miss
         CSR_ML1_DCACHE_MISS = 12'hB04,  // L1 Data Cache Miss
@@ -551,8 +560,11 @@ package riscv;
         CSR_DSCRATCH1      = 12'h7b3, // optional
         // Counters and Timers (User Mode - R/O Shadows)
         CSR_CYCLE          = 12'hC00,
+        CSR_CYCLEH         = 12'hC80,
         CSR_TIME           = 12'hC01,
+        CSR_TIMEH          = 12'hC81,
         CSR_INSTRET        = 12'hC02,
+        CSR_INSTRETH       = 12'hC82,
         // Performance counters (User Mode - R/O Shadows)
         CSR_L1_ICACHE_MISS = 12'hC03,  // L1 Instr Cache Miss
         CSR_L1_DCACHE_MISS = 12'hC04,  // L1 Data Cache Miss
@@ -704,7 +716,9 @@ package riscv;
     // -----
     typedef struct packed {
         logic [31:28]     xdebugver;
-        logic [27:16]     zero2;
+        logic [27:18]     zero2;
+        logic             ebreakvs;
+        logic             ebreakvu;
         logic             ebreakm;
         logic             zero1;
         logic             ebreaks;
@@ -713,7 +727,7 @@ package riscv;
         logic             stopcount;
         logic             stoptime;
         logic [8:6]       cause;
-        logic             zero0;
+        logic             v;
         logic             mprven;
         logic             nmip;
         logic             step;
@@ -802,6 +816,23 @@ package riscv;
         return 32'h00000000;
     endfunction
 
+    // This functions converts S-mode CSR addresses into VS-mode CSR addresses
+    // when V=1 (i.e., running in VS-mode).
+    function automatic csr_t convert_vs_access_csr(csr_t csr_addr, logic v);
+        csr_t ret;
+        ret = csr_addr;
+        unique case (csr_addr.address) inside
+            [CSR_SSTATUS:CSR_STVEC],
+            [CSR_SSCRATCH:CSR_SATP]: begin
+                if(v) begin
+                    ret.csr_decode.priv_lvl = PRIV_LVL_HS;
+                end
+                return ret;
+            end
+            default: return ret;
+        endcase
+    endfunction
+
 
     // trace log compatible to spikes commit log feature
     // pragma translate_off
@@ -829,6 +860,7 @@ package riscv;
         end
     endfunction
 
+    /* verilator lint_off UNPACKED */
     typedef struct {
         byte priv;
         longint unsigned pc;
@@ -838,6 +870,9 @@ package riscv;
         int unsigned instr;
         byte was_exception;
     } commit_log_t;
+    /* verilator lint_on UNPACKED */
     // pragma translate_on
 
 endpackage
+
+`endif

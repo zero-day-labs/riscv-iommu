@@ -13,57 +13,51 @@
     Author: Manuel Rodríguez, University of Minho <manuel.cederog@gmail.com>
     Date:    10/11/2022
 
-    Description:    RISC-V IOMMU Process Directory Table Cache.
-                    Cache to store context info for processes within DMA-capable attached devices.
+    Description:    RISC-V IOMMU Device Directory Table Cache.
+                    Cache to store context info for DMA-capable attached devices.
+                    This version utilizes the DC extended format.
 */
 
-module iommu_pdtc import ariane_pkg::*; #(
-    parameter int unsigned PDTC_ENTRIES = 4,
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20
+module iommu_ddtc import ariane_pkg::*; #(
+    parameter int unsigned DDTC_ENTRIES = 4,
+    parameter int unsigned DEVICE_ID_WIDTH  = 24
 )(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
 
     // TODO: Create F, U and LU signals structure (carefull with cocotb testing...)
     // Flush signals
-    input  logic                        flush_i,        // IODIR.INVAL_DDT or IODIR.INVAL_PDT
-    input  logic                        flush_dv_i,     // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
-    input  logic                        flush_pv_i,     // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
+    input  logic                        flush_i,        // IODIR.INVAL_DDT
+    input  logic                        flush_dv_i,     // device_id valid
     input  logic [DEVICE_ID_WIDTH-1:0]  flush_did_i,    // device_id to be flushed
-    input  logic [PROCESS_ID_WIDTH-1:0] flush_pid_i,    // process_id to be flushed (if flush_pv_i = 1)
 
     // TODO: If flush and update operations are mutually exclusive, some signals may be shared
     // Update signals
     input  logic                        update_i,       // update flag
     input  logic [DEVICE_ID_WIDTH-1:0]  up_did_i,       // device ID to be inserted
-    input  logic [PROCESS_ID_WIDTH-1:0] up_pid_i,       // process ID to be inserted
-    input iommu_pkg::pc_t               up_content_i,   // PC to be inserted
+    input iommu_pkg::dc_ext_t           up_content_i,   // DC to be inserted
 
     // Lookup signals
     input  logic                        lookup_i,       // lookup flag
-    input  logic [DEVICE_ID_WIDTH-1:0]  lu_did_i,       // device_id to look for
-    input  logic [PROCESS_ID_WIDTH-1:0] lu_pid_i,       // process_id to look for
-    output iommu_pkg::pc_t              lu_content_o,   // PC
+    input  logic [DEVICE_ID_WIDTH-1:0]  lu_did_i,       // device_id to look for 
+    output iommu_pkg::dc_ext_t          lu_content_o,   // DC
     output logic                        lu_hit_o        // hit flag
 );
 
-    //# Tags to identify DDTC entries
-    // 24-bits device_id may be divided into up to three levels.
-    // 20-bits process_id may be divided into up to three levels.
+    //* Tags to identify DDTC entries
+    // 24-bits device_id may be divided into up to three levels
     struct packed {
-        logic [DEVICE_ID_WIDTH-1:0]     device_id;  // device_id //? Would it be necessary to divide the DID into levels? If yes, info about N of levels is necessary
-        logic [PROCESS_ID_WIDTH-1:0]    process_id; // process_id
-        logic                           valid;      // valid bit //? Why two V bits? tag and PC
-    } [PDTC_ENTRIES-1:0] tags_q, tags_n;
+        logic [DEVICE_ID_WIDTH-1:0] device_id;  // device_id 
+        logic                       valid;      // valid bit
+    } [DDTC_ENTRIES-1:0] tags_q, tags_n;
 
-    //# DDTC entries: Device Contexts
+    //* DDTC entries: Device Contexts
     struct packed {
-        iommu_pkg::pc_t pc;     // process context
-    } [PDTC_ENTRIES-1:0] content_q, content_n;
+        iommu_pkg::dc_ext_t dc;
+    } [DDTC_ENTRIES-1:0] content_q, content_n;
 
-    logic [PDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
-    logic [PDTC_ENTRIES-1:0] replace_en; // replace the following entry, set by replacement strategy
+    logic [DDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
+    logic [DDTC_ENTRIES-1:0] replace_en; // replace the following entry, set by replacement strategy
 
     //---------
     //# Lookup
@@ -75,13 +69,15 @@ module iommu_pdtc import ariane_pkg::*; #(
         lu_hit_o       = 1'b0;
         lu_content_o   = '{default: 0};
 
+        // To guarantee that hit signal is only set when we want to access the cache
         if (lookup_i) begin
-            for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
+
+            for (int unsigned i = 0; i < DDTC_ENTRIES; i++) begin
                 
-                // An entry match occurs if the entry is valid and if a device_id and process_id match occurs
-                if (tags_q[i].valid && tags_q[i].device_id == lu_did_i && tags_q[i].process_id == lu_pid_i) begin
+                // An entry match occurs if the entry is valid and if a device_id match occurs
+                if (tags_q[i].valid && tags_q[i].device_id == lu_did_i) begin
                 
-                    lu_content_o    = content_q[i].pc;
+                    lu_content_o    = content_q[i].dc;
                     lu_hit_o        = 1'b1;
                     lu_hit[i]       = 1'b1;
                 end
@@ -105,46 +101,35 @@ module iommu_pdtc import ariane_pkg::*; #(
         tags_n      = tags_q;
         content_n   = content_q;
 
-        for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
+        for (int unsigned i = 0; i < DDTC_ENTRIES; i++) begin
             
             // overall flush flag
-            if (flush_i && !flush_pv_i) begin
+            if (flush_i) begin
                 
-                // DV = 0: Invalidate all PDTC entries
+                // DV = 0: Invalidate all DDTC entries
                 if (!flush_dv_i) begin
                     tags_n[i].valid = 1'b0;
                 end
 
-                // DV = 1: Invalidate only the PDTC entry that matches given device_id
+                // DV = 1: Invalidate only the DDTC entry that matches given device_id (and corresponding PDT entries)
                 else if (tags_q[i].device_id == flush_did_i) begin
                     tags_n[i].valid = 1'b0;
                 end
             end
 
-            /*
-                # IODIR.INVAL_PDT
-                IODIR.INVAL_PDT guarantees that any previous stores made by a RISC-V hart to the PDT are observed
-                before all subsequent implicit reads from IOMMU to PDT. The command invalidates cached leaf
-                PDT entry for the specified PID and DID.
-            */
-            else if (flush_i && flush_pv_i) begin
-                if (tags_q[i].device_id == flush_did_i && tags_q[i].process_id == flush_pid_i) begin
-                    tags_n[i].valid = 1'b0;
-                end
-            end
-
             // normal replacement
-            else if (update_i && replace_en[i] && up_content_i.ta.v) begin
+            // only valid entries can be cached
+            //? We should give priority to invalid entries (if present) to be evicted in an update. Else we can evict the LRU
+            else if (update_i && replace_en[i] && up_content_i.tc.v) begin
                 
                 // update tags
                 tags_n[i] = '{
                     device_id:  up_did_i,
-                    process_id: up_pid_i,
                     valid:      1'b1
-                }
+                };
 
                 // update device context
-                content_n[i].pc = up_content_i;
+                content_n[i].dc = up_content_i;
             end
         end 
     end
@@ -154,7 +139,7 @@ module iommu_pdtc import ariane_pkg::*; #(
     // -----------------------------------------------
     
     //? Is it necessary to update LRU on updates?
-    logic[2*(PDTC_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
+    logic[2*(DDTC_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement
         plru_tree_n = plru_tree_q;
         // The PLRU-tree indexing:
@@ -167,7 +152,7 @@ module iommu_pdtc import ariane_pkg::*; #(
         //       / \ /\/\  /\
         //      ... ... ... ...
         // Just predefine which nodes will be set/cleared
-        // E.g. for a PDTC with 8 entries, the for-loop is semantically
+        // E.g. for a DDTC with 8 entries, the for-loop is semantically
         // equivalent to the following pseudo-code:
         // unique case (1'b1)
         // lu_hit[7]: plru_tree_n[0, 2, 6] = {1, 1, 1};
@@ -180,15 +165,15 @@ module iommu_pdtc import ariane_pkg::*; #(
         // lu_hit[0]: plru_tree_n[0, 1, 3] = {0, 0, 0};
         // default: begin /* No hit */ end
         // endcase
-        for (int unsigned i = 0; i < PDTC_ENTRIES; i++) begin
+        for (int unsigned i = 0; i < DDTC_ENTRIES; i++) begin
             automatic int unsigned idx_base, shift, new_index;
             // we got a hit so update the pointer as it was least recently used
-            if ((lu_hit[i] && lookup_i) || (replace[i] && update_i)) begin      // LRU updated on hits and updates
+            if (lu_hit[i] && lookup_i) begin      // LRU updated on LU hits and updates
                 // Set the nodes to the values we would expect
-                for (int unsigned lvl = 0; lvl < $clog2(PDTC_ENTRIES); lvl++) begin  // 3 for 8 entries
+                for (int unsigned lvl = 0; lvl < $clog2(DDTC_ENTRIES); lvl++) begin  // 3 for 8 entries
                     idx_base = $unsigned((2**lvl)-1);     // 0 for lvl0, 1 for lvl1, 3 for lvl2
                     // lvl0 <=> MSB, lvl1 <=> MSB-1, ...
-                    shift = $clog2(PDTC_ENTRIES) - lvl;    // 3 for lvl0, 2 for lvl1, 1 for lvl2
+                    shift = $clog2(DDTC_ENTRIES) - lvl;    // 3 for lvl0, 2 for lvl1, 1 for lvl2
                     // to circumvent the 32 bit integer arithmetic assignment
                     new_index =  ~((i >> (shift-1)) & 32'b1);
                     plru_tree_n[idx_base + (i >> shift)] = new_index[0];
@@ -197,7 +182,7 @@ module iommu_pdtc import ariane_pkg::*; #(
         end
         // Decode tree to write enable signals
         // Next for-loop basically creates the following logic for e.g. an 8 entry
-        // PDTC (note: pseudo-code obviously):
+        // DDTC (note: pseudo-code obviously):
         // replace_en[7] = &plru_tree_q[ 6, 2, 0]; //plru_tree_q[0,2,6]=={1,1,1}
         // replace_en[6] = &plru_tree_q[~6, 2, 0]; //plru_tree_q[0,2,6]=={1,1,0}
         // replace_en[5] = &plru_tree_q[ 5,~2, 0]; //plru_tree_q[0,2,5]=={1,0,1}
@@ -209,14 +194,14 @@ module iommu_pdtc import ariane_pkg::*; #(
         // For each entry traverse the tree. If every tree-node matches,
         // the corresponding bit of the entry's index, this is
         // the next entry to replace.
-        for (int unsigned i = 0; i < PDTC_ENTRIES; i += 1) begin
+        for (int unsigned i = 0; i < DDTC_ENTRIES; i += 1) begin
             automatic logic en;
             automatic int unsigned idx_base, shift, new_index;
             en = 1'b1;
-            for (int unsigned lvl = 0; lvl < $clog2(PDTC_ENTRIES); lvl++) begin
+            for (int unsigned lvl = 0; lvl < $clog2(DDTC_ENTRIES); lvl++) begin
                 idx_base = $unsigned((2**lvl)-1);
                 // lvl0 <=> MSB, lvl1 <=> MSB-1, ...
-                shift = $clog2(PDTC_ENTRIES) - lvl;
+                shift = $clog2(DDTC_ENTRIES) - lvl;
 
                 // en &= plru_tree_q[idx_base + (i>>shift)] == ((i >> (shift-1)) & 1'b1);
                 new_index =  (i >> (shift-1)) & 32'b1;
@@ -252,14 +237,14 @@ module iommu_pdtc import ariane_pkg::*; #(
     `ifndef VERILATOR
 
     initial begin : p_assertions
-        assert ((PDTC_ENTRIES % 2 == 0) && (PDTC_ENTRIES > 1))
-        else begin $error("PDTC size must be a multiple of 2 and greater than 1"); $stop(); end
-        assert ((PROCESS_ID_WIDTH == 20) || (PROCESS_ID_WIDTH == 17) || (PROCESS_ID_WIDTH == 8))
-        else begin $error("process_id can be only 8, 17 or 20 bits wide"); $stop(); end
+        assert ((DDTC_ENTRIES % 2 == 0) && (DDTC_ENTRIES > 1))
+        else begin $error("DDTC size must be a multiple of 2 and greater than 1"); $stop(); end
+        assert ((DEVICE_ID_WIDTH == 24) || (DEVICE_ID_WIDTH == 15) || (DEVICE_ID_WIDTH == 6))
+        else begin $error("device_id can be only 6, 15 or 24 bits wide"); $stop(); end
     end
 
     // Just for checking
-    function int countSetBits(logic[PDTC_ENTRIES-1:0] vector);
+    function int countSetBits(logic[DDTC_ENTRIES-1:0] vector);
         automatic int count = 0;
         foreach (vector[idx]) begin
         count += vector[idx];
@@ -268,9 +253,9 @@ module iommu_pdtc import ariane_pkg::*; #(
     endfunction
 
     assert property (@(posedge clk_i)(countSetBits(lu_hit) <= 1))
-        else begin $error("More than one hit in PDTC!"); $stop(); end
+        else begin $error("More than one hit in DDTC!"); $stop(); end
     assert property (@(posedge clk_i)(countSetBits(replace_en) <= 1))
-        else begin $error("More than one PDTC entry selected for next replace!"); $stop(); end
+        else begin $error("More than one DDTC entry selected for next replace!"); $stop(); end
 
     `endif
     //pragma translate_on

@@ -19,7 +19,7 @@
 package iommu_reg_pkg;
 
   // Address widths within the block
-  parameter int BlockAw = 13;
+  parameter int BlockAw = 12;
 
   ////////////////////////////
   // Typedefs for registers //
@@ -106,7 +106,7 @@ package iommu_reg_pkg;
     } wsi;
     struct packed {
       logic        q;
-    } glx;
+    } gxl;
   } iommu_reg2hw_fctl_reg_t;
 
   typedef struct packed {
@@ -469,7 +469,7 @@ package iommu_reg_pkg;
     struct packed {
       logic        d;
       logic        de;
-    } glx;
+    } gxl;
   } iommu_hw2reg_fctl_reg_t;
 
   typedef struct packed {

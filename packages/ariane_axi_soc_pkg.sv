@@ -15,12 +15,18 @@
  * Description: Contains Ariane's AXI ports on SoC, does not contain user ports
  */
 
+ `ifndef ARIANE_AXI_SOC
+ `define ARIANE_AXI_SOC
+
+ `include "ariane_soc_pkg.sv"
+ `include "axi_pkg.sv"
+
 package ariane_axi_soc;
 
     // used in axi_adapter.sv
     typedef enum logic { SINGLE_REQ, CACHE_LINE_REQ } ad_req_t;
 
-    localparam UserWidth = 1;
+    localparam UserWidth = ariane_pkg::AXI_USER_WIDTH;
     localparam AddrWidth = 64;
     localparam DataWidth = 64;
     localparam StrbWidth = DataWidth / 8;
@@ -178,3 +184,5 @@ package ariane_axi_soc;
     } resp_slv_t;
 
 endpackage
+
+`endif

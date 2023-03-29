@@ -19,34 +19,37 @@
 
 module mem_if_wrapper
 (
+    input  logic    clk_i,
+    input  logic    rst_ni,
+
     // External ports: To AXI Bus
-    input  ariane_axi_pkg::resp_t       mem_resp_i,
-    output ariane_axi_pkg::req_t        mem_req_o,
+    input  ariane_axi::resp_t       mem_resp_i,
+    output ariane_axi::req_t        mem_req_o,
 
     /*--------------------------------------------*/
     
     // From PTW
-    output ariane_axi_pkg::resp_t       ptw_resp_o,
-    input  ariane_axi_pkg::req_t        ptw_req_i,
+    output ariane_axi::resp_t       ptw_resp_o,
+    input  ariane_axi::req_t        ptw_req_i,
 
     // From CDW
-    output ariane_axi_pkg::resp_t       cdw_resp_o,
-    input  ariane_axi_pkg::req_t        cdw_req_i,
+    output ariane_axi::resp_t       cdw_resp_o,
+    input  ariane_axi::req_t        cdw_req_i,
 
     // From CQ
-    output ariane_axi_pkg::resp_t       cq_resp_o,
-    input  ariane_axi_pkg::req_t        cq_req_i,
+    output ariane_axi::resp_t       cq_resp_o,
+    input  ariane_axi::req_t        cq_req_i,
 
     // From FQ
-    output ariane_axi_pkg::resp_t       fq_resp_o,
-    input  ariane_axi_pkg::req_t        fq_req_i,
+    output ariane_axi::resp_t       fq_resp_o,
+    input  ariane_axi::req_t        fq_req_i,
 
     // From MSI IG
-    output ariane_axi_pkg::resp_t       ig_resp_o,
-    input  ariane_axi_pkg::req_t        ig_req_i
+    output ariane_axi::resp_t       ig_resp_o,
+    input  ariane_axi::req_t        ig_req_i
 );
 
-    logic w_select, w_select_fifo;
+    logic[1:0] w_select, w_select_fifo;
 
     //# AR Channel (PTW, CDW, CQ)
     stream_arbiter #(
@@ -81,12 +84,12 @@ module mem_if_wrapper
     //# W Channel
     // Control signal to select accepted AWID for writing data to W Channel
     always_comb begin
-        w_select = 0;
+        w_select = '0;
         unique case (mem_req_o.aw.id)   // Selected AWID
-            4'b0000:                            w_select = 0; // CQ
-            4'b0001:                            w_select = 1; // FQ
-            4'b0010:                            w_select = 2; // MSI IG
-            default:                            w_select = 0; // none
+            4'b0000:                            w_select = 2'd0; // CQ
+            4'b0001:                            w_select = 2'd1; // FQ
+            4'b0010:                            w_select = 2'd2; // MSI IG
+            default:                            w_select = 2'd0; // none
         endcase
     end
 

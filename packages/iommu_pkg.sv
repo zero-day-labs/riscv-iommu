@@ -147,10 +147,10 @@ package iommu_pkg;
     //--------------------------
 
     typedef enum logic [1:0] {
-        RSV_1           = 2'b00;
-        MRIF            = 2'b01;
-        RSV_2           = 2'b10;
-        WRITE_THROUGH   = 2'b11;
+        RSV_1           = 2'b00,
+        MRIF            = 2'b01,
+        RSV_2           = 2'b10,
+        WRITE_THROUGH   = 2'b11
     } msi_pte_mode_e;
 
     // MSI PTE (Write-through mode)
@@ -183,10 +183,10 @@ package iommu_pkg;
     //----------------------
 
     // Opcodes
-    localparam logic [6:0] IOTINVAL = 6'd1;
-    localparam logic [6:0] IOFENCE  = 6'd2;
-    localparam logic [6:0] IODIR    = 6'd3;
-    localparam logic [6:0] ATS      = 6'd4;
+    localparam logic [6:0] IOTINVAL = 7'd1;
+    localparam logic [6:0] IOFENCE  = 7'd2;
+    localparam logic [6:0] IODIR    = 7'd3;
+    localparam logic [6:0] ATS      = 7'd4;
 
     // Func3
     localparam logic [2:0] VMA      = 3'b000;
@@ -381,7 +381,8 @@ package iommu_pkg;
     //#  IOMMU functions
     //--------------------------
 
-    // Extract vIMSIC number from valid GPA
+    // Extract Interrupt File number from GPA
+    // The resulting IF number is used to index the corresponding MSI PTE in memory.
     function logic [(MSI_MASK_LEN-1):0] extract_imsic_num(input logic [(MSI_MASK_LEN-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
         logic [(MSI_MASK_LEN-1):0] masked_gpaddr, imsic_num;
         int unsigned i;

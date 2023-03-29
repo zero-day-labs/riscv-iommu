@@ -23,12 +23,11 @@
                     -   Bruno Sá, University of Minho.
 */
 
-//# Disabled verilator_lint_off WIDTH
+/* verilator lint_off WIDTH */
 
 module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         parameter int unsigned PSCID_WIDTH = 20,
-        parameter int unsigned GSCID_WIDTH = 16,
-        parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
+        parameter int unsigned GSCID_WIDTH = 16
 ) (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
@@ -39,14 +38,14 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
     output logic                                ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
     output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
-    // TODO: Integrate functional IOPMP
 
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
     input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
+    input  logic                    is_rx_i,                // Indicate whether the access is read-for-execute
 
-    input  ariane_axi_pkg::resp_t   mem_resp_i,
-    output ariane_axi_pkg::req_t    mem_req_o,
+    input  ariane_axi_soc::resp_t   mem_resp_i,
+    output ariane_axi_soc::req_t    mem_req_o,
 
     // to IOTLB, update logic
     output logic                    update_o,
@@ -92,12 +91,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // output logic                    itlb_miss_o,
     // output logic                    dtlb_miss_o,
 
-    output logic [riscv::GPLEN-1:0]         bad_gpaddr_o    // to return the GPA in case of second-stage error
+    output logic [riscv::GPLEN-1:0] bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
-
-    // input registers to receive data from memory
-    logic data_rvalid_q;
-    logic [63:0] data_rdata_q;
 
     riscv::pte_t pte;
     // register to perform context switch between stages
@@ -159,10 +154,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // input IOVA (GPA) is the address of a virtual IMSIC
     assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i &&
-                                   ((req_iova_i[(riscv::VLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
+                                   ((req_iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
     // GPA is the address of a virtual IMSIC
-    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i &&
-                                   ((gpaddr[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
+    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i && 
+                                   ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
@@ -202,7 +197,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             up_is_g_1G_o = (ptw_lvl_q == LVL1);
         end
 
-        if(gpaddr_is_imsic_addr || iova_is_imsic_addr)    up_is_msi_o  = 1'b1;
+        if(msi_translation_q)    up_is_msi_o  = 1'b1;
 
         up_pscid_o = iotlb_update_pscid_q;
         up_gscid_o = iotlb_update_gscid_q;
@@ -230,7 +225,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     logic allow_access;
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
-    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN:0] : gpaddr_q) : '0;
+    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN-1:0] : gpaddr_q) : '0;
 
     //# Page table walker
     always_comb begin : ptw
@@ -265,18 +260,17 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0000;              //? Can we define any value for AR.ID?
-        mem_req_o.ar.addr       = ptw_pptr_q;           // Physical address to access
-        mem_req_o.ar.len        = 8'b0;                 // 1 beat per burst only
-        mem_req_o.ar.size       = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst      = axi_pkg::BURST_FIXED; // Fixed start address
-        mem_req_o.ar.lock       = '0;
-        mem_req_o.ar.cache      = '0;
-        mem_req_o.ar.prot       = '0;
-        mem_req_o.ar.qos        = '0;
-        mem_req_o.ar.region     = '0;
-        mem_req_o.ar.atop       = '0;
-        mem_req_o.ar.user       = '0;
+        mem_req_o.ar.id                     = 4'b0000;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.addr[riscv::PLEN-1:0]  = ptw_pptr_q;           // Physical address to access
+        mem_req_o.ar.len                    = 8'b0;                 // 1 beat per burst only
+        mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst                  = axi_pkg::BURST_FIXED; // Fixed start address
+        mem_req_o.ar.lock                   = '0;
+        mem_req_o.ar.cache                  = '0;
+        mem_req_o.ar.prot                   = '0;
+        mem_req_o.ar.qos                    = '0;
+        mem_req_o.ar.region                 = '0;
+        mem_req_o.ar.user                   = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
         mem_req_o.r_ready       = 1'b0;                 // to signal read completion
@@ -284,7 +278,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         ptw_error_o             = 1'b0;
         ptw_error_stage2_o      = 1'b0;
         ptw_error_stage2_int_o  = 1'b0;
-        ptw_iopmp_excep_o       = 1'b0;
         cause_code_o            = '0;
         update_o                = 1'b0;
         cdw_done_o              = 1'b0;
@@ -441,6 +434,14 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 state_n = PROPAGATE_ERROR;
                             end
 
+                            // "If the transaction is an Untranslated or Translated read-for-execute"
+                            // "then stop and report Instruction access fault (cause = 1)."
+                            if (is_rx_i) begin
+                                update_o = 1'b0;
+                                cause_n = iommu_pkg::INSTR_ACCESS_FAULT;
+                                state_n = PROPAGATE_ERROR;
+                            end
+
                             // MSI translation successful
                         end
                     end
@@ -494,7 +495,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         // GPA is an IMSIC address (even if Stage 2 is disabled)
                                         if (gpaddr_is_imsic_addr) begin
                                             state_n = WAIT_GRANT;
-                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(gpaddr[(riscv::GPLEN-1):12], msi_addr_mask_i), 4'b0};
+                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
                                         end
                                     end
@@ -575,6 +576,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         STAGE_2_FINAL: begin
                                                 ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
                                         end
+                                        default:;
                                     endcase
                                 end
 
@@ -715,9 +717,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             gptw_pptr_q             <= '0;
             global_mapping_q        <= 1'b0;
             msi_translation_q       <= 1'b0;
-            data_rdata_q            <= '0;
             gpte_q                  <= '0;
-            data_rvalid_q           <= 1'b0;
             cause_q                 <= '0;
             cdw_implicit_access_q   <= 1'b0;
             page_fault_q            <= 1'b0;
@@ -735,9 +735,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
             gpaddr_q                <= gpaddr_n;
             global_mapping_q        <= global_mapping_n;
             msi_translation_q       <= msi_translation_n;
-            data_rdata_q            <= mem_resp_i.data_rdata;
             gpte_q                  <= gpte_n;
-            data_rvalid_q           <= mem_resp_i.data_rvalid;
             cause_q                 <= cause_n;
             cdw_implicit_access_q   <= cdw_implicit_access_n;
             page_fault_q            <= page_fault_n;
@@ -745,4 +743,5 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     end
 
 endmodule
-//# Disabled verilator_lint_on WIDTH
+
+/* verilator lint_on WIDTH */

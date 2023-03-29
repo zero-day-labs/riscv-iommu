@@ -20,11 +20,10 @@
 //# Disabled verilator_lint_off WIDTH
 
 module iommu_cdw import ariane_pkg::*; #(
-        parameter int unsigned  DEVICE_ID_WIDTH     = 24,
-        parameter int unsigned  PROCESS_ID_WIDTH    = 20,
+    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
+    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
 
-        parameter bit           InclPID             = 0,
-        parameter ariane_pkg::ariane_cfg_t ArianeCfg = ariane_pkg::ArianeDefaultConfig
+    parameter bit           InclPID             = 0
 ) (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
@@ -40,7 +39,7 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic        caps_t2gpa_i,
     input  logic        caps_pd20_i, caps_pd17_i, caps_pd8_i,
     input  logic        caps_sv32_i, caps_sv39_i, caps_sv48_i, caps_sv57_i,
-    input  logic        fctl_glx_i, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
+    input  logic        fctl_gxl_i, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
     input  logic        caps_msi_flat_i,
     input  logic        caps_amo_i,
     input  logic        caps_end_i, fctl_be_i,
@@ -49,8 +48,8 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic        dc_sxl_i,
 
     // CDW memory interface
-    input  ariane_axi_pkg::resp_t   mem_resp_i,
-    output ariane_axi_pkg::req_t    mem_req_o,
+    input  ariane_axi_soc::resp_t   mem_resp_i,
+    output ariane_axi_soc::req_t    mem_req_o,
 
     // Update logic
     output  logic                           update_dc_o,
@@ -62,8 +61,8 @@ module iommu_cdw import ariane_pkg::*; #(
     output iommu_pkg::pc_t                  up_pc_content_o,
 
     // CDC tags
-    input  logic [iommu_pkg::DEVICE_ID_WIDTH-1:0]  req_did_i,    // device_id associated with request
-    input  logic [iommu_pkg::PROCESS_ID_WIDTH-1:0] req_pid_i,    // process_id associated with request
+    input  logic [DEVICE_ID_WIDTH-1:0]  req_did_i,    // device_id associated with request
+    input  logic [PROCESS_ID_WIDTH-1:0] req_pid_i,    // process_id associated with request
 
     // from DDTC / PDTC, to monitor misses
     input  logic                        ddtc_access_i,
@@ -88,8 +87,7 @@ module iommu_cdw import ariane_pkg::*; #(
     output logic                        cdw_implicit_access_o,
     output logic                        is_ddt_walk_o,
     output logic [(riscv::GPPNW-1):0]   pdt_gppn_o,
-    output logic [riscv::PPNW-1:0]      iohgatp_ppn_fw_o, // to forward iohgatp.PPN to PTW when translating pdtp.PPN
-
+    output logic [riscv::PPNW-1:0]      iohgatp_ppn_fw_o  // to forward iohgatp.PPN to PTW when translating pdtp.PPN
 
     // TODO: include HPM
     // // Performance counters
@@ -138,7 +136,7 @@ module iommu_cdw import ariane_pkg::*; #(
     state_t state_q, state_n;
 
     // IOMMU mode and DDT/PDT levels
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         OFF, BARE, LVL1, LVL2, LVL3
     } level_t;
     
@@ -148,8 +146,8 @@ module iommu_cdw import ariane_pkg::*; #(
     logic is_ddt_walk_q, is_ddt_walk_n;
 
     // Save and propagate the input device_id/process id to walk multiple levels
-    logic [iommu_pkg::DEVICE_ID_WIDTH-1:0]  device_id_q, device_id_n;
-    logic [iommu_pkg::PROCESS_ID_WIDTH-1:0] process_id_q, process_id_n;
+    logic [DEVICE_ID_WIDTH-1:0]  device_id_q, device_id_n;
+    logic [PROCESS_ID_WIDTH-1:0] process_id_q, process_id_n;
 
     // Physical pointer to access memory bus
     logic [riscv::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
@@ -223,19 +221,18 @@ module iommu_cdw import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id         = 4'b0001;                         
-        mem_req_o.ar.addr       = cdw_pptr_q;                       // Physical address to access
+        mem_req_o.ar.id                     = 4'b0001;                         
+        mem_req_o.ar.addr[riscv::PLEN-1:0]  = cdw_pptr_q;                       // Physical address to access
         // Number of beats per burst (1 for non-leaf entries, 2 for PC, 7 for DC)
-        mem_req_o.ar.len        = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (8'd6) : (8'd1)) : (8'd0);
-        mem_req_o.ar.size       = 3'b011;                           // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst      = axi_pkg::BURST_INCR;              // Incremental start address
-        mem_req_o.ar.lock       = '0;
-        mem_req_o.ar.cache      = '0;
-        mem_req_o.ar.prot       = '0;
-        mem_req_o.ar.qos        = '0;
-        mem_req_o.ar.region     = '0;
-        mem_req_o.ar.atop       = '0;
-        mem_req_o.ar.user       = '0;
+        mem_req_o.ar.len                    = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (8'd6) : (8'd1)) : (8'd0);
+        mem_req_o.ar.size                   = 3'b011;                           // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst                  = axi_pkg::BURST_INCR;              // Incremental start address
+        mem_req_o.ar.lock                   = '0;
+        mem_req_o.ar.cache                  = '0;
+        mem_req_o.ar.prot                   = '0;
+        mem_req_o.ar.qos                    = '0;
+        mem_req_o.ar.region                 = '0;
+        mem_req_o.ar.user                   = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
 
@@ -303,7 +300,7 @@ module iommu_cdw import ariane_pkg::*; #(
                     
                         process_id_n    = req_pid_i;
                         state_n         = MEM_ACCESS;
-                        cdw_lvl_n       = level_t'(pdtp_mode_i + 1);    // level enconding is different for PDT
+                        cdw_lvl_n       = level_t'(pdtp_mode_i + 4'd1);    // level enconding is different for PDT
                         // pdtc_miss_o        = 1'b1;     // to HPM
 
                         // load pptr according to pdtp.MODE
@@ -402,7 +399,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 end
                             end
 
-                            default:
+                            default:;
                         endcase
 
                         state_n = MEM_ACCESS;
@@ -410,7 +407,7 @@ module iommu_cdw import ariane_pkg::*; #(
 
                     // "If any bits or encoding that are reserved for future standard use are set within ddte,"
                     // "stop and report "DDT entry misconfigured" (cause = 259)"
-                    if (mem_resp_i.r_valid && (nl.reserved_1 || nl.reserved_2)) begin
+                    if (mem_resp_i.r_valid && ((|nl.reserved_1) || (|nl.reserved_2))) begin
                         state_n = ERROR;
                         cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
                     end
@@ -507,7 +504,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 (!dc_tc.pdtv && dc_tc.dpe) ||
                                 (!caps_amo_i && (dc_tc.sade || dc_tc.gade)) ||
                                 (fctl_be_i != dc_tc.sbe) ||
-                                (dc_tc.sxl != fctl_glx_i)) begin
+                                (dc_tc.sxl != fctl_gxl_i)) begin
                                 state_n = ERROR;
                                 cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
@@ -519,12 +516,12 @@ module iommu_cdw import ariane_pkg::*; #(
                             dc_n.iohgatp = dc_iohgatp;
 
                             // Config checks
-                            if ((dc_q.t2gpa && !(|dc_iohgatp.mode)) ||
+                            if ((dc_q.tc.t2gpa && !(|dc_iohgatp.mode)) ||
                                 (!(dc_iohgatp.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
-                                (!fctl_glx_i && ((!caps_sv39x4_i && dc_iohgatp.mode == 4'd8) ||
+                                (!fctl_gxl_i && ((!caps_sv39x4_i && dc_iohgatp.mode == 4'd8) ||
                                                  (!caps_sv48x4_i && dc_iohgatp.mode == 4'd9) ||
                                                  (!caps_sv57x4_i && dc_iohgatp.mode == 4'd10))) ||
-                                (fctl_glx_i && (!caps_sv32x4_i && dc_iohgatp.mode == 4'd8)) ||
+                                (fctl_gxl_i && (!caps_sv32x4_i && dc_iohgatp.mode == 4'd8)) ||
                                 (|dc_iohgatp.mode && |dc_iohgatp.ppn[13:0])) begin
                                 state_n = ERROR;
                                 cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
@@ -602,8 +599,8 @@ module iommu_cdw import ariane_pkg::*; #(
                                 cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
                             end
                         end
-
-                        default:
+                        
+                        default:;
                     endcase
                 end
 
@@ -632,7 +629,7 @@ module iommu_cdw import ariane_pkg::*; #(
 
                         // "If if any bits or encoding that are reserved for future standard use are set within ddte,"
                         // "stop and report "DDT entry misconfigured" (cause = 259)"
-                        else if (nl.reserved_1 || nl.reserved_2) begin
+                        else if ((|nl.reserved_1) || (|nl.reserved_2)) begin
                             state_n = ERROR;
                             cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
                         end
@@ -706,10 +703,7 @@ module iommu_cdw import ariane_pkg::*; #(
         if (~rst_ni) begin
             state_q                 <= IDLE;
             cdw_lvl_q               <= LVL1;
-            tag_valid_q             <= 1'b0;
             cdw_pptr_q              <= '0;
-            data_rdata_q            <= '0;
-            data_rvalid_q           <= 1'b0;
             entry_cnt_q             <= '0;
             device_id_q             <= '0;
             process_id_q            <= '0;
@@ -724,9 +718,6 @@ module iommu_cdw import ariane_pkg::*; #(
             state_q                 <= state_n;
             cdw_pptr_q              <= cdw_pptr_n;
             cdw_lvl_q               <= cdw_lvl_n;
-            tag_valid_q             <= tag_valid_n;
-            data_rdata_q            <= mem_resp_i.data_rdata;
-            data_rvalid_q           <= mem_resp_i.data_rvalid;
             entry_cnt_q             <= entry_cnt_n;
             device_id_q             <= device_id_n;
             process_id_q            <= process_id_n;

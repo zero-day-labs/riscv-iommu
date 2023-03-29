@@ -52,8 +52,8 @@ module iommu_msi_ig (
     output logic        msi_write_error_o,
 
     // AXI Master interface to write to memory
-    input  ariane_axi_pkg::resp_t       mem_resp_i,
-    output ariane_axi_pkg::req_t        mem_req_o
+    input  ariane_axi_soc::resp_t       mem_resp_i,
+    output ariane_axi_soc::req_t        mem_req_o
 );
 
     // FSM States

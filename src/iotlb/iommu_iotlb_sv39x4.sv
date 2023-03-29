@@ -37,8 +37,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    flush_gv_i,       // GSCID valid
     input  logic                    flush_pscv_i,     // PSCID valid
     input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN to be flushed
-    input  logic [PSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
-    input  logic [GSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
+    input  logic [GSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
+    input  logic [PSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
     // Update signals
     // input  tlb_update_sv39x4_t      update_i,
@@ -139,11 +139,11 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         lu_is_msi_o     = 1'b0;
         match_pscid     = '{default: 0};
         match_gscid     = '{default: 0};
-        match_stage    = '{default: 0};
-        is_1G          = '{default: 0};
-        is_2M          = '{default: 0};
-        g_content      = '{default: 0};
-        lu_gpaddr_o    = '{default: 0};
+        match_stage     = '{default: 0};
+        is_1G           = '{default: 0};
+        is_2M           = '{default: 0};
+        g_content       = '{default: 0};
+        lu_gpaddr_o     = '{default: 0};
 
         // Hit flag may be set only when we want to access the IOTLB
         if (lookup_i) begin
@@ -186,7 +186,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                     // Construct a GPA with input GVA, according to the size of the page (bypassed offset field is different in each case)
                     // All 44 bits of the S/VS PTE's PPN are not used. Only 11 bits of PPN[2] are used, in order to match GPA's length
                     // Does not make sense when translating GPAs (S-stage disabled)
-                    lu_gpaddr_o = make_gpaddr_sv39x4(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
+                    lu_gpaddr_o = make_gpaddr(s_stg_en_i, tags_q[i].is_s_1G, tags_q[i].is_s_2M, lu_iova_i, content_q[i].pte);
                     
                     // 1G match | 2M match | 4k match, modified condition to simplify
                     if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
@@ -217,6 +217,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     logic  [IOTLB_ENTRIES-1:0] gpaddr_gppn0_match;
     logic  [IOTLB_ENTRIES-1:0] gpaddr_gppn1_match;
     logic  [IOTLB_ENTRIES-1:0] gpaddr_gppn2_match;
+    logic  [IOTLB_ENTRIES-1:0] gpaddr_2M_match;
+    logic  [IOTLB_ENTRIES-1:0] gpaddr_1G_match;
     /*
         !NOTE: 
         For IOTINVAL.GVMA commands, any entry whose GVA maps to a GPA that matches 
@@ -245,7 +247,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             vaddr_1G_match[i] = (vaddr_vpn2_match[i] && tags_q[i].is_s_1G);
 
             // construct GPA's PPN according to VS page table entry data
-            gppn[i] = make_gppn_sv39x4(tags_q[i].s_stg_en, tags_q[i].is_s_1G, tags_q[i].is_s_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte);
+            gppn[i] = make_gppn(tags_q[i].s_stg_en, tags_q[i].is_s_1G, tags_q[i].is_s_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte);
             
             // check if given GPA matches with any tag
             // Since the IOVA may be a GVA or a GPA, i think the input port may be the same...
@@ -356,19 +358,19 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             */
             else if(flush_gvma_i) begin
                 unique casez ({flush_gv_i, flush_av_i})
-                    3'b0?: begin
+                    2'b0?: begin
                         // G enabled, S/VS don't care
                         if(tags_q[i].g_stg_en) begin
                             tags_n[i].valid = 1'b0;
                         end
                     end
-                    3'b10: begin
+                    2'b10: begin
                         // G enabled, S/VS don't care, GSCID match
                         if(tags_q[i].g_stg_en && tags_q[i].gscid == flush_gscid_i) begin
                             tags_n[i].valid = 1'b0;
                         end
                     end
-                    3'b11: begin
+                    2'b11: begin
                         // G enabled, S/VS don't care, GSCID match, IOVA (41-bit GPA) match
                         if(tags_q[i].g_stg_en && tags_q[i].gscid == flush_gscid_i && 
                            ((gpaddr_gppn2_match[i] && gpaddr_gppn1_match[i] && gpaddr_gppn0_match[i]) ||
@@ -380,7 +382,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             end
             // normal replacement
             // replace_en[i] identifies the LRU entry
-            // only valid entries can be cached
+            // only valid entries can be cached (PTW only update valid leaf entries)
             else if (update_i && replace_en[i] && ((s_stg_en_i && up_content_i.v) || (g_stg_en_i && up_g_content_i.v))) begin
                 // update tags
                 tags_n[i] = '{
@@ -439,7 +441,7 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
             automatic int unsigned idx_base, shift, new_index;
             // we got a hit so update the pointer as it was least recently used
-            if ((lu_hit[i] && lookup_i) || (replace[i] && update_i)) begin      // LRU updated on LU hits and updates
+            if (lu_hit[i] && lookup_i) begin
                 // Set the nodes to the values we would expect
                 for (int unsigned lvl = 0; lvl < $clog2(IOTLB_ENTRIES); lvl++) begin  // 3 for 8 entries
                     idx_base = $unsigned((2**lvl)-1);     // 0 for lvl0, 1 for lvl1, 3 for lvl2

@@ -27,8 +27,8 @@ module iommu_wsi_ig (
     input  logic        fip_i,
 
     // icvec
-    input  logic        civ_i,
-    input  logic        fiv_i,
+    input  logic[3:0]   civ_i,
+    input  logic[3:0]   fiv_i,
 
     // interrupt wires
     output logic [15:0] wsi_wires_o
