@@ -56,7 +56,6 @@ module fq_handler import ariane_pkg::*; #(
     input  logic                                event_valid_i,      // a fault/event has occurred
     input  logic [iommu_pkg::TTYP_LEN-1:0]      trans_type_i,       // transaction type
     input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,       // Fault code as defined by IOMMU and Priv Spec
-    //? complete VLEN for IOVA? Offset required?
     input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
     input  logic [riscv::SVX-1:0]               gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
     input  logic [DEVICE_ID_WIDTH-1:0]          did_i,              // device_id associated with the transaction
@@ -68,7 +67,9 @@ module fq_handler import ariane_pkg::*; #(
 
     // Memory Bus
     input  ariane_axi_soc::resp_t   mem_resp_i,
-    output ariane_axi_soc::req_t    mem_req_o
+    output ariane_axi_soc::req_t    mem_req_o,
+
+    output logic                    is_full_o
 );
 
     // FSM States
@@ -112,6 +113,44 @@ module fq_handler import ariane_pkg::*; #(
 
     // Counter to send all four FQ record DWs
     logic [1:0] wr_cnt_q, wr_cnt_n;
+
+    // Signal to indicate that the FQ is currently writing a new record
+    logic is_idle;
+    assign is_idle = (state_q == IDLE);
+    logic is_empty;
+
+    // Wires to connect FIFO output
+    logic [iommu_pkg::TTYP_LEN-1:0]      trans_type;   
+    logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code;   
+    logic [riscv::VLEN-1:0]              iova;         
+    logic [riscv::SVX-1:0]               gpaddr;       
+    logic [DEVICE_ID_WIDTH-1:0]          did;          
+    logic                                pv;           
+    logic [PROCESS_ID_WIDTH-1:0]         pid;          
+    logic                                is_supervisor;
+    logic                                is_guest_pf;  
+    logic                                is_implicit;  
+
+    // NOTE:    data is pushed into the FIFO when event_valid_i is set. Thus, this signal must be set 
+    //          only one cycle after a fault/event occurred. Since it is directly driven by AXVALID, the
+    //          Error Slave should be able to respond in one cycle
+    fifo_v3 #(
+        .FALL_THROUGH   (1),
+        .DEPTH          (4),
+        .DATA_WIDTH     (iommu_pkg::TTYP_LEN + iommu_pkg::CAUSE_LEN + riscv::VLEN + riscv::SVX + DEVICE_ID_WIDTH + PROCESS_ID_WIDTH + 4)
+    ) i_fifo_fq (
+        .clk_i      ( clk_i           ),
+        .rst_ni     ( rst_ni          ),
+        .flush_i    ( 1'b0            ),
+        .testmode_i ( 1'b0            ),
+        .full_o     ( is_full_o       ),
+        .empty_o    ( is_empty        ),
+        .usage_o    (                 ),
+        .data_i     ( {trans_type_i, cause_code_i, iova_i, gpaddr_i, did_i, pv_i, pid_i, is_supervisor_i, is_guest_pf_i, is_implicit_i}),
+        .push_i     ( event_valid_i   ),
+        .data_o     ( {trans_type, cause_code, iova, gpaddr, did, pv, pid, is_supervisor, is_guest_pf, is_implicit} ),
+        .pop_i      ( is_idle ) // W transaction has finished
+    );
 
     //# Combinational logic
     always_comb begin : fq_handler
@@ -191,7 +230,7 @@ module fq_handler import ariane_pkg::*; #(
                         fq_en_n     = 1'b1;
                     end
                 
-                    else if (event_valid_i) begin
+                    else if (event_valid_i || !is_empty) begin
 
                         state_n     = WRITE;
                         wr_state_n  = AW_REQ;
@@ -199,34 +238,34 @@ module fq_handler import ariane_pkg::*; #(
                         fq_entry_n.iotval2  = '0;
                         fq_entry_n.iotval   = '0;
                         fq_entry_n.did      = '0;
-                        fq_entry_n.ttyp     = trans_type_i;
+                        fq_entry_n.ttyp     = trans_type;
                         fq_entry_n.priv     = 1'b0;
                         fq_entry_n.pv       = 1'b0;
                         fq_entry_n.pid      = '0;
-                        fq_entry_n.cause    = cause_code_i;
+                        fq_entry_n.cause    = cause_code;
 
                         // If TTYP = 0 or fault occurred due to a PCIe Msg Request, nothing is reported in iotval/iotval2
                         // The DID, PV, PID, and PRIV fields are 0 if TTYP is 0
-                        if (trans_type_i != iommu_pkg::NONE) begin
-                            fq_entry_n.did      = did_i;
-                            fq_entry_n.pid      = (pv_i) ? (pid_i) : ('0);
-                            fq_entry_n.priv     = pv_i & is_supervisor_i;
-                            fq_entry_n.pv       = pv_i;
+                        if (trans_type != iommu_pkg::NONE) begin
+                            fq_entry_n.did      = did;
+                            fq_entry_n.pid      = (pv) ? (pid) : ('0);
+                            fq_entry_n.priv     = pv & is_supervisor;
+                            fq_entry_n.pv       = pv;
 
-                            if (trans_type_i != iommu_pkg::PCIE_MSG_REQ)
-                                fq_entry_n.iotval   = iova_i;
+                            if (trans_type != iommu_pkg::PCIE_MSG_REQ)
+                                fq_entry_n.iotval   = iova;
                         end
 
                         // The only case where TTYP = 0 known until now is for an IOMMU-generated MSI write access fault
                         else begin
-                                fq_entry_n.iotval   = iova_i;
+                                fq_entry_n.iotval   = iova;
                         end
                         
                         // If the CAUSE is a guest-page fault then bits 63:2 of the GPA are reported in iotval2[63:2].
-                        if (is_guest_pf_i) begin
+                        if (is_guest_pf) begin
 
-                                fq_entry_n.iotval2      = {23'b0, gpaddr_i};    // zero-extended GPA
-                                fq_entry_n.iotval2[0]   = is_implicit_i;        // Guest page fault was caused by an implicit access
+                                fq_entry_n.iotval2      = {23'b0, gpaddr};    // zero-extended GPA
+                                fq_entry_n.iotval2[0]   = is_implicit;        // Guest page fault was caused by an implicit access
                                 fq_entry_n.iotval2[1]   = 1'b0;                 // Always zero since A/D update of bits is not implemented
                             end
 
@@ -332,6 +371,7 @@ module fq_handler import ariane_pkg::*; #(
             fq_pptr_q   <= '0;
             fq_entry_q  <= '0;
             fq_en_q     <= 1'b0;
+            wr_cnt_q    <= '0;
         end
 
         else begin
@@ -340,6 +380,7 @@ module fq_handler import ariane_pkg::*; #(
             fq_pptr_q   <= fq_pptr_n;
             fq_entry_q  <= fq_entry_n;
             fq_en_q     <= fq_en_n;
+            wr_cnt_q    <= wr_cnt_n;
         end
     end
 

@@ -114,7 +114,9 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        trans_valid_o,      // Translation completed
     output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
     output logic [riscv::PLEN-1:0]      translated_addr_o,  // Translated address
-    output logic                        trans_error_o
+    output logic                        trans_error_o,
+
+    output logic                        is_fq_fifo_full_o
 );
 
     // DDTC
@@ -221,8 +223,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
     logic   report_fault;
     logic   msi_write_error;
-    assign  report_fault    = ((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | 
-                               (report_always | msi_write_error | (cdw_error & is_ddt_walk)) & trans_error);
+    assign  report_fault    = (((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | 
+                               (report_always | msi_write_error | (cdw_error & is_ddt_walk))) & trans_error);
     assign  trans_error_o   = trans_error;  // The requesting device needs to know if an error occurred
 
     logic   is_implicit;
@@ -236,6 +238,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // To indicate if the IOMMU supports and uses MSI as interrupt generation mechanism
     logic   msi_ig_en;
     assign  msi_ig_en = (!capabilities_i.igs.q[0] & !fctl_i.wsi.q);
+
 
     // Update wires
     logic                           ddtc_update;
@@ -690,7 +693,9 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
         // Memory Bus
         .mem_resp_i             (fq_axi_resp),
-        .mem_req_o              (fq_axi_req)
+        .mem_req_o              (fq_axi_req),
+
+        .is_full_o            (is_fq_fifo_full_o)
     );
     /* verilator lint_on WIDTH */
 
@@ -907,8 +912,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                         - (4): S-mode transaction and PTE has U=1 and (SUM=0 or x=1).
                     */
                     if ((is_store && ((!iotlb_lu_content.w && en_stage1) || (!iotlb_lu_g_content.w && en_stage2))   ) ||    // (1)
-                        (is_rx && (!iotlb_lu_content.x && en_stage1) || (!iotlb_lu_g_content.x && en_stage2)        ) ||    // (2)
-                        (priv_lvl_i == riscv::PRIV_LVL_U && !iotlb_lu_content.u                                     ) ||    // (3)
+                        (is_rx && ((!iotlb_lu_content.x && en_stage1) || (!iotlb_lu_g_content.x && en_stage2))      ) ||    // (2)
+                        ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_content.u && en_stage1                      ) ||    // (3)
                         (is_s_priv && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x)         )       // (4)
                         ) begin
                             if (is_store)   cause_code = iommu_pkg::STORE_PAGE_FAULT;
@@ -977,7 +982,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         //# Check for errors
         // If we had to walk memory is because we had a miss. As we had an exception,
         // the corresponding cache/TLB was not updated, and translation was never set to valid
-        if (ptw_error || cdw_error) begin
+        if (ptw_error || cdw_error || msi_write_error) begin
             cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
             trans_error   = 1'b1;
         end

@@ -125,12 +125,12 @@ module iommu_cdw import ariane_pkg::*; #(
 
     // PTW states
     typedef enum logic[2:0] {
-      IDLE,
-      MEM_ACCESS,
-      NON_LEAF,
-      LEAF,
-      GUEST_TR,
-      ERROR
+      IDLE,                     // 000
+      MEM_ACCESS,               // 001
+      NON_LEAF,                 // 010
+      LEAF,                     // 011
+      GUEST_TR,                 // 100
+      ERROR                     // 101
     } state_t;
     
     state_t state_q, state_n;
@@ -522,7 +522,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                                  (!caps_sv48x4_i && dc_iohgatp.mode == 4'd9) ||
                                                  (!caps_sv57x4_i && dc_iohgatp.mode == 4'd10))) ||
                                 (fctl_gxl_i && (!caps_sv32x4_i && dc_iohgatp.mode == 4'd8)) ||
-                                (|dc_iohgatp.mode && |dc_iohgatp.ppn[13:0])) begin
+                                (|dc_iohgatp.mode && |dc_iohgatp.ppn[1:0])) begin
                                 state_n = ERROR;
                                 cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
@@ -657,7 +657,6 @@ module iommu_cdw import ariane_pkg::*; #(
 
             // Permission/access errors detected. Propagate fault signal with error code
             ERROR: begin
-                cdw_error_o         = 1'b1;
                 mem_req_o.r_ready   = 1'b1;     // Set RREADY to finish all transactions
 
                 // Set cause code
@@ -665,6 +664,7 @@ module iommu_cdw import ariane_pkg::*; #(
 
                 // Check whether we have to wait for AXI transmission to end
                 if ((wait_rlast_q && mem_resp_i.r.last) || !wait_rlast_q) begin
+                    cdw_error_o         = 1'b1;
                     state_n = IDLE;
                 end
             end

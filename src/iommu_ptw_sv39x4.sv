@@ -104,10 +104,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // PTW states
     enum logic[2:0] {
-      IDLE,
-      WAIT_GRANT,
-      PTE_LOOKUP,
-      PROPAGATE_ERROR
+      IDLE,             // 000
+      WAIT_GRANT,       // 001
+      PTE_LOOKUP,       // 010
+      PROPAGATE_ERROR   // 011
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -530,12 +530,15 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 end
 
                                 // "(1): If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
-                                // "Stop and raise a page-fault exception corresponding to the original access type."
+                                // "     Stop and raise a page-fault exception corresponding to the original access type."
                                 // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
-                                // " a page-fault exception is raised."
+                                // "     a page-fault exception is raised."
+                                // "(3): For G-stage address translation, all memory accesses are considered to be user-level accesses," 
+                                // "     as though executed in U-mode."
                                 if ((ptw_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
                                     (ptw_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
-                                    (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
+                                    (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
+                                    (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                     
                                     page_fault_n        = 1'b1;
                                     state_n             = PROPAGATE_ERROR;
@@ -543,6 +546,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                     update_o            = 1'b0;
                                     cdw_done_o          = 1'b0;
                                 end
+
+                                // TODO: Check user bit for second-stage translation
                             end
                             
                             //# non-leaf PTE
@@ -627,7 +632,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                                 if (ptw_lvl_q == LVL3) begin
                                     page_fault_n    = 1'b1;
-                                    ptw_lvl_n   = LVL3;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
                                 end

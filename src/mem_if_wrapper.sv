@@ -86,9 +86,9 @@ module mem_if_wrapper
     always_comb begin
         w_select = '0;
         unique case (mem_req_o.aw.id)   // Selected AWID
-            4'b0000:                            w_select = 2'd0; // CQ
+            4'b0000:                            w_select = 2'd2; // CQ
             4'b0001:                            w_select = 2'd1; // FQ
-            4'b0010:                            w_select = 2'd2; // MSI IG
+            4'b0010:                            w_select = 2'd0; // MSI IG
             default:                            w_select = 2'd0; // none
         endcase
     end
@@ -143,9 +143,9 @@ module mem_if_wrapper
     always_comb begin
         r_select = 0;
         unique case (mem_resp_i.r.id)
-            4'b0000:                        r_select = 0; // PTW
+            4'b0000:                        r_select = 2; // PTW
             4'b0001:                        r_select = 1; // CDW
-            4'b0010:                        r_select = 2; // CQ
+            4'b0010:                        r_select = 0; // CQ
             default:                        r_select = 0;
         endcase
     end
@@ -170,9 +170,9 @@ module mem_if_wrapper
     always_comb begin
         b_select = 0;
         unique case (mem_resp_i.b.id)
-            4'b0000:                        b_select = 0; // CQ
+            4'b0000:                        b_select = 2; // CQ
             4'b0001:                        b_select = 1; // FQ
-            4'b0010:                        b_select = 2; // MSI IG
+            4'b0010:                        b_select = 0; // MSI IG
             default:                        b_select = 0;
         endcase
     end
