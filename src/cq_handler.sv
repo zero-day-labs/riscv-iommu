@@ -98,12 +98,12 @@ module cq_handler import ariane_pkg::*; #(
 
     // FSM states
     enum logic [2:0] {
-        IDLE,
-        FETCH,
-        WRITE,
-        REGISTER,
-        DECODE,
-        ERROR
+        IDLE,           // 000
+        FETCH,          // 001
+        WRITE,          // 010
+        REGISTER,       // 011
+        DECODE,         // 100
+        ERROR           // 101
     }   state_q, state_n;
 
     // Write FSM states
@@ -162,7 +162,7 @@ module cq_handler import ariane_pkg::*; #(
         mem_req_o.aw.id                     = 4'b0000;
         mem_req_o.aw.addr[riscv::PLEN-1:0]  = cq_pptr_q;
         mem_req_o.aw.len                    = 8'b0;
-        mem_req_o.aw.size                   = 3'b011;
+        mem_req_o.aw.size                   = 3'b010;
         mem_req_o.aw.burst                  = axi_pkg::BURST_FIXED;
         mem_req_o.aw.lock                   = '0;
         mem_req_o.aw.cache                  = '0;
@@ -220,6 +220,7 @@ module cq_handler import ariane_pkg::*; #(
         flush_pid_o         = '0;
 
         cq_ip_o             = 1'b0;
+        error_wen_o         = 1'b0;
 
         cq_head_o           = cq_head_i;
         cq_mf_o             = cq_mf_i;
@@ -327,6 +328,7 @@ module cq_handler import ariane_pkg::*; #(
 
                     if (mem_resp_i.r.last) begin
                         cmd_n[127:64]   = mem_resp_i.r.data;
+                        cq_head_o = cq_head_i + 1;  // head is incremented after fetching a command
                         state_n         = DECODE;
                     end
                     else cmd_n[63:0]    = mem_resp_i.r.data;
@@ -378,12 +380,10 @@ module cq_handler import ariane_pkg::*; #(
                         else if (cmd_iotinval.func3 == iommu_pkg::VMA) begin
                             flush_vma_o     = 1'b1;
                             flush_pscv_o    = cmd_iotinval.pscv;
-                            cq_head_o = cq_head_i + 1;
                         end
 
                         else if (cmd_iotinval.func3 == iommu_pkg::GVMA) begin
                             flush_gvma_o    = 1'b1;
-                            cq_head_o = cq_head_i + 1;
                         end
 
                     end
@@ -403,7 +403,7 @@ module cq_handler import ariane_pkg::*; #(
                         */
 
                         // "A command is determined to be illegal if a reserved bit is set to 1"
-                        if ((|cmd_iofence.reserved_1) || (|cmd_iotinval.reserved_2)) begin
+                        if ((|cmd_iofence.reserved_1) || (|cmd_iofence.reserved_2)) begin
                             
                             cmd_ill_o   = 1'b1;
                             error_wen_o = 1'b1;
@@ -412,8 +412,6 @@ module cq_handler import ariane_pkg::*; #(
 
                         // Valid IOFENCE.C command
                         else begin
-
-                            cq_head_o = cq_head_i + 1;
 
                             // "If AV=1, the IOMMU writes DATA to memory at a 4-byte aligned address ADDR[63:2] * 4"
                             if(cmd_iofence.av) begin
@@ -459,14 +457,12 @@ module cq_handler import ariane_pkg::*; #(
                         else if (cmd_iodirinval.func3 == iommu_pkg::DDT) begin
                             flush_ddtc_o    = 1'b1;
                             flush_pdtc_o    = 1'b1;
-                            cq_head_o = cq_head_i + 1;
                         end
 
                         else if (cmd_iodirinval.func3 == iommu_pkg::PDT) begin
                             flush_pdtc_o    = 1'b1;
                             flush_pv_o      = 1'b1;
                             flush_pid_o     = cmd_iodirinval.pid;
-                            cq_head_o = cq_head_i + 1;
                         end
                     end
 

@@ -18,8 +18,7 @@
 //              register interface protocol and AXI4.
 //
 
-`include "packages/iommu_reg_pkg.sv"
-`include "include/typedef_global.svh"
+// `include "packages/iommu_reg_pkg.sv"
 
 module iommu_regmap_if #(
     /// The width of the address.

@@ -17,12 +17,12 @@
 
 /* verilator lint_off WIDTH */
 
-`include "riscv_pkg.sv"
-`include "iommu_pkg.sv"
-`include "axi_pkg.sv"
-`include "ariane_axi_pkg.sv"
-`include "ariane_axi_soc_pkg.sv"
-`include "iommu_reg_pkg.sv"
+// `include "riscv_pkg.sv"
+// `include "iommu_pkg.sv"
+// `include "axi_pkg.sv"
+// `include "ariane_axi_pkg.sv"
+// `include "ariane_axi_soc_pkg.sv"
+// `include "iommu_reg_pkg.sv"
 
 module riscv_iommu #(
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -46,6 +46,8 @@ module riscv_iommu #(
     parameter int   DATA_WIDTH      = 64,
     /// AXI ID width
     parameter int   ID_WIDTH        = 4,
+    /// AXI ID width
+    parameter int   ID_SLV_WIDTH    = 6,
     /// AXI user width
     parameter int   USER_WIDTH      = 0,
     /// AXI AW Channel struct type
@@ -62,6 +64,10 @@ module riscv_iommu #(
     parameter type  axi_req_t       = logic,
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
+    /// AXI Full Slave request struct type
+    parameter type  axi_req_slv_t   = logic,
+    /// AXI Full Slave response struct type
+    parameter type  axi_rsp_slv_t   = logic,
     /// AXI-Lite request struct type.
     parameter type  axi_lite_req_t  = logic,
     /// AXI-Lite response struct type.
@@ -119,7 +125,7 @@ module riscv_iommu #(
     logic                           bound_violation;
 
     // AXI request bus used to intercept AxADDR and AxVALID parameters, and connect to the demux slave port
-    ariane_axi_soc::req_t       axi_aux_req;
+    ariane_axi_soc::req_t           axi_aux_req;
 
     // Memory-Mapped Register Interface connections
     iommu_reg_pkg::iommu_reg2hw_t   reg2hw;
@@ -130,6 +136,9 @@ module riscv_iommu #(
     logic [53:0]                    msi_addr_x[16];
     logic [31:0]                    msi_data_x[16];
     logic                           msi_vec_masked_x[16];
+
+    // We must wait for the FQ to write a record for a given error before letting the error slave respond to a subsequent request
+    logic                           is_fq_fifo_full;
 
     // WE signals
     assign  hw2reg.cqh.de               = 1'b1;
@@ -205,8 +214,8 @@ module riscv_iommu #(
     };
 
     // Error slave AXI bus
-    ariane_axi_soc::req_t       error_req;
-    ariane_axi_soc::resp_t      error_rsp;
+    axi_req_t  error_req;
+    axi_rsp_t  error_rsp;
 
     // AW
     // AWVALID is set on translation success or when an error occurs
@@ -222,13 +231,13 @@ module riscv_iommu #(
 
         After the AW handshake, communication through AXI bus is directly handled by the AXI demux for W, R and B channels 
     */
-    assign axi_aux_req.aw_valid                 = (trans_valid | trans_error | bound_violation) & aw_request;
+    assign axi_aux_req.aw_valid                 = (trans_valid | (trans_error & !is_fq_fifo_full) | bound_violation) & aw_request;
 
     assign axi_aux_req.aw.id                    = dev_tr_req_i.aw.id;
-    assign axi_aux_req.aw.addr[riscv::PLEN-1:0] = spaddr;                   // translated address
-    assign axi_aux_req.aw.len                   = dev_tr_req_i.aw.len;
-    assign axi_aux_req.aw.size                  = dev_tr_req_i.aw.size;
-    assign axi_aux_req.aw.burst                 = dev_tr_req_i.aw.burst;
+    assign axi_aux_req.aw.addr[riscv::PLEN-1:0] = (aw_request & trans_valid) ? (spaddr) : ('0);  // translated address
+    assign axi_aux_req.aw.len                   = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.len) : '0;
+    assign axi_aux_req.aw.size                  = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.size) : '0;
+    assign axi_aux_req.aw.burst                 = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.burst) : '0;
     assign axi_aux_req.aw.lock                  = dev_tr_req_i.aw.lock;
     assign axi_aux_req.aw.cache                 = dev_tr_req_i.aw.cache;
     assign axi_aux_req.aw.prot                  = dev_tr_req_i.aw.prot;
@@ -239,19 +248,21 @@ module riscv_iommu #(
 
     // W
     assign axi_aux_req.w            = dev_tr_req_i.w;
+    // assign axi_aux_req.w            = '0;
     assign axi_aux_req.w_valid      = dev_tr_req_i.w_valid;
+    // assign axi_aux_req.w_valid      = 1'b0;
 
     // B
     assign axi_aux_req.b_ready      = dev_tr_req_i.b_ready;
 
     // AR
-    assign axi_aux_req.ar_valid                 = (trans_valid | trans_error | bound_violation) & ar_request;
+    assign axi_aux_req.ar_valid                 = (trans_valid | (trans_error & !is_fq_fifo_full) | bound_violation) & ar_request;
 
     assign axi_aux_req.ar.id                    = dev_tr_req_i.ar.id;
-    assign axi_aux_req.ar.addr[riscv::PLEN-1:0] = spaddr;                   // translated address
-    assign axi_aux_req.ar.len                   = dev_tr_req_i.ar.len;
-    assign axi_aux_req.ar.size                  = dev_tr_req_i.ar.size;
-    assign axi_aux_req.ar.burst                 = dev_tr_req_i.ar.burst;
+    assign axi_aux_req.ar.addr[riscv::PLEN-1:0] = (ar_request & trans_valid) ? (spaddr) : ('0);  // translated address
+    assign axi_aux_req.ar.len                   = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.len) : '0;
+    assign axi_aux_req.ar.size                  = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.size) : '0;
+    assign axi_aux_req.ar.burst                 = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.burst) : '0;
     assign axi_aux_req.ar.lock                  = dev_tr_req_i.ar.lock;
     assign axi_aux_req.ar.cache                 = dev_tr_req_i.ar.cache;
     assign axi_aux_req.ar.prot                  = dev_tr_req_i.ar.prot;
@@ -301,7 +312,7 @@ module riscv_iommu #(
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
 
-        .req_trans_i    (allow_request),        // Trigger translation
+        .req_trans_i    (allow_request & !is_fq_fifo_full),        // Trigger translation
 
         // Translation request data
         .device_id_i    (device_id),            // AxID
@@ -310,7 +321,7 @@ module riscv_iommu #(
         .iova_i         (iova),                 // AxADDR
         
         .trans_type_i   (trans_type),           // Always untranslated requests as PCIe is not implemented
-        .priv_lvl_i     (riscv::PRIV_LVL_S),    // Always U-mode as we do not use process_id (See Spec)
+        .priv_lvl_i     (riscv::PRIV_LVL_U),    // Always U-mode as we do not use process_id (See Spec)
 
         // Memory Bus
         .mem_resp_i     (mem_resp_i),           // Simply connect AXI channels
@@ -374,7 +385,9 @@ module riscv_iommu #(
         .trans_valid_o      (trans_valid),  // Translation successfully completed
         .is_msi_o           (),             // Indicate whether the translated address is an MSI address
         .translated_addr_o  (spaddr),       // Translated address
-        .trans_error_o      (trans_error)   // Translation error
+        .trans_error_o      (trans_error),  // Translation error
+
+        .is_fq_fifo_full_o  (is_fq_fifo_full)
     );
 
     iommu_regmap_if #(
@@ -420,7 +433,7 @@ module riscv_iommu #(
         // AR request received (this way we are giving priority to read transactions)
         if (dev_tr_req_i.ar_valid) begin
 
-            ar_request  = 1'b1;
+            ar_request      =  1'b1;
             iova            =  dev_tr_req_i.ar.addr;
             device_id       =  dev_tr_req_i.ar.id;
             // ARPROT[2] indicates data access (r) when LOW, instruction access (rx) when HIGH
@@ -511,7 +524,7 @@ module riscv_iommu #(
                 axi_pkg::BURST_INCR: begin
                     // check if burst is within 4K range
                     if (((iova & 12'hfff) + ((burst_length + 1) << n_bytes)) < (1'b1 << 12)) begin
-                        allow_request  = 1'b0;     // Allow transaction
+                        allow_request  = 1'b1;     // Allow transaction
                     end
 
                     // Boundary violation

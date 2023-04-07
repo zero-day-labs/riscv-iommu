@@ -27,7 +27,6 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
 
-    // TODO: Create F, U and LU signals structure (carefull with cocotb testing...)
     // Flush signals
     input  logic                    flush_vma_i,      // IOTINVAL.VMA
     input  logic                    flush_gvma_i,     // IOTINVAL.GVMA

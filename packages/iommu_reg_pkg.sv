@@ -1105,62 +1105,62 @@ package iommu_reg_pkg;
     8'b 01111111, // index[ 2] IOMMU_DDTP
     8'b 01111111, // index[ 3] IOMMU_CQB
     8'b 00001111, // index[ 4] IOMMU_CQH
-    8'b 00001111, // index[ 5] IOMMU_CQT
+    8'b 11110000, // index[ 5] IOMMU_CQT
     8'b 01111111, // index[ 6] IOMMU_FQB
     8'b 00001111, // index[ 7] IOMMU_FQH
-    8'b 00001111, // index[ 8] IOMMU_FQT
+    8'b 11110000, // index[ 8] IOMMU_FQT
     8'b 00000111, // index[ 9] IOMMU_CQCSR
-    8'b 00000111, // index[10] IOMMU_FQCSR
-    8'b 00000001, // index[11] IOMMU_IPSR
+    8'b 01110000, // index[10] IOMMU_FQCSR
+    8'b 00010000, // index[11] IOMMU_IPSR
     8'b 00000011, // index[12] IOMMU_ICVEC
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001, // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
     8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
     8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00000001 // index[15] IOMMU_MSI_VEC_CTL_0
+    8'b 00010000 // index[15] IOMMU_MSI_VEC_CTL_0
   };
 
 endpackage

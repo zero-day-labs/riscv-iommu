@@ -99,10 +99,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // PTW states
     enum logic[2:0] {
-      IDLE,
-      WAIT_GRANT,
-      PTE_LOOKUP,
-      PROPAGATE_ERROR
+      IDLE,             // 000
+      WAIT_GRANT,       // 001
+      PTE_LOOKUP,       // 010
+      PROPAGATE_ERROR   // 011
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -148,10 +148,10 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     logic page_fault_q, page_fault_n;
 
     // input IOVA (GPA) is the address of a virtual IMSIC
-    assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i &&
+    assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i && is_store_i &&
                                    ((req_iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
     // GPA is the address of a virtual IMSIC
-    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i && 
+    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i && is_store_i &&
                                    ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
     // PTW walking
@@ -186,7 +186,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         end
 
         // stage 2 only
-        else begin
+        else if (en_stage2_i) begin
             
             up_is_g_2M_o = (ptw_lvl_q == LVL2);
             up_is_g_1G_o = (ptw_lvl_q == LVL1);
@@ -217,7 +217,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         end
     end
 
-    logic allow_access;
     logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
 
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN-1:0] : gpaddr_q) : '0;
@@ -338,6 +337,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         if (iova_is_imsic_addr) begin
                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
                             msi_translation_n = 1'b1;   // signal next cycle
+                            ptw_lvl_n         = LVL3;
+                            gptw_lvl_n        = LVL3;
                         end
 
                         // normal second-stage translation
@@ -354,7 +355,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
                     end
 
-                    // MSI Address translation may be invoked if no stage is enabled
+                    // MSI Address translation may be invoked even if no stage is enabled
                     else if (iova_is_imsic_addr) begin
                         ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i), 4'b0};
                         msi_translation_n   = 1'b1;   // signal next cycle
@@ -492,6 +493,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                             state_n = WAIT_GRANT;
                                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
+                                            ptw_lvl_n = LVL3;
+                                            gptw_lvl_n = LVL3;
                                         end
                                     end
 
@@ -525,12 +528,15 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 end
 
                                 // "(1): If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
-                                // "Stop and raise a page-fault exception corresponding to the original access type."
+                                // "     Stop and raise a page-fault exception corresponding to the original access type."
                                 // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
-                                // " a page-fault exception is raised."
+                                // "     a page-fault exception is raised."
+                                // "(3): For G-stage address translation, all memory accesses are considered to be user-level accesses," 
+                                // "     as though executed in U-mode."
                                 if ((ptw_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
                                     (ptw_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
-                                    (!pte.a || !pte.r || (is_store_i && !pte.d) )) begin
+                                    (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
+                                    (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                     
                                     page_fault_n        = 1'b1;
                                     state_n             = PROPAGATE_ERROR;
@@ -622,7 +628,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                 //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                                 if (ptw_lvl_q == LVL3) begin
                                     page_fault_n    = 1'b1;
-                                    ptw_lvl_n   = LVL3;
                                     state_n = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
                                 end

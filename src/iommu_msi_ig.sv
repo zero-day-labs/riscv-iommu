@@ -75,11 +75,8 @@ module iommu_msi_ig (
     // Control signal to indicate interrupt source
     logic   is_cq_int_q, is_cq_int_n;
 
-    // CQ interrupt message pending
-    logic   cq_pending_q, cq_pending_n;
-
-    // FQ interrupt message pending
-    logic   fq_pending_q, fq_pending_n;
+    // Pending interrupts
+    logic [15:0] pending_q, pending_n;
 
     always_comb begin : int_generation_fsm
 
@@ -88,8 +85,8 @@ module iommu_msi_ig (
         // AW
         mem_req_o.aw.id         = 4'b0010;
         mem_req_o.aw.addr       = (is_cq_int_q) ? ({msi_addr_x_i[civ_i], 2'b0}) : ({msi_addr_x_i[fiv_i], 2'b0});
-        mem_req_o.aw.len        = 8'd0;         // MSI writes only 64 bits
-        mem_req_o.aw.size       = 3'b011;       // 8-bytes beat
+        mem_req_o.aw.len        = 8'd0;         // MSI writes only 32 bits
+        mem_req_o.aw.size       = 3'b010;       // 4-bytes beat
         mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
         mem_req_o.aw.lock       = '0;
         mem_req_o.aw.cache      = '0;
@@ -123,7 +120,6 @@ module iommu_msi_ig (
         mem_req_o.ar.prot       = '0;
         mem_req_o.ar.qos        = '0;
         mem_req_o.ar.region     = '0;
-        mem_req_o.ar.atop       = '0;
         mem_req_o.ar.user       = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // we never read here
@@ -138,8 +134,7 @@ module iommu_msi_ig (
         is_cq_int_n     = is_cq_int_q;
         edged_cip_n     = edged_cip_q;
         edged_fip_n     = edged_fip_q;
-        cq_pending_n    = cq_pending_q;
-        fq_pending_n    = fq_pending_q;
+        pending_n       = pending_q;
 
         case (state_q)
             
@@ -147,19 +142,20 @@ module iommu_msi_ig (
             IDLE: begin
 
                 // If the IOMMU does not support or use MSI as IG mechanism, do nothing
-                if (!msi_ig_enabled_i) begin
+                if (msi_ig_enabled_i) begin
+
                     // Send CQ pending messages if the mask was cleared
-                    if (cq_pending_q && !msi_vec_masked_x_i[civ_i]) begin
-                            is_cq_int_n     = 1'b1;
-                            cq_pending_n    = 1'b0;
-                            state_n         = WRITE;
+                    if (pending_q[civ_i] && !msi_vec_masked_x_i[civ_i]) begin
+                            is_cq_int_n         = 1'b1;
+                            pending_n[civ_i]    = 1'b0;
+                            state_n             = WRITE;
                     end
 
                     // Send FQ pending messages if the mask was cleared
-                    else if (fq_pending_q && !msi_vec_masked_x_i[fiv_i]) begin
-                            is_cq_int_n     = 1'b0;
-                            fq_pending_n    = 1'b0;
-                            state_n         = WRITE;
+                    else if (pending_q[fiv_i] && !msi_vec_masked_x_i[fiv_i]) begin
+                            is_cq_int_n         = 1'b0;
+                            pending_n[fiv_i]    = 1'b0;
+                            state_n             = WRITE;
                     end
 
                     // CQ Interrupt
@@ -175,16 +171,16 @@ module iommu_msi_ig (
                             state_n     = WRITE;
                         end
 
-                        // if vector is masked, then save request for CQ
+                        // if vector is masked, then save request
                         else begin
-                            cq_pending_n    = 1'b1;
+                            pending_n[civ_i]    = 1'b1;
                         end
                     end
 
                     // FQ Interrupt
                     else if (fip_i && !edged_fip_q) begin
 
-                        // We do not attribute cip_i directly to avoid missing 
+                        // We do not attribute fip_i directly to avoid missing 
                         // any IP bit transition while sending another interrupt.
                         edged_fip_n = 1'b1;
 
@@ -196,7 +192,7 @@ module iommu_msi_ig (
 
                         // if vector is masked, then save request for FQ
                         else begin
-                            fq_pending_n    = 1'b1;
+                            pending_n[fiv_i]    = 1'b1;
                         end
                     end
 
@@ -270,21 +266,19 @@ module iommu_msi_ig (
             // Reset values
             state_q         <= IDLE;
             wr_state_q      <= AW_REQ;
-            is_cq_int_n     <= 1'b0;
-            edged_cip_n     <= 1'b0;
-            edged_fip_n     <= 1'b0;
-            cq_pending_n    <= 1'b0;
-            fq_pending_n    <= 1'b0;
+            is_cq_int_q     <= 1'b0;
+            edged_cip_q     <= 1'b0;
+            edged_fip_q     <= 1'b0;
+            pending_q       <= '0;
         end
 
         else begin
-            state_n         <= state_q;
-            wr_state_n      <= wr_state_q;
-            is_cq_int_n     <= is_cq_int_q;
-            edged_cip_n     <= edged_cip_q;
-            edged_fip_n     <= edged_fip_q;
-            cq_pending_n    <= cq_pending_q;
-            fq_pending_n    <= fq_pending_q;
+            state_q         <= state_n;
+            wr_state_q      <= wr_state_n;
+            is_cq_int_q     <= is_cq_int_n;
+            edged_cip_q     <= edged_cip_n;
+            edged_fip_q     <= edged_fip_n;
+            pending_q       <= pending_n;
         end
     end
     

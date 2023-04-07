@@ -19,10 +19,10 @@
 // Disclaimer:  This file was generated using LowRISC `reggen` tool. Edit at your own risk.
 
 
-`include "include/assertions.svh"
-`include "packages/iommu_reg_pkg.sv"
-`include "packages/iommu_field_pkg.sv"
-`include "register_interface/typedef.svh"
+// `include "include/assertions.svh"
+// `include "packages/iommu_reg_pkg.sv"
+// `include "packages/iommu_field_pkg.sv"
+// `include "register_interface/typedef.svh"
 
 module iommu_regmap_wrapper #(
     parameter int 			ADDR_WIDTH = 64,
@@ -875,7 +875,7 @@ module iommu_regmap_wrapper #(
   end
 
   // MSI and WSI support
-  else if (!InclMSI_IG && InclWSI_IG) begin
+  else if (InclMSI_IG && InclWSI_IG) begin
       assign reg2hw.capabilities.igs.q = 2'h2;
       assign capabilities_igs_qs = 2'h2;
   end
@@ -3547,8 +3547,8 @@ module iommu_regmap_wrapper #(
 
   // Interrupts can not be generated as MSI (0) if caps.IGS != {0,2}, and can not be generated as WSI (1) if caps.IGS != {1,2}
   assign fctl_wsi_we = (addr_hit[1] & reg_we & !reg_error) & 
-    (reg_wdata[1] == 1'b0 & reg2hw.capabilities.igs.q inside {2'b00, 2'b10}) | 
-    (reg_wdata[1] == 1'b1 & reg2hw.capabilities.igs.q inside {2'b01, 2'b10});
+    (((reg_wdata[1] == 1'b0) & (reg2hw.capabilities.igs.q inside {2'b00, 2'b10})) | 
+     ((reg_wdata[1] == 1'b1) & (reg2hw.capabilities.igs.q inside {2'b01, 2'b10})));
   assign fctl_wsi_wd = reg_wdata[1];
 
   assign fctl_gxl_we = addr_hit[1] & reg_we & !reg_error;
@@ -3845,8 +3845,8 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[5]: begin
-        reg_rdata_next[31:0] = cqt_qs;
-        reg_rdata_next[63:32] = '0;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:32] = cqt_qs;
       end
 
       addr_hit[6]: begin
@@ -3862,8 +3862,8 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[8]: begin
-        reg_rdata_next[31:0] = fqt_qs;
-        reg_rdata_next[63:32] = '0;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:32] = fqt_qs;
       end
 
       addr_hit[9]: begin
@@ -3883,25 +3883,26 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[10]: begin
-        reg_rdata_next[0] = fqcsr_fqen_qs;
-        reg_rdata_next[1] = fqcsr_fie_qs;
-        reg_rdata_next[7:2] = '0;
-        reg_rdata_next[8] = fqcsr_fqmf_qs;
-        reg_rdata_next[9] = fqcsr_fqof_qs;
-        reg_rdata_next[15:10] = '0;
-        reg_rdata_next[16] = fqcsr_fqon_qs;
-        reg_rdata_next[17] = fqcsr_busy_qs;
-        reg_rdata_next[27:18] = '0;
-        reg_rdata_next[31:28] = '0;
-        reg_rdata_next[63:32] = '0;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[32] = fqcsr_fqen_qs;
+        reg_rdata_next[33] = fqcsr_fie_qs;
+        reg_rdata_next[39:34] = '0;
+        reg_rdata_next[40] = fqcsr_fqmf_qs;
+        reg_rdata_next[41] = fqcsr_fqof_qs;
+        reg_rdata_next[47:42] = '0;
+        reg_rdata_next[48] = fqcsr_fqon_qs;
+        reg_rdata_next[49] = fqcsr_busy_qs;
+        reg_rdata_next[59:50] = '0;
+        reg_rdata_next[63:60] = '0;
       end
 
       addr_hit[11]: begin
-        reg_rdata_next[0] = ipsr_cip_qs;
-        reg_rdata_next[1] = ipsr_fip_qs;
-        reg_rdata_next[2] = ipsr_pmip_qs;
-        reg_rdata_next[3] = ipsr_pip_qs;
-        reg_rdata_next[63:4] = '0;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[32] = ipsr_cip_qs;
+        reg_rdata_next[33] = ipsr_fip_qs;
+        reg_rdata_next[34] = ipsr_pmip_qs;
+        reg_rdata_next[35] = ipsr_pip_qs;
+        reg_rdata_next[63:36] = '0;
       end
 
       addr_hit[12]: begin
@@ -3924,8 +3925,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[15]: begin
-        reg_rdata_next[0] = msi_vec_ctl_0_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_0_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[16]: begin
@@ -3940,8 +3942,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[18]: begin
-        reg_rdata_next[0] = msi_vec_ctl_1_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_1_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[19]: begin
@@ -3956,8 +3959,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[21]: begin
-        reg_rdata_next[0] = msi_vec_ctl_2_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_2_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[22]: begin
@@ -3972,8 +3976,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[24]: begin
-        reg_rdata_next[0] = msi_vec_ctl_3_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_3_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[25]: begin
@@ -3988,8 +3993,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[27]: begin
-        reg_rdata_next[0] = msi_vec_ctl_4_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_4_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[28]: begin
@@ -4004,8 +4010,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[30]: begin
-        reg_rdata_next[0] = msi_vec_ctl_5_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_5_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[31]: begin
@@ -4020,8 +4027,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[33]: begin
-        reg_rdata_next[0] = msi_vec_ctl_6_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_6_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[34]: begin
@@ -4036,8 +4044,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[36]: begin
-        reg_rdata_next[0] = msi_vec_ctl_7_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_7_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[37]: begin
@@ -4052,8 +4061,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[39]: begin
-        reg_rdata_next[0] = msi_vec_ctl_8_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_8_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[40]: begin
@@ -4068,8 +4078,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[42]: begin
-        reg_rdata_next[0] = msi_vec_ctl_9_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_9_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[43]: begin
@@ -4084,8 +4095,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[45]: begin
-        reg_rdata_next[0] = msi_vec_ctl_10_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_10_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[46]: begin
@@ -4100,8 +4112,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[48]: begin
-        reg_rdata_next[0] = msi_vec_ctl_11_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_11_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[49]: begin
@@ -4116,8 +4129,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[51]: begin
-        reg_rdata_next[0] = msi_vec_ctl_12_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_12_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[52]: begin
@@ -4132,8 +4146,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[54]: begin
-        reg_rdata_next[0] = msi_vec_ctl_13_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_13_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[55]: begin
@@ -4148,8 +4163,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[57]: begin
-        reg_rdata_next[0] = msi_vec_ctl_14_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_14_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       addr_hit[58]: begin
@@ -4164,8 +4180,9 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[60]: begin
-        reg_rdata_next[0] = msi_vec_ctl_15_qs;
-        reg_rdata_next[63:1] = '0;
+        reg_rdata_next[32] = msi_vec_ctl_15_qs;
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[63:33] = '0;
       end
 
       default: begin

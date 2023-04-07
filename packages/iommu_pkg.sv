@@ -283,7 +283,7 @@ package iommu_pkg;
     localparam logic [CAUSE_LEN-1:0] LOAD_GUEST_PAGE_FAULT  = 21; // Load/read guest-page fault
     localparam logic [CAUSE_LEN-1:0] STORE_GUEST_PAGE_FAULT = 23; // Store/write/AMO guest-page fault
 
-    // Extended IOMMU fault cases (include in riscv_pkg ???)
+    // Extended IOMMU fault cases
     localparam logic [CAUSE_LEN-1:0] ALL_INB_TRANSACTIONS_DISALLOWED    = 256;  // IOMMU off / ATS requested and not supported
     localparam logic [CAUSE_LEN-1:0] DDT_ENTRY_LD_ACCESS_FAULT          = 257;  // PMP/PMA fault when accessing 'ddtp' or 'DC' 
     localparam logic [CAUSE_LEN-1:0] DDT_ENTRY_INVALID                  = 258;  // When either 'ddtp' or 'DC' are not valid
@@ -390,8 +390,8 @@ package iommu_pkg;
         imsic_num = '0;
         i = 0;
         for (int unsigned k = 0 ; k < MSI_MASK_LEN; k++) begin
-            if (masked_gpaddr[k]) begin
-                imsic_num[i] = 1'b1;
+            if (mask[k]) begin
+                imsic_num[i] = masked_gpaddr[k];
                 i++;
             end
         end
