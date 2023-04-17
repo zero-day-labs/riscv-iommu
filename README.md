@@ -1,92 +1,103 @@
-# iommu
+# RISC-V IOMMU
+<!-- Table of contents -->
+<!-- About this project -->
+<!-- Interfaces -->
+<!-- Usage -->
+<!-- Features -->
+<!-- Testing -->
+<!-- Roadmap -->
+<!-- License -->
 
+## Table of Contents
 
-
-## Getting started
-
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/ESRGv3/iommu.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.com/ESRGv3/iommu/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+- [About this Project](#about-this-project)
+- [Interfaces](#interfaces)
+- [Features](#features)
+- [Usage](#usage)
+- [Integration and Testing](#integration-and-testing)
+- [Roadmap](#roadmap)
+- [License](#license)
 
 ***
 
-# Editing this README
+## About this Project
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+This repository contains the RTL implementation of an Input/Output Memory Management Unit (IOMMU), compliant with the [RISC-V IOMMU Specification](https://github.com/riscv-non-isa/riscv-iommu). An IOMMU performs permission checks, address translation and interrupt remapping on requests originated by DMA-capable IO devices
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+**This implementation is currently under development**. A basic version of the IOMMU IP with mandatory features defined by the spec and virtualization support has been achieved and validated. The internal design of the IP is ilustrated in the diagram below. Advanced modules/features are presented in gray, and are not implemented yet.
 
-## Name
-Choose a self-explaining name for your project.
+![My Image](doc/IOMMU_design.png)
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+The IOMMU communicates through four AXI4 interfaces, described in the [interfaces](#interfaces) section. In [features](#features), we list all features considered for both versions of the IOMMU IP (basic and advanced).
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Interfaces
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Four AXI4-Full interfaces are used by the IOMMU to operate:
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+- **Programming Interface**
+
+Slave interface used by RISC-V harts to program and monitor the memory-mapped registers of the IOMMU. These registers must be located within a naturally aligned 4-KiB region of physical address space.
+
+- **Memory Interface**
+
+Master interface used by modules that generate implicit memory accesses during the translation process. The following table summarizes these modules and the data structures accessed by them.
+
+| Module  | Data Structures |
+| ------------- | ------------- |
+| Page Table Walker (PTW) | First and second-stage page tables. MSI Page Tables |
+| Context Directory Walker (CDW) | Device Directory Table (DDT). Process Directory Table (PDT) |
+| Command Queue handler | Command Queue |
+| Fault Queue handler | Fault Queue |
+| Interrupt Generation (IGS) | IOMMU-generated MSIs |
+
+- **Translation Request Interface**
+
+Slave interface to which DMA-capable devices connect to request address translations. A request is initiated by setting *AXVALID*. The input IO Virtual Address is taken from the AXADDR bus.
+
+![My Image](doc/AXI/tr_if.png)
+
+- **Translation Completion Interface**
+
+Master interface used to forward permitted requests to the system interconnect. On a successful translation, the translated address is placed in the AXADDR bus of this interface, and the AXVALID is set to continue the transaction.
+
+On an error, the AXI demux connects the translation request IF to the [AXI Error Slave](https://github.com/openhwgroup/cva6/tree/master/vendor/pulp-platform/axi), which responds the failing request with an AXI error.
+
+- **Wired-Signaled Interrupt wires**
+
+The IOMMU may be configured to generate interrupts as WSIs to request service from software. These 16 wires are driven by the Interrupt Generation Support module, and should be connected to a Platform-Level Interrupt Controller (e.g. PLIC/APLIC).
+
+## Features
+
+The following table lists all features supported by this implementation, and those that will be included in the advanced version.
+
+| Feature  | Status |
+| ------------- | ------------- |
+| Memory-based Device Context (DC) indexed using *device_id* up to 24-bits | Implemented. Basic Version |
+| Memory-based Process Context (PC) indexed using *process_id* up to 20-bits | Implemented. Basic Version |
+| Address Translation Caches: DDT Cache, PDT Cache and IOTLB with 16-bit *GSCID* and 20-bit *PSCID* tags (see [Spec](https://github.com/riscv-non-isa/riscv-iommu))  | Implemented. Basic Version |
+| Two-stage Address Translation | Implemented. Basic Version |
+| Command Queue and Fault Queue | Implemented. Basic Version |
+| MSI Translation using basic-translate mode | Implemented. Basic Version |
+| WSI and MSI IOMMU interrupt generation support | Implemented. Basic Version |
+| Memory-mapped register interface | Implemented. Basic Version |
+| Memory-Resident Interrupt Files (MRIF) support | NOT Implemented. Advanced Version |
+| Hardware Performance Monitor | NOT Implemented. Advanced Version |
+| Debug Register Interface | NOT Implemented. Advanced Version |
+
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+The top module of the IOMMU IP is located in the `riscv_iommu.sv` file. Some parameters may be used to specify the number of entries of the Address Translation Caches, the width of some signals, and internal configurations, such as whether to include support for WSI generation, support for MSI generation and support for Process Contexts.
+
+## Testing
+
+The IP was integrated and validated in a CVA6-based SoC, using a baremetal test framework and the [PULP iDMA](https://github.com/pulp-platform/iDMA) module as the DMA-capable device.
 
 ## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+As for the next steps, we plan to add support for the advanced features mentioned in the [features](#features) section.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+TBD
+
