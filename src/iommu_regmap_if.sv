@@ -83,8 +83,8 @@ module iommu_regmap_if #(
         .AxiDataWidth       (DATA_WIDTH),
         .AxiIdWidth         (ID_WIDTH),
         .AxiUserWidth       (USER_WIDTH),
-        .AxiMaxWriteTxns    (32'd1),    //? What is the correct value
-        .AxiMaxReadTxns     (32'd1),    //? What is the correct value
+        .AxiMaxWriteTxns    (32'd1),    
+        .AxiMaxReadTxns     (32'd1),   
         .FallThrough        (1'b0),     // The data at the head of the FIFO is immediately presented on the data output lines
         .full_req_t         (axi_req_t),
         .full_resp_t        (axi_rsp_t),
@@ -108,8 +108,8 @@ module iommu_regmap_if #(
     axi_lite_to_reg #(
         .DATA_WIDTH      (DATA_WIDTH),
         .ADDR_WIDTH      (ADDR_WIDTH),
-        .BUFFER_DEPTH    (BUFFER_DEPTH), //? What is the correct value for this?
-        .DECOUPLE_W      (DECOUPLE_W),   //? What is the correct value for this?
+        .BUFFER_DEPTH    (BUFFER_DEPTH), 
+        .DECOUPLE_W      (DECOUPLE_W),   
         .axi_lite_req_t  (axi_lite_req_t),
         .axi_lite_rsp_t  (axi_lite_resp_t),
         .reg_req_t       (reg_req_t),

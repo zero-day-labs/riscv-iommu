@@ -186,7 +186,7 @@ module cq_handler import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0010;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.id                     = 4'b0010;              
         mem_req_o.ar.addr[riscv::PLEN-1:0]  = cq_pptr_q;            // Physical address to access
         mem_req_o.ar.len                    = 8'd1;                 // CQ entries are 16-bytes wide (2 beats)
         mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat
@@ -219,7 +219,6 @@ module cq_handler import ariane_pkg::*; #(
         flush_pv_o          = 1'b0;
         flush_pid_o         = '0;
 
-        cq_ip_o             = 1'b0;
         error_wen_o         = 1'b0;
 
         cq_head_o           = cq_head_i;

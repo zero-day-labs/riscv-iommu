@@ -25,7 +25,6 @@ module iommu_pdtc import ariane_pkg::*; #(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
 
-    // TODO: Create F, U and LU signals structure (carefull with cocotb testing...)
     // Flush signals
     input  logic                        flush_i,        // IODIR.INVAL_DDT or IODIR.INVAL_PDT
     input  logic                        flush_dv_i,     // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
@@ -33,12 +32,11 @@ module iommu_pdtc import ariane_pkg::*; #(
     input  logic [DEVICE_ID_WIDTH-1:0]  flush_did_i,    // device_id to be flushed
     input  logic [PROCESS_ID_WIDTH-1:0] flush_pid_i,    // process_id to be flushed (if flush_pv_i = 1)
 
-    // TODO: If flush and update operations are mutually exclusive, some signals may be shared
     // Update signals
     input  logic                        update_i,       // update flag
     input  logic [DEVICE_ID_WIDTH-1:0]  up_did_i,       // device ID to be inserted
     input  logic [PROCESS_ID_WIDTH-1:0] up_pid_i,       // process ID to be inserted
-    input iommu_pkg::pc_t               up_content_i,   // PC to be inserted
+    input  iommu_pkg::pc_t               up_content_i,   // PC to be inserted
 
     // Lookup signals
     input  logic                        lookup_i,       // lookup flag
@@ -52,9 +50,9 @@ module iommu_pdtc import ariane_pkg::*; #(
     // 24-bits device_id may be divided into up to three levels.
     // 20-bits process_id may be divided into up to three levels.
     struct packed {
-        logic [DEVICE_ID_WIDTH-1:0]     device_id;  // device_id //? Would it be necessary to divide the DID into levels? If yes, info about N of levels is necessary
+        logic [DEVICE_ID_WIDTH-1:0]     device_id;  // device_id
         logic [PROCESS_ID_WIDTH-1:0]    process_id; // process_id
-        logic                           valid;      // valid bit //? Why two V bits? tag and PC
+        logic                           valid;      // valid bit
     } [PDTC_ENTRIES-1:0] tags_q, tags_n;
 
     //# DDTC entries: Device Contexts
@@ -153,7 +151,6 @@ module iommu_pdtc import ariane_pkg::*; #(
     //# PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
-    //? Is it necessary to update LRU on updates?
     logic[2*(PDTC_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement
         plru_tree_n = plru_tree_q;

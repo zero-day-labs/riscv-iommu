@@ -57,7 +57,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]                  req_iova_i,
-    //? Necessary to propagate? Or can we simply connect the CDTC outputs with the IOTLB update bus?
     input  logic [PSCID_WIDTH-1:0]                  pscid_i,
     input  logic [GSCID_WIDTH-1:0]                  gscid_i,
 
@@ -198,7 +197,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         up_gscid_o = iotlb_update_gscid_q;
 
         // set the global mapping bit
-        //? Why set the global bit again?
         if(en_stage2_i) begin   // if stage 2 is enabled
             up_content_o = gpte_q | (global_mapping_q << 5);
             up_g_content_o = pte;
@@ -227,7 +225,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         // default assignments
         // AXI parameters
         // AW
-        mem_req_o.aw.id         = 4'b0010;              //? Can we define any value for AR.ID?
+        mem_req_o.aw.id         = 4'b0010; 
         mem_req_o.aw.addr       = '0;           // Physical address to access
         mem_req_o.aw.len        = 8'b0;                 // 1 beat per burst only
         mem_req_o.aw.size       = 3'b011;               // 64 bits (8 bytes) per beat
@@ -254,7 +252,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0000;              //? Can we define any value for AR.ID?
+        mem_req_o.ar.id                     = 4'b0000;          
         mem_req_o.ar.addr[riscv::PLEN-1:0]  = ptw_pptr_q;           // Physical address to access
         mem_req_o.ar.len                    = 8'b0;                 // 1 beat per burst only
         mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat

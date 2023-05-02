@@ -23,13 +23,11 @@ module iommu_ddtc import ariane_pkg::*; #(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
 
-    // TODO: Create F, U and LU signals structure (carefull with cocotb testing...)
     // Flush signals
     input  logic                        flush_i,        // IODIR.INVAL_DDT
     input  logic                        flush_dv_i,     // device_id valid
     input  logic [DEVICE_ID_WIDTH-1:0]  flush_did_i,    // device_id to be flushed
 
-    // TODO: If flush and update operations are mutually exclusive, some signals may be shared
     // Update signals
     input  logic                        update_i,       // update flag
     input  logic [DEVICE_ID_WIDTH-1:0]  up_did_i,       // device ID to be inserted
@@ -117,7 +115,6 @@ module iommu_ddtc import ariane_pkg::*; #(
 
             // normal replacement
             // only valid entries can be cached
-            //? We should give priority to invalid entries (if present) to be evicted in an update. Else we can evict the LRU
             else if (update_i && replace_en[i] && up_content_i.tc.v) begin
                 
                 // update tags
@@ -136,7 +133,6 @@ module iommu_ddtc import ariane_pkg::*; #(
     //# PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
-    //? Is it necessary to update LRU on updates?
     logic[2*(DDTC_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement
         plru_tree_n = plru_tree_q;

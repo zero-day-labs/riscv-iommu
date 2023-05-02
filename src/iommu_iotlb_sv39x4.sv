@@ -90,11 +90,10 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         logic                  is_msi;        // IOTLB entry contains a GPA associated with a guest vIMSIC
         logic                  s_stg_en;      // s-stage translation enable
         logic                  g_stg_en;      // g-stage translation enable
-        logic                  valid;         // valid bit //? Why two V bits? tag and PTE
+        logic                  valid;         // valid bit
     } [IOTLB_ENTRIES-1:0] tags_q, tags_n;
 
     //* IOTLB entries: Same entry for both stages (S/VS and G)
-    // TODO: For now, adopt the same PTE format for the IOTLB. Then, consider to ignore/save some unnecessary bits
     // For G-stage address translation, all memory accesses are considered to be user-level accesses
     // R, W and X permissions are checked in both stages
     // G bit in G-stage PTEs should be cleared by SW and ignored by HW
@@ -408,7 +407,6 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     //* PLRU - Pseudo Least Recently Used Replacement
     // -----------------------------------------------
     
-    //? Is it necessary to update LRU on updates?
     logic[2*(IOTLB_ENTRIES-1)-1:0] plru_tree_q, plru_tree_n;
     always_comb begin : plru_replacement
         plru_tree_n = plru_tree_q;

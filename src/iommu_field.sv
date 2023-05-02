@@ -20,6 +20,7 @@
 // `include "packages/iommu_field_pkg.sv"
 
 module iommu_field
+    import iommu_field_pkg::*;
     #(
         parameter int                           DATA_WIDTH = 32,        // bit width of the register field (2-state)
         parameter iommu_field_pkg::sw_access_e  SwAccess = SwAccessRW,  // SW access permission
