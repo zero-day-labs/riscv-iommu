@@ -22,13 +22,13 @@
 
 module iommu_regmap_if #(
     /// The width of the address.
-    parameter int   ADDR_WIDTH = 64,
+    parameter int   ADDR_WIDTH = -1,
     /// The width of the data.
-    parameter int   DATA_WIDTH = 64,
+    parameter int   DATA_WIDTH = -1,
     /// AXI ID width
-    parameter int   ID_WIDTH  = 4,
+    parameter int   ID_WIDTH  = -1,
     /// AXI user width
-    parameter int   USER_WIDTH  = 0,
+    parameter int   USER_WIDTH  = 1,
     /// Buffer depth (how many outstanding transactions do we allow)
     parameter int   BUFFER_DEPTH = 2,
     /// Whether the AXI-Lite W channel should be decoupled with a register. This

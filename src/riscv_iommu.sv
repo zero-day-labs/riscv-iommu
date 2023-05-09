@@ -17,12 +17,12 @@
 
 /* verilator lint_off WIDTH */
 
-// `include "riscv_pkg.sv"
-// `include "iommu_pkg.sv"
-// `include "axi_pkg.sv"
-// `include "ariane_axi_pkg.sv"
-// `include "ariane_axi_soc_pkg.sv"
-// `include "iommu_reg_pkg.sv"
+`include "riscv_pkg.sv"
+`include "iommu_pkg.sv"
+`include "axi_pkg.sv"
+`include "ariane_axi_pkg.sv"
+`include "ariane_axi_soc_pkg.sv"
+`include "iommu_reg_pkg.sv"
 
 module riscv_iommu #(
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -41,15 +41,15 @@ module riscv_iommu #(
     parameter bit           InclMSI_IG          = 0,
 
     /// AXI Bus Addr width.
-    parameter int   ADDR_WIDTH      = 64,
+    parameter int   ADDR_WIDTH      = -1,
     /// AXI Bus data width.
-    parameter int   DATA_WIDTH      = 64,
+    parameter int   DATA_WIDTH      = -1,
     /// AXI ID width
-    parameter int   ID_WIDTH        = 4,
+    parameter int   ID_WIDTH        = -1,
     /// AXI ID width
-    parameter int   ID_SLV_WIDTH    = 6,
+    parameter int   ID_SLV_WIDTH    = -1,
     /// AXI user width
-    parameter int   USER_WIDTH      = 0,
+    parameter int   USER_WIDTH      = 1,
     /// AXI AW Channel struct type
     parameter type aw_chan_t        = logic,
     /// AXI W Channel struct type
@@ -585,6 +585,20 @@ module riscv_iommu #(
       .slv_req_i    (error_req  ),
       .slv_resp_o   (error_rsp  )
   );
+
+    //pragma translate_off
+    `ifndef VERILATOR
+
+    initial begin : p_assertions
+        assert ((InclMSI_IG) || (InclWSI_IG))
+        else begin $error("At least one Interrupt Generation method must be supported (See spec)."); $stop(); end
+
+        assert ((ADDR_WIDTH >= 1) && (DATA_WIDTH >= 1) && (ID_WIDTH >= 1) && (ID_SLV_WIDTH >= 1) && (USER_WIDTH >= 1))
+        else begin $error("Invalid AXI parameter width"); $stop(); end
+    end
+
+    `endif
+    //pragma translate_on
     
 endmodule
 

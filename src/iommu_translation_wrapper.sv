@@ -48,7 +48,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     input  logic [PROCESS_ID_WIDTH-1:0]     process_id_i,
     input  logic [riscv::VLEN-1:0]          iova_i,
     
-    input  logic [iommu_pkg::TTYP_LEN-1:0]  trans_type_i,           //? When not implementing ATS, are all requests untranslated?
+    input  logic [iommu_pkg::TTYP_LEN-1:0]  trans_type_i,
     input  riscv::priv_lvl_t                priv_lvl_i,             // Privilege mode associated with the transaction
 
     // Memory Bus

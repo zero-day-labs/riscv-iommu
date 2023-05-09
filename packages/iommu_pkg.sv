@@ -15,6 +15,9 @@
 //
 // Description: RISC-V IOMMU overall SV package.
 
+`ifndef RISCV_IOMMU_PKG
+`define RISCV_IOMMU_PKG
+
 package iommu_pkg;
 
     // Device Context max length
@@ -399,3 +402,5 @@ package iommu_pkg;
     endfunction : extract_imsic_num
 
 endpackage
+
+`endif  /* RISCV_IOMMU_PKG */

@@ -17,14 +17,23 @@
 #
 # Description:  Makefile to perform lint checks in the RISC-V IOMMU IP using verilator
 
-WARN_FLAGS = -Wno-MULTITOP -Wno-UNOPTFLAT -Wno-CASEINCOMPLETE -Wno-UNSIGNED -Wno-CMPCONST -Wno-SYMRSVDWORD -Wno-LATCH
-INCLUDE_PATHS = -I./packages -I./vendor -I./include -I./src -I./src/axi -I./src/cdw -I./src/ddtc -I./src/ig -I./src/interfaces -I./src/iotlb -I./src/pdtc -I./src/ptw -I./src/queue_if -I./src/reg_file
+WARN_FLAGS += -Wno-MULTITOP
+WARN_FLAGS += -Wno-UNOPTFLAT
+WARN_FLAGS += -Wno-CASEINCOMPLETE
+WARN_FLAGS += -Wno-UNSIGNED
+WARN_FLAGS += -Wno-CMPCONST
+WARN_FLAGS += -Wno-SYMRSVDWORD
+WARN_FLAGS += -Wno-LATCH
+
+INC = -I./packages -I./vendor -I./include -I./src
+
+all: lint
 
 lint:
-	verilator --lint-only lint_checks.sv ${INCLUDE_PATHS} ${WARN_FLAGS}
+	verilator --lint-only lint_checks.sv ${INC} ${WARN_FLAGS}
 
 lint_less:
-	verilator --lint-only lint_checks.sv -${INCLUDE_PATHS} ${WARN_FLAGS} | less
+	verilator --lint-only lint_checks.sv -${INC} ${WARN_FLAGS} | less
 
 lint_log:
-	verilator --lint-only lint_checks.sv ${INCLUDE_PATHS} ${WARN_FLAGS} 2> verilator_log.txt
+	verilator --lint-only lint_checks.sv ${INC} ${WARN_FLAGS} 2> verilator_log.txt

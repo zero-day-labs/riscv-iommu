@@ -18,9 +18,6 @@
 //! NOTES:
 /*
     -   Interrupt generation is triggered on a possitive transition of cip or fip.
-    -   Since we only have two possible interrupt sources for now, we use some bits to monitor possitive 
-        transitions of cip or fip independently, so if a transition of fip occurs while processing a CQ interrupt,
-        it is not lost.
     -   The IOMMU must not send MSIs for interrupt vectors with mask M = 1. These messages must be saved and later sent if
         the corresponding mask is cleared to 0.
     -   A register could be used for each source to save messages from vectors with M = 1 (Remember that the same vector 

@@ -17,19 +17,6 @@
 //              This module fetches, decodes and executes commands
 //              issued by software into the CQ
 
-//! NOTES:
-/*
-    -   SW must ensure that the CQ is properly aligned according to its size:
-        For log2(N)-1 <= 7, the base PPN must be aligned to 4KiB, so bits [11:0] must be 0.
-        For log2(N)-1  > 7, the MSB index increases by one for each level (for 8 -> [12:0]; for 9 -> [13:0]; etc).
-    -   Invalidations are performed by the TLBs through combinational logic in one single cycle.
-    -   Registers that are handled both by SW and HW have an input port and an output port.
-    !-   IOMMU support for WSI (caps.IGS) and enable of WSI (fctl.WSI) must be checked externally before setting cqcsr.fence_w_ip
-    -   Write enable signal at HW side of the regmap for head register should be hardwired to 1
-    -   ipsr.cip write enable signal may be the value of the signal itself, in order to be written only when is set.
-        Signal is only cleared by SW.
-*/
-
 /* verilator lint_off WIDTH */
 
 module cq_handler import ariane_pkg::*; #(

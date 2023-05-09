@@ -19,10 +19,10 @@
 // Disclaimer:  This file was generated using LowRISC `reggen` tool. Edit at your own risk.
 
 
-// `include "include/assertions.svh"
-// `include "packages/iommu_reg_pkg.sv"
-// `include "packages/iommu_field_pkg.sv"
-// `include "register_interface/typedef.svh"
+`include "include/assertions.svh"
+`include "packages/iommu_reg_pkg.sv"
+`include "packages/iommu_field_pkg.sv"
+`include "register_interface/typedef.svh"
 
 module iommu_regmap_wrapper #(
     parameter int 			ADDR_WIDTH = 64,
