@@ -105,7 +105,7 @@ module cq_handler import ariane_pkg::*; #(
 
     // To mask the input head index according to the size of the CQ
     logic [31:0]    masked_head;
-    assign          masked_head = (cq_size_i <= 7) ? (cq_head_i & 32'b1111_1111) : (cq_head_i & ~({32{1'b1}} << (cq_size_i+1)));
+    assign          masked_head = cq_head_i & ~({32{1'b1}} << (cq_size_i+1));
 
     // Control busy signal to notice SW when is not possible to write to cqcsr
     logic cq_en_q, cq_en_n;
@@ -314,7 +314,7 @@ module cq_handler import ariane_pkg::*; #(
 
                     if (mem_resp_i.r.last) begin
                         cmd_n[127:64]   = mem_resp_i.r.data;
-                        cq_head_o = cq_head_i + 1;  // head is incremented after fetching a command
+                        cq_head_o = (cq_head_i + 1) & ~({32{1'b1}} << (cq_size_i+1));  // head is incremented after fetching a command
                         state_n         = DECODE;
                     end
                     else cmd_n[63:0]    = mem_resp_i.r.data;

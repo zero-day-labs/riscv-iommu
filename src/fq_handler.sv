@@ -103,7 +103,7 @@ module fq_handler import ariane_pkg::*; #(
 
     // To mask the input tail index according to the size of the CQ
     logic [31:0]    masked_tail;
-    assign          masked_tail = (fq_size_i <= 6) ? (fq_tail_i & 32'b0111_1111) : (fq_tail_i & ~({32{1'b1}} << (fq_size_i+1)));
+    assign          masked_tail = fq_tail_i & ~({32{1'b1}} << (fq_size_i+1));
 
     // Control busy signal to notice SW when is not possible to write to cqcsr
     logic fq_en_q, fq_en_n;
@@ -356,7 +356,7 @@ module fq_handler import ariane_pkg::*; #(
 
                             // After writing FQ record we can go back to IDLE
                             else begin
-                                fq_tail_o   = fq_tail_i + 1;    // Increment fqt
+                                fq_tail_o   = (fq_tail_i + 1) & ~({32{1'b1}} << (fq_size_i+1));    // Increment fqt
                                 state_n     = IDLE;
                             end
                         end
