@@ -24,7 +24,12 @@
         can be used by different sources. That's why we can have more than one pending message per vector).
 */
 
-module iommu_msi_ig (
+module iommu_msi_ig #(
+    parameter int unsigned N_INT_VEC = 16,
+
+    // DO NOT MODIFY
+    parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
+) (
     input  logic clk_i,
     input  logic rst_ni,
 
@@ -34,9 +39,9 @@ module iommu_msi_ig (
     input  logic cip_i,
     input  logic fip_i,
 
-    // Interrupt vectors
-    input  logic [3:0]  civ_i,
-    input  logic [3:0]  fiv_i,
+    // icvec
+    input  logic[(LOG2_INTVEC-1):0]   civ_i,
+    input  logic[(LOG2_INTVEC-1):0]   fiv_i,
 
     // MSI config table
     input  logic [53:0] msi_addr_x_i[16],
@@ -73,13 +78,14 @@ module iommu_msi_ig (
     logic   is_cq_int_q, is_cq_int_n;
 
     // Pending interrupts
-    logic [15:0] pending_q, pending_n;
+    logic [(N_INT_VEC-1):0] pending_q, pending_n;
 
     always_comb begin : int_generation_fsm
 
         // Default values
         // AXI parameters
         // AW
+        /* verilator lint_off WIDTH */
         mem_req_o.aw.id         = 4'b0010;
         mem_req_o.aw.addr       = (is_cq_int_q) ? ({msi_addr_x_i[civ_i], 2'b0}) : ({msi_addr_x_i[fiv_i], 2'b0});
         mem_req_o.aw.len        = 8'd0;         // MSI writes only 32 bits
@@ -97,6 +103,7 @@ module iommu_msi_ig (
 
         // W
         mem_req_o.w.data        = (is_cq_int_q) ? (msi_data_x_i[civ_i]) : (msi_data_x_i[fiv_i]); // set accordingly to the cause
+        /* verilator lint_on WIDTH */
         mem_req_o.w.strb        = '1;
         mem_req_o.w.last        = 1'b0;
         mem_req_o.w.user        = '0;

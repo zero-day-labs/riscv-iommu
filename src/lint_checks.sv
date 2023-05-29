@@ -55,7 +55,8 @@ module lint_checks (
 
 		.InclPID          	( 1'b0						),
 		.InclWSI_IG       	( 1'b1						),
-		.InclMSI_IG       	( 1'b0						),
+		.InclMSI_IG       	( 1'b1						),
+		.N_INT_VEC			( 8							),
 
 		.ADDR_WIDTH			( 64						),
 		.DATA_WIDTH			( 64						),

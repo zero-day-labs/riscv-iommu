@@ -430,9 +430,10 @@ module cq_handler import ariane_pkg::*; #(
 
                         // "A command is determined to be illegal if a reserved bit is set to 1"
                         // "PID operand is reserved for IODIR.INVAL_PDT"
-                        if ((|cmd_iodirinval.reserved_1) || (|cmd_iodirinval.reserved_2) || 
-                            (|cmd_iodirinval.reserved_3) || (|cmd_iodirinval.reserved_4) ||
-                            (cmd_iodirinval.func3 == iommu_pkg::DDT && |cmd_iodirinval.pid)) begin
+                        if ((|cmd_iodirinval.reserved_1) || (|cmd_iodirinval.reserved_2)    || 
+                            (|cmd_iodirinval.reserved_3) || (|cmd_iodirinval.reserved_4)    ||
+                            (cmd_iodirinval.func3 == iommu_pkg::DDT && |cmd_iodirinval.pid) ||
+                            (cmd_iodirinval.func3 == iommu_pkg::PDT && !cmd_iodirinval.dv)  ) begin
                             
                             cmd_ill_o   = 1'b1;
                             error_wen_o = 1'b1;

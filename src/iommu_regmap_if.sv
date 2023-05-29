@@ -22,22 +22,24 @@
 
 module iommu_regmap_if #(
     /// The width of the address.
-    parameter int   ADDR_WIDTH = -1,
+    parameter int           ADDR_WIDTH = -1,
     /// The width of the data.
-    parameter int   DATA_WIDTH = -1,
+    parameter int           DATA_WIDTH = -1,
     /// AXI ID width
-    parameter int   ID_WIDTH  = -1,
+    parameter int           ID_WIDTH  = -1,
     /// AXI user width
-    parameter int   USER_WIDTH  = 1,
+    parameter int           USER_WIDTH  = 1,
     /// Buffer depth (how many outstanding transactions do we allow)
-    parameter int   BUFFER_DEPTH = 2,
+    parameter int           BUFFER_DEPTH = 2,
     /// Whether the AXI-Lite W channel should be decoupled with a register. This
     /// can help break long paths at the expense of registers.
-    parameter bit   DECOUPLE_W = 1,
+    parameter bit           DECOUPLE_W = 1,
     // Include IOMMU WSI generation support
-    parameter bit   InclWSI_IG = 1,
+    parameter bit           InclWSI_IG = 1,
     // Include IOMMU MSI generation support
-    parameter bit   InclMSI_IG = 0,
+    parameter bit           InclMSI_IG = 0,
+    // Number of interrupt vectors supported
+    parameter int unsigned  N_INT_VEC = 16,
     /// AXI Full request struct type
     parameter type  axi_req_t = logic,
     /// AXI Full response struct type
@@ -133,6 +135,7 @@ module iommu_regmap_if #(
         .DATA_WIDTH (DATA_WIDTH),
         .InclWSI_IG (InclWSI_IG),
         .InclMSI_IG (InclMSI_IG),
+        .N_INT_VEC  (N_INT_VEC),
         .reg_req_t  (reg_req_t),
         .reg_rsp_t  (reg_rsp_t)
     ) i_iommu_regmap_wrapper (
