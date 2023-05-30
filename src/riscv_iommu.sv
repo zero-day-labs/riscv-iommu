@@ -70,10 +70,6 @@ module riscv_iommu #(
     parameter type  axi_req_slv_t   = logic,
     /// AXI Full Slave response struct type
     parameter type  axi_rsp_slv_t   = logic,
-    /// AXI-Lite request struct type.
-    parameter type  axi_lite_req_t  = logic,
-    /// AXI-Lite response struct type.
-    parameter type  axi_lite_resp_t = logic,
     /// Regbus request struct type.
     parameter type  reg_req_t       = logic,
     /// Regbus response struct type.
@@ -94,9 +90,9 @@ module riscv_iommu #(
     input  axi_rsp_t    mem_resp_i,
     output axi_req_t    mem_req_o,
 
-    // Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
-    input  axi_req_t    prog_req_i,
-    output axi_rsp_t    prog_resp_o,
+    // Programming Interface (Slave) (AXI4 + ATOP => Reg IF)
+    input  axi_req_slv_t    prog_req_i,
+    output axi_rsp_slv_t    prog_resp_o,
 
     output logic [(N_INT_VEC-1):0] wsi_wires_o
 );
@@ -398,17 +394,14 @@ module riscv_iommu #(
     iommu_regmap_if #(
         .ADDR_WIDTH      (ADDR_WIDTH      ),
         .DATA_WIDTH      (DATA_WIDTH      ),
-        .ID_WIDTH        (ID_WIDTH        ),
+        .ID_WIDTH        (ID_SLV_WIDTH    ),
         .USER_WIDTH      (USER_WIDTH      ),
-        .BUFFER_DEPTH    (4               ), // Max 4 outstanding transaction at the programming interface
         .DECOUPLE_W      (1               ), // Channel W is decoupled with registers
         .InclWSI_IG      (InclWSI_IG      ),
         .InclMSI_IG      (InclMSI_IG      ),
         .N_INT_VEC       (N_INT_VEC       ),
-        .axi_req_t       (axi_req_t       ),
-        .axi_rsp_t       (axi_rsp_t       ),
-        .axi_lite_req_t  (axi_lite_req_t  ),
-        .axi_lite_resp_t (axi_lite_resp_t ),
+        .axi_req_t       (axi_req_slv_t   ),
+        .axi_rsp_t       (axi_rsp_slv_t   ),
         .reg_req_t       (reg_req_t       ),
         .reg_rsp_t       (reg_rsp_t       )
     ) i_iommu_regmap_if (
