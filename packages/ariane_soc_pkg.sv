@@ -36,6 +36,8 @@ package ariane_soc;
   localparam IdWidth   = 4;
   localparam IdWidthSlave = IdWidth + $clog2(NrSlaves);
 
+  localparam IOMMUNumWires = 4;
+
   // must be in order from highest address to lowest
   typedef enum int unsigned {
     DRAM      =  0,

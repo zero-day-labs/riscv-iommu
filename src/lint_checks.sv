@@ -39,8 +39,8 @@ module lint_checks (
 	output ariane_axi_soc::req_t    mem_req_o,
 
 	// Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
-	input  ariane_axi_soc::req_t    prog_req_i,
-	output ariane_axi_soc::resp_t   prog_resp_o,
+	input  ariane_axi_soc::req_slv_t    prog_req_i,
+	output ariane_axi_soc::resp_slv_t   prog_resp_o,
 
 	output logic [15:0] wsi_wires_o
 );
@@ -49,18 +49,19 @@ module lint_checks (
 		.IOTLB_ENTRIES		( 16						),
 		.DDTC_ENTRIES		( 16						),
 		.PDTC_ENTRIES		( 16						),
-		.DEVICE_ID_WIDTH  	( 24						),
-		.PSCID_WIDTH      	( 20						),
-		.GSCID_WIDTH      	( 16						),
+		.DEVICE_ID_WIDTH	( 24						),
+		.PSCID_WIDTH		( 20						),
+		.GSCID_WIDTH		( 16						),
 
-		.InclPID          	( 1'b0						),
-		.InclWSI_IG       	( 1'b1						),
-		.InclMSI_IG       	( 1'b1						),
-		.N_INT_VEC			( 8							),
+		.InclPID            ( 1'b0						),
+		.InclWSI_IG         ( 1'b1						),
+		.InclMSI_IG         ( 1'b1						),
+		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),
 
 		.ADDR_WIDTH			( 64						),
 		.DATA_WIDTH			( 64						),
 		.ID_WIDTH			( ariane_soc::IdWidth		),
+		.ID_SLV_WIDTH		( ariane_soc::IdWidthSlave	),
 		.USER_WIDTH			( 1							),
 		.aw_chan_t			( ariane_axi_soc::aw_chan_t ),
 		.w_chan_t			( ariane_axi_soc::w_chan_t	),
@@ -69,10 +70,10 @@ module lint_checks (
 		.r_chan_t			( ariane_axi_soc::r_chan_t	),
 		.axi_req_t			( ariane_axi_soc::req_t		),
 		.axi_rsp_t			( ariane_axi_soc::resp_t	),
-		.axi_lite_req_t		( axi_lite_req_t			),
-		.axi_lite_resp_t	( axi_lite_resp_t			),
-		.reg_req_t			( reg_req_t					),
-		.reg_rsp_t			( reg_rsp_t					)
+		.axi_req_slv_t		( ariane_axi_soc::req_slv_t	),
+		.axi_rsp_slv_t		( ariane_axi_soc::resp_slv_t),
+		.reg_req_t			( iommu_reg_req_t			),
+		.reg_rsp_t			( iommu_reg_rsp_t			)
 	) i_riscv_iommu (
 
 		.clk_i				( clk_i				),
@@ -94,7 +95,7 @@ module lint_checks (
 		.prog_req_i			( prog_req_i		),
 		.prog_resp_o		( prog_resp_o		),
 
-		.wsi_wires_o		( wsi_wires_o     	)
+		.wsi_wires_o		( wsi_wires_o[(ariane_soc::IOMMUNumWires-1):0])
 	);
 
 endmodule

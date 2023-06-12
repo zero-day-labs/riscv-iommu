@@ -14,9 +14,6 @@ typedef logic [64-1:0]  data_t;
 typedef logic [8-1:0]   strb_t;
 
 // Define reg_req_t and reg_rsp_t structs
-`REG_BUS_TYPEDEF_ALL(reg, addr_t, data_t, strb_t)
-
-// Define axi_lite_req_t and axi_lite_rsp_t structs
-`AXI_LITE_TYPEDEF_ALL(axi_lite, addr_t, data_t, strb_t)
+`REG_BUS_TYPEDEF_ALL(iommu_reg, addr_t, data_t, strb_t)
 
 `endif

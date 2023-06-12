@@ -1939,7 +1939,7 @@ module iommu_regmap_wrapper #(
       .SwAccess(SwAccessRW),
       .RESVAL  ('0)
     ) u_icvec_civ (
-      .clk_i   (clk_i    ),
+      .clk_i   (clk_i   ),
       .rst_ni  (rst_ni  ),
 
       // from register interface
@@ -1953,7 +1953,7 @@ module iommu_regmap_wrapper #(
 
       // to internal hardware
       .qe     (),
-      .q      (reg2hw.icvec.civ.q ),
+      .q      (reg2hw.icvec.civ.q[(LOG2_INTVEC-1):0]),
 
       // to register interface (read)
       .qs     (icvec_civ_qs)
@@ -1980,7 +1980,7 @@ module iommu_regmap_wrapper #(
 
       // to internal hardware
       .qe     (),
-      .q      (reg2hw.icvec.fiv.q ),
+      .q      (reg2hw.icvec.fiv.q[(LOG2_INTVEC-1):0]),
 
       // to register interface (read)
       .qs     (icvec_fiv_qs)

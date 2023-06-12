@@ -40,6 +40,7 @@ module iommu_wsi_ig #(
 
     always_comb begin : wsi_support
             
+        /* verilator lint_off WIDTH */
         // If WSI generation supported and enabled
         if (wsi_en_i) begin
 
@@ -47,24 +48,8 @@ module iommu_wsi_ig #(
                 wsi_wires_o[i] = ((cip_i & (civ_i == iommu_pkg::icvec_vals[i] )) 
                                     | (fip_i & (fiv_i == iommu_pkg::icvec_vals[i] )));
             end
-
-            // wsi_wires_o[0 ] = ((cip_i & (civ_i == 4'd0 )) | (fip_i & (fiv_i == 4'd0 )));
-            // wsi_wires_o[1 ] = ((cip_i & (civ_i == 4'd1 )) | (fip_i & (fiv_i == 4'd1 )));
-            // wsi_wires_o[2 ] = ((cip_i & (civ_i == 4'd2 )) | (fip_i & (fiv_i == 4'd2 )));
-            // wsi_wires_o[3 ] = ((cip_i & (civ_i == 4'd3 )) | (fip_i & (fiv_i == 4'd3 )));
-            // wsi_wires_o[4 ] = ((cip_i & (civ_i == 4'd4 )) | (fip_i & (fiv_i == 4'd4 )));
-            // wsi_wires_o[5 ] = ((cip_i & (civ_i == 4'd5 )) | (fip_i & (fiv_i == 4'd5 )));
-            // wsi_wires_o[6 ] = ((cip_i & (civ_i == 4'd6 )) | (fip_i & (fiv_i == 4'd6 )));
-            // wsi_wires_o[7 ] = ((cip_i & (civ_i == 4'd7 )) | (fip_i & (fiv_i == 4'd7 )));
-            // wsi_wires_o[8 ] = ((cip_i & (civ_i == 4'd8 )) | (fip_i & (fiv_i == 4'd8 )));
-            // wsi_wires_o[9 ] = ((cip_i & (civ_i == 4'd9 )) | (fip_i & (fiv_i == 4'd9 )));
-            // wsi_wires_o[10] = ((cip_i & (civ_i == 4'd10)) | (fip_i & (fiv_i == 4'd10)));
-            // wsi_wires_o[11] = ((cip_i & (civ_i == 4'd11)) | (fip_i & (fiv_i == 4'd11)));
-            // wsi_wires_o[12] = ((cip_i & (civ_i == 4'd12)) | (fip_i & (fiv_i == 4'd12)));
-            // wsi_wires_o[13] = ((cip_i & (civ_i == 4'd13)) | (fip_i & (fiv_i == 4'd13)));
-            // wsi_wires_o[14] = ((cip_i & (civ_i == 4'd14)) | (fip_i & (fiv_i == 4'd14)));
-            // wsi_wires_o[15] = ((cip_i & (civ_i == 4'd15)) | (fip_i & (fiv_i == 4'd15)));
         end
+        /* verilator lint_on WIDTH */
     end
     
 endmodule

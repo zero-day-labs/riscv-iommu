@@ -148,19 +148,23 @@ module iommu_msi_ig #(
                 // If the IOMMU does not support or use MSI as IG mechanism, do nothing
                 if (msi_ig_enabled_i) begin
 
+                    /* verilator lint_off WIDTH */
                     // Send CQ pending messages if the mask was cleared
                     if (pending_q[civ_i] && !msi_vec_masked_x_i[civ_i]) begin
                             is_cq_int_n         = 1'b1;
                             pending_n[civ_i]    = 1'b0;
                             state_n             = WRITE;
                     end
+                    /* verilator lint_on WIDTH */
 
+                    /* verilator lint_off WIDTH */
                     // Send FQ pending messages if the mask was cleared
                     else if (pending_q[fiv_i] && !msi_vec_masked_x_i[fiv_i]) begin
                             is_cq_int_n         = 1'b0;
                             pending_n[fiv_i]    = 1'b0;
                             state_n             = WRITE;
                     end
+                    /* verilator lint_on WIDTH */
 
                     // CQ Interrupt
                     else if (cip_i && !edged_cip_q) begin
@@ -169,11 +173,13 @@ module iommu_msi_ig #(
                         // any IP bit transition while sending another interrupt.
                         edged_cip_n = 1'b1;
 
+                        /* verilator lint_off WIDTH */
                         // cip bit was set in the last cycle, send MSI if vector is not masked
                         if (!msi_vec_masked_x_i[civ_i]) begin
                             is_cq_int_n = 1'b1;
                             state_n     = WRITE;
                         end
+                        /* verilator lint_on WIDTH */
 
                         // if vector is masked, then save request
                         else begin
@@ -188,11 +194,13 @@ module iommu_msi_ig #(
                         // any IP bit transition while sending another interrupt.
                         edged_fip_n = 1'b1;
 
+                        /* verilator lint_off WIDTH */
                         // fip bit was set in the last cycle, send MSI if vector is not masked
                         if (!msi_vec_masked_x_i[fiv_i]) begin
                             is_cq_int_n = 1'b0;
                             state_n     = WRITE;
                         end
+                        /* verilator lint_on WIDTH */
 
                         // if vector is masked, then save request for FQ
                         else begin
