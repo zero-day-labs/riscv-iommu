@@ -40,7 +40,7 @@ module iommu_cdw import ariane_pkg::*; #(
     input  logic        caps_sv32_i, caps_sv39_i, caps_sv48_i, caps_sv57_i,
     input  logic        fctl_gxl_i, caps_sv32x4_i, caps_sv39x4_i, caps_sv48x4_i, caps_sv57x4_i,
     input  logic        caps_msi_flat_i,
-    input  logic        caps_amo_i,
+    input  logic        caps_amo_hwad_i,
     input  logic        caps_end_i, fctl_be_i,
 
     // PC checks
@@ -501,7 +501,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 (!dc_tc.en_ats && (dc_tc.t2gpa || dc_tc.en_pri || dc_tc.prpr)) ||
                                 (!caps_t2gpa_i && dc_tc.t2gpa) ||
                                 (!dc_tc.pdtv && dc_tc.dpe) ||
-                                (!caps_amo_i && (dc_tc.sade || dc_tc.gade)) ||
+                                (!caps_amo_hwad_i && (dc_tc.sade || dc_tc.gade)) ||
                                 (fctl_be_i != dc_tc.sbe) ||
                                 (dc_tc.sxl != fctl_gxl_i)) begin
                                 state_n = ERROR;

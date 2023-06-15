@@ -536,7 +536,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .caps_sv48x4_i          (capabilities_i.sv48x4.q),
         .caps_sv57x4_i          (capabilities_i.sv57x4.q),
         .caps_msi_flat_i        (capabilities_i.msi_flat.q),
-        .caps_amo_i             (capabilities_i.amo.q),
+        .caps_amo_hwad_i        (capabilities_i.amo_hwad.q),
         .caps_end_i             (capabilities_i.endi.q),
         .fctl_be_i              (fctl_i.be.q),
 

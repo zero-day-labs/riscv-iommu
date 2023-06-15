@@ -63,13 +63,16 @@ package iommu_reg_pkg;
     } sv57x4;
     struct packed {
       logic        q;
+    } amo_mrif;
+    struct packed {
+      logic        q;
     } msi_flat;
     struct packed {
       logic        q;
     } msi_mrif;
     struct packed {
       logic        q;
-    } amo;
+    } amo_hwad;
     struct packed {
       logic        q;
     } ats;

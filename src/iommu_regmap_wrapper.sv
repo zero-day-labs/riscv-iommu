@@ -112,9 +112,10 @@ module iommu_regmap_wrapper #(
   logic 		capabilities_sv39x4_qs;
   logic 		capabilities_sv48x4_qs;
   logic 		capabilities_sv57x4_qs;
+  logic 		capabilities_amo_mrif_qs;
   logic 		capabilities_msi_flat_qs;
   logic 		capabilities_msi_mrif_qs;
-  logic 		capabilities_amo_qs;
+  logic 		capabilities_amo_hwad_qs;
   logic 		capabilities_ats_qs;
   logic 		capabilities_t2gpa_qs;
   logic 		capabilities_endi_qs;
@@ -681,6 +682,10 @@ module iommu_regmap_wrapper #(
   assign reg2hw.capabilities.sv57x4.q = 1'h0;
   assign capabilities_sv57x4_qs = 1'h0;
 
+  // AMO_MRIF
+  assign reg2hw.capabilities.amo_mrif.q = 1'h0;
+  assign capabilities_amo_mrif_qs = 1'h0;
+
   //   F[msi_flat]: 22:22
   // MSI redirection to Guest interrupt files must be implemented to give support to AIA
   // iommu_field #(
@@ -759,8 +764,8 @@ module iommu_regmap_wrapper #(
   //   // to register interface (read)
   //   .qs     (capabilities_amo_qs)
   // );
-  assign reg2hw.capabilities.amo.q = 1'h0;
-  assign capabilities_amo_qs = 1'h0;
+  assign reg2hw.capabilities.amo_hwad.q = 1'h0;
+  assign capabilities_amo_hwad_qs = 1'h0;
 
 
   //   F[ats]: 25:25
@@ -4068,10 +4073,11 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[17] = capabilities_sv39x4_qs;
         reg_rdata_next[18] = capabilities_sv48x4_qs;
         reg_rdata_next[19] = capabilities_sv57x4_qs;
-        reg_rdata_next[21:20] = '0;
+        reg_rdata_next[20] = capabilities_amo_mrif_qs;
+        reg_rdata_next[21] = '0;
         reg_rdata_next[22] = capabilities_msi_flat_qs;
         reg_rdata_next[23] = capabilities_msi_mrif_qs;
-        reg_rdata_next[24] = capabilities_amo_qs;
+        reg_rdata_next[24] = capabilities_amo_hwad_qs;
         reg_rdata_next[25] = capabilities_ats_qs;
         reg_rdata_next[26] = capabilities_t2gpa_qs;
         reg_rdata_next[27] = capabilities_endi_qs;
