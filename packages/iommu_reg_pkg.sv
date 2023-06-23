@@ -226,6 +226,58 @@ package iommu_reg_pkg;
     } pip;
   } iommu_reg2hw_ipsr_reg_t;
 
+  // TODO: Check which structures are not used (read by HW) to delete
+  typedef struct packed {
+    struct packed {
+      logic        q;
+    } cy;
+    struct packed {
+      logic [30:0] q;
+    } hpm;
+  } iommu_reg2hw_iocountinh_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic [62:0] q;
+    } counter;
+    struct packed {
+      logic        q;
+    } of;
+  } iommu_reg2hw_iohpmcycles_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic [63:0] q;
+    } counter;
+  } iommu_reg2hw_iohpmctr_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic [14:0] q;
+    } eventid;
+    struct packed {
+      logic        q;
+    } dmask;
+    struct packed {
+      logic [19:0] q;
+    } pid_pscid;
+    struct packed {
+      logic [23:0] q;
+    } did_gscid;
+    struct packed {
+      logic        q;
+    } pv_pscv;
+    struct packed {
+      logic        q;
+    } dv_dscv;
+    struct packed {
+      logic        q;
+    } idt;
+    struct packed {
+      logic        q;
+    } of;
+  } iommu_reg2hw_iohpmevt_reg_t;
+
   typedef struct packed {
     struct packed {
       logic [3:0]  q;
@@ -620,6 +672,31 @@ package iommu_reg_pkg;
 
   typedef struct packed {
     struct packed {
+      logic [62:0] d;
+      logic        de;
+    } counter;
+    struct packed {
+      logic        d;
+      logic        de;
+    } of;
+  } iommu_hw2reg_iohpmcycles_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic [63:0] d;
+      logic        de;
+    } counter;
+  } iommu_hw2reg_iohpmctr_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic        d;
+      logic        de;
+    } of;
+  } iommu_hw2reg_iohpmevt_reg_t;
+
+  typedef struct packed {
+    struct packed {
       logic [3:0]  d;
       logic        de;
     } civ;
@@ -923,6 +1000,10 @@ package iommu_reg_pkg;
     iommu_reg2hw_cqcsr_reg_t cqcsr; // [1457:1450]
     iommu_reg2hw_fqcsr_reg_t fqcsr; // [1449:1444]
     iommu_reg2hw_ipsr_reg_t ipsr; // [1443:1440]
+    iommu_reg2hw_iocountinh_reg_t iocountinh;
+    iommu_reg2hw_iohpmcycles_reg_t iohpmcycles;
+    iommu_reg2hw_iohpmctr_reg_t [30:0] iohpmctr;
+    iommu_reg2hw_iohpmevt_reg_t [30:0] iohpmevt;
     iommu_reg2hw_icvec_reg_t icvec; // [1439:1424]
     iommu_reg2hw_msi_addr_0_reg_t msi_addr_0; // [1423:1368]
     iommu_reg2hw_msi_data_0_reg_t msi_data_0; // [1367:1336]
@@ -986,6 +1067,9 @@ package iommu_reg_pkg;
     iommu_hw2reg_fqt_reg_t fqt; // [1528:1496]
     iommu_hw2reg_cqcsr_reg_t cqcsr; // [1495:1480]
     iommu_hw2reg_fqcsr_reg_t fqcsr; // [1479:1468]
+    iommu_hw2reg_iohpmcycles_reg_t iohpmcycles;
+    iommu_hw2reg_iohpmctr_reg_t iohpmctr;
+    iommu_hw2reg_iohpmevt_reg_t [30:0] iohpmevt;
     iommu_hw2reg_ipsr_reg_t ipsr; // [1467:1460]
     iommu_hw2reg_icvec_reg_t icvec; // [1459:1440]
     iommu_hw2reg_msi_addr_0_reg_t msi_addr_0; // [1439:1385]
@@ -1051,6 +1135,11 @@ package iommu_reg_pkg;
   parameter logic [BlockAw-1:0] IOMMU_CQCSR_OFFSET = 12'h 48;
   parameter logic [BlockAw-1:0] IOMMU_FQCSR_OFFSET = 12'h 4c;
   parameter logic [BlockAw-1:0] IOMMU_IPSR_OFFSET = 12'h 54;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTOVF_OFFSET = 12'h 58;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTINH_OFFSET = 12'h 5c;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET = 12'h 60;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET = 12'h 68;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET = 12'h 160;
   parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET = 12'h 2f8;
   parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_0_OFFSET = 12'h 300;
   parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_0_OFFSET = 12'h 308;
@@ -1102,68 +1191,73 @@ package iommu_reg_pkg;
   parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_15_OFFSET = 12'h 3fc;
 
   // Register width information to check illegal writes
-  parameter logic [7:0] IOMMU_PERMIT [61] = '{
-    8'b 00111111, // index[ 0] IOMMU_CAPABILITIES
-    8'b 00000001, // index[ 1] IOMMU_FCTL
-    8'b 01111111, // index[ 2] IOMMU_DDTP
-    8'b 01111111, // index[ 3] IOMMU_CQB
-    8'b 00001111, // index[ 4] IOMMU_CQH
-    8'b 11110000, // index[ 5] IOMMU_CQT
-    8'b 01111111, // index[ 6] IOMMU_FQB
-    8'b 00001111, // index[ 7] IOMMU_FQH
-    8'b 11110000, // index[ 8] IOMMU_FQT
-    8'b 00000111, // index[ 9] IOMMU_CQCSR
-    8'b 01110000, // index[10] IOMMU_FQCSR
-    8'b 00010000, // index[11] IOMMU_IPSR
-    8'b 00000011, // index[12] IOMMU_ICVEC
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000, // index[15] IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // index[13] IOMMU_MSI_ADDR_0
-    8'b 00001111, // index[14] IOMMU_MSI_DATA_0
-    8'b 00010000 // index[15] IOMMU_MSI_VEC_CTL_0
+  parameter logic [7:0] IOMMU_PERMIT [66] = '{
+    8'b 00111111, // IOMMU_CAPABILITIES
+    8'b 00000001, // IOMMU_FCTL
+    8'b 01111111, // IOMMU_DDTP
+    8'b 01111111, // IOMMU_CQB
+    8'b 00001111, // IOMMU_CQH
+    8'b 11110000, // IOMMU_CQT
+    8'b 01111111, // IOMMU_FQB
+    8'b 00001111, // IOMMU_FQH
+    8'b 11110000, // IOMMU_FQT
+    8'b 00000111, // IOMMU_CQCSR
+    8'b 01110000, // IOMMU_FQCSR
+    8'b 00010000, // IOMMU_IPSR
+    8'b 00001111, // IOMMU_IOCNTOVF
+    8'b 11110000, // IOMMU_IOCNTINH
+    8'b 11111111, // IOMMU_IOHPMCYCLES
+    8'b 11111111, // IOMMU_IOHPMCTR
+    8'b 11111111, // IOMMU_IOHPMEVT
+    8'b 00000011, // IOMMU_ICVEC
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR_0
+    8'b 00001111, // IOMMU_MSI_DATA_0
+    8'b 00010000  // IOMMU_MSI_VEC_CTL_0
   };
 
 endpackage

@@ -32,16 +32,18 @@ module iommu_regmap_wrapper #(
     parameter bit           InclWSI_IG = 1,
     // Include IOMMU MSI generation support
     parameter bit           InclMSI_IG = 0,
+    // Number of Performance monitoring event counters (set to zero to disable HPM)
+    parameter int unsigned  N_IOHPMCTR = 8, // max 31
     // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
     parameter int unsigned  N_INT_VEC = 16,
 
     parameter type 			reg_req_t = logic,
     parameter type 			reg_rsp_t = logic,
 
-    // DO NOT MODIFY
+    // DO NOT MODIFY MANUALLY
 	  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8),
-    parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC)
-
+    parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC),
+    parameter int unsigned  LOG2_IOHPMCTR = $clog2(N_IOHPMCTR)
 ) (
 	input logic clk_i,
 	input logic rst_ni,
@@ -59,6 +61,8 @@ module iommu_regmap_wrapper #(
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
+  localparam N_HPM_REGS = (N_IOHPMCTR > 0) ? (3 + (2*N_IOHPMCTR)) : 0;
+
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
   logic           			  reg_we;
@@ -70,7 +74,8 @@ module iommu_regmap_wrapper #(
   logic           			  reg_error;
   logic           			  reg_ready;
 
-  logic addrmiss, wr_err;
+  logic addrmiss;
+  logic [(60+65):0] wr_err;
   logic [DATA_WIDTH-1:0] reg_rdata_next;
 
   reg_req_t  reg_intf_req;
@@ -92,8 +97,7 @@ module iommu_regmap_wrapper #(
   assign reg_intf_rsp.ready = 1'b1;
 
   assign reg_rdata = reg_re ? reg_rdata_next : '0;
-  assign reg_error = (devmode_i & addrmiss) | wr_err;   // when in development mode, address misses are not silent
-
+  assign reg_error = (devmode_i & addrmiss) | (reg_we & |wr_err);   // when in development mode, address misses are not silent
 
   // Define SW related signals
   // Format: <reg>_<field>_{wd|we|qs}
@@ -217,6 +221,53 @@ module iommu_regmap_wrapper #(
   logic 		fqcsr_fqon_qs;
   logic 		fqcsr_busy_qs;
 
+  // iocountinh
+  logic 		    iocountinh_cy_qs;
+  logic 		    iocountinh_cy_wd;
+  logic 		    iocountinh_cy_we;
+  logic [30:0]	iocountinh_hpm_qs;
+  logic [30:0]	iocountinh_hpm_wd;
+  logic 		    iocountinh_hpm_we;
+
+  // iohpmcycles
+  logic [62:0]	iohpmcycles_counter_qs;
+  logic [62:0]	iohpmcycles_counter_wd;
+  logic 		    iohpmcycles_counter_we;
+  logic 		    iohpmcycles_of_qs;
+  logic 		    iohpmcycles_of_wd;
+  logic 		    iohpmcycles_of_we;
+
+  // iohpmctr
+  logic [63:0]	iohpmctr_counter_qs [N_IOHPMCTR];
+  logic [63:0]	iohpmctr_counter_wd [N_IOHPMCTR];
+  logic 		    iohpmctr_counter_we [N_IOHPMCTR];
+
+  // iohpmevt
+  logic [14:0]	iohpmevt_eventid_qs [N_IOHPMCTR];
+  logic [14:0]	iohpmevt_eventid_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_eventid_we [N_IOHPMCTR];
+  logic 	      iohpmevt_dmask_qs [N_IOHPMCTR];
+  logic 	      iohpmevt_dmask_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_dmask_we [N_IOHPMCTR];
+  logic [19:0]	iohpmevt_pid_pscid_qs [N_IOHPMCTR];
+  logic [19:0]	iohpmevt_pid_pscid_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_pid_pscid_we [N_IOHPMCTR];
+  logic [23:0]	iohpmevt_did_gscid_qs [N_IOHPMCTR];
+  logic [23:0]	iohpmevt_did_gscid_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_did_gscid_we [N_IOHPMCTR];
+  logic 	      iohpmevt_pv_pscv_qs [N_IOHPMCTR];
+  logic 	      iohpmevt_pv_pscv_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_pv_pscv_we [N_IOHPMCTR];
+  logic 	      iohpmevt_dv_gscv_qs [N_IOHPMCTR];
+  logic 	      iohpmevt_dv_gscv_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_dv_gscv_we [N_IOHPMCTR];
+  logic 	      iohpmevt_idt_qs [N_IOHPMCTR];
+  logic 	      iohpmevt_idt_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_idt_we [N_IOHPMCTR];
+  logic 	      iohpmevt_of_qs [N_IOHPMCTR];
+  logic 	      iohpmevt_of_wd [N_IOHPMCTR];
+  logic 		    iohpmevt_of_we [N_IOHPMCTR];
+  
   // ipsr
   logic 		ipsr_cip_qs;
   logic 		ipsr_cip_wd;
@@ -1877,32 +1928,30 @@ module iommu_regmap_wrapper #(
 
 
   //   F[pmip]: 2:2
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessW1C),
-  //   .RESVAL  (1'h0)
-  // ) u_ipsr_pmip (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
+  iommu_field #(
+    .DATA_WIDTH      (1),
+    .SwAccess(SwAccessW1C),
+    .RESVAL  (1'h0)
+  ) u_ipsr_pmip (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
 
-  //   // from register interface
-  //   .we     (ipsr_pmip_we),
-  //   .wd     (ipsr_pmip_wd),
+    // from register interface
+    .we     (ipsr_pmip_we),
+    .wd     (ipsr_pmip_wd),
 
-  //   // from internal hardware
-  //   .de     (hw2reg.ipsr.pmip.de),
-  //   .ds     (),
-  //   .d      (hw2reg.ipsr.pmip.d ),
+    // from internal hardware
+    .de     (hw2reg.ipsr.pmip.de),
+    .ds     (),
+    .d      (hw2reg.ipsr.pmip.d ),
 
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.ipsr.pmip.q ),
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.ipsr.pmip.q ),
 
-  //   // to register interface (read)
-  //   .qs     (ipsr_pmip_qs)
-  // );
-
-  assign ipsr_pmip_qs = 1'b0;
+    // to register interface (read)
+    .qs     (ipsr_pmip_qs)
+  );
 
 
   //   F[pip]: 3:3
@@ -1933,6 +1982,410 @@ module iommu_regmap_wrapper #(
 
   assign ipsr_pip_qs = 1'b0;
 
+  if (N_IOHPMCTR > 0) begin
+
+    // R[iocountinh]: V(False)
+
+    //   F[cy]: 0:0
+    iommu_field #(
+      .DATA_WIDTH      (1),
+      .SwAccess(SwAccessRW),
+      .RESVAL  (1'h1)
+    ) u_iocountinh_cy (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
+
+      // from register interface
+      .we     (iocountinh_cy_we),
+      .wd     (iocountinh_cy_wd),
+
+      // from internal hardware
+      .de     ('0),
+      .ds     (),
+      .d      ('0),
+
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.iocountinh.cy.q ),
+
+      // to register interface (read)
+      .qs     (iocountinh_cy_qs)
+    );
+
+    //   F[hpm]: 31:1
+    iommu_field #(
+      .DATA_WIDTH      (N_IOHPMCTR),
+      .SwAccess(SwAccessRW),
+      .RESVAL  ('1)
+    ) u_iocountinh_hpm (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
+
+      // from register interface
+      .we     (iocountinh_hpm_we),
+      .wd     (iocountinh_hpm_wd),
+
+      // from internal hardware
+      .de     ('0),
+      .ds     (),
+      .d      ('0),
+
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.iocountinh.hpm.q ),
+
+      // to register interface (read)
+      .qs     (iocountinh_hpm_qs)
+    );
+
+    // R[iohpmcycles]: V(False)
+
+    //   F[counter]: 62:0
+    iommu_field #(
+      .DATA_WIDTH      (63),
+      .SwAccess(SwAccessRW),
+      .RESVAL  (63'h0)
+    ) u_iohpmcycles_counter (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
+
+      // from register interface
+      .we     (iohpmcycles_counter_we),
+      .wd     (iohpmcycles_counter_wd),
+
+      // from internal hardware
+      .de     (hw2reg.iohpmcycles.counter.de),
+      .ds     (),
+      .d      (hw2reg.iohpmcycles.counter.d ),
+
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.iohpmcycles.counter.q ),
+
+      // to register interface (read)
+      .qs     (iohpmcycles_counter_qs)
+    );
+
+    //   F[of]: 63:63
+    iommu_field #(
+      .DATA_WIDTH      (1),
+      .SwAccess(SwAccessRW),
+      .RESVAL  (1'h0)
+    ) u_iohpmcycles_of (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
+
+      // from register interface
+      .we     (iohpmcycles_of_we),
+      .wd     (iohpmcycles_of_wd),
+
+      // from internal hardware
+      .de     (hw2reg.iohpmcycles.of.de),
+      .ds     (),
+      .d      (hw2reg.iohpmcycles.of.d ),
+
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.iohpmcycles.of.q ),
+
+      // to register interface (read)
+      .qs     (iohpmcycles_of_qs)
+    );
+
+    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
+
+      // R[iohpmctr]: V(False)
+
+      //   F[counter]: 63:0
+      iommu_field #(
+        .DATA_WIDTH      (64),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (64'h0)
+      ) u_iohpmctr_counter (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmctr_counter_we[i]),
+        .wd     (iohpmctr_counter_wd[i]),
+
+        // from internal hardware
+        .de     (hw2reg.iohpmctr[i].counter.de),
+        .ds     (),
+        .d      (hw2reg.iohpmctr[i].counter.d ),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmctr[i].counter.q ),
+
+        // to register interface (read)
+        .qs     (iohpmctr_counter_qs[i])
+      );
+
+      // R[iohpmevt]: V(False)
+
+      //   F[eventid]: 14:0
+      iommu_field #(
+        .DATA_WIDTH      (15),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (15'h0)
+      ) u_iohpmevt_eventid (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_eventid_we[i]),
+        .wd     (iohpmevt_eventid_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].eventid.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_eventid_qs[i])
+      );
+
+      //   F[dmask]: 15:15
+      iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (1'h0)
+      ) u_iohpmevt_dmask (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_dmask_we[i]),
+        .wd     (iohpmevt_dmask_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].dmask.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_dmask_qs[i])
+      );
+
+      //   F[pid_pscid]: 35:16
+      iommu_field #(
+        .DATA_WIDTH      (20),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (20'h0)
+      ) u_iohpmevt_pid_pscid (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_pid_pscid_we[i]),
+        .wd     (iohpmevt_pid_pscid_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].pid_pscid.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_pid_pscid_qs[i])
+      );
+
+      //   F[did_gscid]: 59:36
+      iommu_field #(
+        .DATA_WIDTH      (24),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (24'h0)
+      ) u_iohpmevt_did_gscid (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_did_gscid_we[i]),
+        .wd     (iohpmevt_did_gscid_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].did_gscid.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_did_gscid_qs[i])
+      );
+
+      //   F[pv_pscv]: 60:60
+      iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (1'h0)
+      ) u_iohpmevt_pv_pscv (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_pv_pscv_we[i]),
+        .wd     (iohpmevt_pv_pscv_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].pv_pscv.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_pv_pscv_qs[i])
+      );
+
+      //   F[dv_gscv]: 61:61
+      iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (1'h0)
+      ) u_iohpmevt_dv_gscv (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_dv_gscv_we[i]),
+        .wd     (iohpmevt_dv_gscv_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].dv_gscv.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_dv_gscv_qs[i])
+      );
+
+      //   F[idt]: 62:62
+      iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (1'h0)
+      ) u_iohpmevt_idt (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_idt_we[i]),
+        .wd     (iohpmevt_idt_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].idt.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_idt_qs[i])
+      );
+
+      //   F[of]: 63:63
+      iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (1'h0)
+      ) u_iohpmevt_of (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_of_we[i]),
+        .wd     (iohpmevt_of_wd[i]),
+
+        // from internal hardware
+        .de     (hw2reg.iohpmevt[i].of.de),
+        .ds     (),
+        .d      (hw2reg.iohpmevt[i].of.d),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].of.q ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_of_qs[i])
+      );
+    end
+
+    // Hardwire unused ports to 0
+    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+
+      assign reg2hw.iohpmctr[i].counter.q   = '0;
+      assign reg2hw.iohpmevt[i].eventid.q   = '0;
+      assign reg2hw.iohpmevt[i].dmask.q     = '0;
+      assign reg2hw.iohpmevt[i].pid_pscid.q = '0;
+      assign reg2hw.iohpmevt[i].did_gscid.q = '0;
+      assign reg2hw.iohpmevt[i].pv_pscv.q   = '0;
+      assign reg2hw.iohpmevt[i].dv_gscv.q   = '0;
+      assign reg2hw.iohpmevt[i].idt.q       = '0;
+      assign reg2hw.iohpmevt[i].of.q        = '0;
+
+      assign hw2reg.iohpmevt[i].of.de       = 1'b0;
+    end
+  end
+
+  else begin
+    
+    assign iocountinh_cy_qs       = '0;
+    assign iocountinh_hpm_qs      = '0;
+    assign iohpmcycles_counter_qs = '0;
+    assign iohpmcycles_of_qs      = '0;
+    assign iohpmctr_counter_qs    = '0;
+    assign iohpmevt_eventid_qs    = '0;
+    assign iohpmevt_dmask_qs      = '0;
+    assign iohpmevt_pid_pscid_qs  = '0;
+    assign iohpmevt_did_gscid_qs  = '0;
+    assign iohpmevt_pv_pscv_qs    = '0;
+    assign iohpmevt_dv_gscv_qs    = '0;
+    assign iohpmevt_idt_qs        = '0;
+    assign iohpmevt_of_qs         = '0;
+
+    assign reg2hw.iocountinh.cy.q       = '0;
+    assign reg2hw.iocountinh.hpm.q      = '0;
+    assign reg2hw.iohpmcycles.counter.q = '0;
+    assign reg2hw.iohpmcycles.of.q      = '0;
+
+    for (int unsigned i = 0; i < 31; i++) begin
+
+      assign reg2hw.iohpmctr[i].counter.q   = '0;
+      assign reg2hw.iohpmevt[i].eventid.q   = '0;
+      assign reg2hw.iohpmevt[i].dmask.q     = '0;
+      assign reg2hw.iohpmevt[i].pid_pscid.q = '0;
+      assign reg2hw.iohpmevt[i].did_gscid.q = '0;
+      assign reg2hw.iohpmevt[i].pv_pscv.q   = '0;
+      assign reg2hw.iohpmevt[i].dv_gscv.q   = '0;
+      assign reg2hw.iohpmevt[i].idt.q       = '0;
+      assign reg2hw.iohpmevt[i].of.q        = '0;
+
+      assign hw2reg.iohpmevt[i].of.de       = 1'b0;
+    end
+  end
 
   // R[icvec]: V(False)
 
@@ -3674,149 +4127,203 @@ module iommu_regmap_wrapper #(
   
 
   // # Address hit logic
-  // EXP: A RD/WR access is signaled by comparing the input reg_addr to the defined registers offsets
-  logic [60:0] addr_hit;
-  always_comb begin
-    addr_hit = '0;
-    addr_hit[ 0] = (reg_addr == IOMMU_CAPABILITIES_OFFSET);
-    addr_hit[ 1] = (reg_addr == IOMMU_FCTL_OFFSET);
-    addr_hit[ 2] = (reg_addr == IOMMU_DDTP_OFFSET);
-    addr_hit[ 3] = (reg_addr == IOMMU_CQB_OFFSET);
-    addr_hit[ 4] = (reg_addr == IOMMU_CQH_OFFSET);
-    addr_hit[ 5] = (reg_addr == IOMMU_CQT_OFFSET);
-    addr_hit[ 6] = (reg_addr == IOMMU_FQB_OFFSET);
-    addr_hit[ 7] = (reg_addr == IOMMU_FQH_OFFSET);
-    addr_hit[ 8] = (reg_addr == IOMMU_FQT_OFFSET);
-    addr_hit[ 9] = (reg_addr == IOMMU_CQCSR_OFFSET);
-    addr_hit[10] = (reg_addr == IOMMU_FQCSR_OFFSET);
-    addr_hit[11] = (reg_addr == IOMMU_IPSR_OFFSET);
-    addr_hit[12] = (reg_addr == IOMMU_ICVEC_OFFSET);
-    addr_hit[13] = (reg_addr == IOMMU_MSI_ADDR_0_OFFSET);
-    addr_hit[14] = (reg_addr == IOMMU_MSI_DATA_0_OFFSET);
-    addr_hit[15] = (reg_addr == IOMMU_MSI_VEC_CTL_0_OFFSET);
-    addr_hit[16] = (reg_addr == IOMMU_MSI_ADDR_1_OFFSET);
-    addr_hit[17] = (reg_addr == IOMMU_MSI_DATA_1_OFFSET);
-    addr_hit[18] = (reg_addr == IOMMU_MSI_VEC_CTL_1_OFFSET);
-    addr_hit[19] = (reg_addr == IOMMU_MSI_ADDR_2_OFFSET);
-    addr_hit[20] = (reg_addr == IOMMU_MSI_DATA_2_OFFSET);
-    addr_hit[21] = (reg_addr == IOMMU_MSI_VEC_CTL_2_OFFSET);
-    addr_hit[22] = (reg_addr == IOMMU_MSI_ADDR_3_OFFSET);
-    addr_hit[23] = (reg_addr == IOMMU_MSI_DATA_3_OFFSET);
-    addr_hit[24] = (reg_addr == IOMMU_MSI_VEC_CTL_3_OFFSET);
-    addr_hit[25] = (reg_addr == IOMMU_MSI_ADDR_4_OFFSET);
-    addr_hit[26] = (reg_addr == IOMMU_MSI_DATA_4_OFFSET);
-    addr_hit[27] = (reg_addr == IOMMU_MSI_VEC_CTL_4_OFFSET);
-    addr_hit[28] = (reg_addr == IOMMU_MSI_ADDR_5_OFFSET);
-    addr_hit[29] = (reg_addr == IOMMU_MSI_DATA_5_OFFSET);
-    addr_hit[30] = (reg_addr == IOMMU_MSI_VEC_CTL_5_OFFSET);
-    addr_hit[31] = (reg_addr == IOMMU_MSI_ADDR_6_OFFSET);
-    addr_hit[32] = (reg_addr == IOMMU_MSI_DATA_6_OFFSET);
-    addr_hit[33] = (reg_addr == IOMMU_MSI_VEC_CTL_6_OFFSET);
-    addr_hit[34] = (reg_addr == IOMMU_MSI_ADDR_7_OFFSET);
-    addr_hit[35] = (reg_addr == IOMMU_MSI_DATA_7_OFFSET);
-    addr_hit[36] = (reg_addr == IOMMU_MSI_VEC_CTL_7_OFFSET);
-    addr_hit[37] = (reg_addr == IOMMU_MSI_ADDR_8_OFFSET);
-    addr_hit[38] = (reg_addr == IOMMU_MSI_DATA_8_OFFSET);
-    addr_hit[39] = (reg_addr == IOMMU_MSI_VEC_CTL_8_OFFSET);
-    addr_hit[40] = (reg_addr == IOMMU_MSI_ADDR_9_OFFSET);
-    addr_hit[41] = (reg_addr == IOMMU_MSI_DATA_9_OFFSET);
-    addr_hit[42] = (reg_addr == IOMMU_MSI_VEC_CTL_9_OFFSET);
-    addr_hit[43] = (reg_addr == IOMMU_MSI_ADDR_10_OFFSET);
-    addr_hit[44] = (reg_addr == IOMMU_MSI_DATA_10_OFFSET);
-    addr_hit[45] = (reg_addr == IOMMU_MSI_VEC_CTL_10_OFFSET);
-    addr_hit[46] = (reg_addr == IOMMU_MSI_ADDR_11_OFFSET);
-    addr_hit[47] = (reg_addr == IOMMU_MSI_DATA_11_OFFSET);
-    addr_hit[48] = (reg_addr == IOMMU_MSI_VEC_CTL_11_OFFSET);
-    addr_hit[49] = (reg_addr == IOMMU_MSI_ADDR_12_OFFSET);
-    addr_hit[50] = (reg_addr == IOMMU_MSI_DATA_12_OFFSET);
-    addr_hit[51] = (reg_addr == IOMMU_MSI_VEC_CTL_12_OFFSET);
-    addr_hit[52] = (reg_addr == IOMMU_MSI_ADDR_13_OFFSET);
-    addr_hit[53] = (reg_addr == IOMMU_MSI_DATA_13_OFFSET);
-    addr_hit[54] = (reg_addr == IOMMU_MSI_VEC_CTL_13_OFFSET);
-    addr_hit[55] = (reg_addr == IOMMU_MSI_ADDR_14_OFFSET);
-    addr_hit[56] = (reg_addr == IOMMU_MSI_DATA_14_OFFSET);
-    addr_hit[57] = (reg_addr == IOMMU_MSI_VEC_CTL_14_OFFSET);
-    addr_hit[58] = (reg_addr == IOMMU_MSI_ADDR_15_OFFSET);
-    addr_hit[59] = (reg_addr == IOMMU_MSI_DATA_15_OFFSET);
-    addr_hit[60] = (reg_addr == IOMMU_MSI_VEC_CTL_15_OFFSET);
+  logic [(60+65):0] addr_hit;
+
+  // Mandatory registers
+  assign addr_hit[ 0] = (reg_addr == IOMMU_CAPABILITIES_OFFSET);
+  assign addr_hit[ 1] = (reg_addr == IOMMU_FCTL_OFFSET);
+  assign addr_hit[ 2] = (reg_addr == IOMMU_DDTP_OFFSET);
+  assign addr_hit[ 3] = (reg_addr == IOMMU_CQB_OFFSET);
+  assign addr_hit[ 4] = (reg_addr == IOMMU_CQH_OFFSET);
+  assign addr_hit[ 5] = (reg_addr == IOMMU_CQT_OFFSET);
+  assign addr_hit[ 6] = (reg_addr == IOMMU_FQB_OFFSET);
+  assign addr_hit[ 7] = (reg_addr == IOMMU_FQH_OFFSET);
+  assign addr_hit[ 8] = (reg_addr == IOMMU_FQT_OFFSET);
+  assign addr_hit[ 9] = (reg_addr == IOMMU_CQCSR_OFFSET);
+  assign addr_hit[10] = (reg_addr == IOMMU_FQCSR_OFFSET);
+  assign addr_hit[11] = (reg_addr == IOMMU_IPSR_OFFSET);
+
+  // HPM (optional)
+  if (N_IOHPMCTR > 0 ) begin
+    assign addr_hit[12] = (reg_addr == IOMMU_IOCNTOVF_OFFSET);
+    assign addr_hit[13] = (reg_addr == IOMMU_IOCNTINH_OFFSET);
+    assign addr_hit[14] = (reg_addr == IOMMU_IOHPMCYCLES_OFFSET);
+
+    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+      assign addr_hit[15+i]     = (reg_addr == (IOMMU_IOHPMCTR_OFFSET + i*8));
+      assign addr_hit[15+31+i]  = (reg_addr == (IOMMU_IOHPMEVT_OFFSET + i*8));
+    end
+
+    // Hardwire unused bits to 0
+    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+      assign addr_hit[15+i]     = 1'b0;
+      assign addr_hit[15+31+i]  = 1'b0;
+    end
   end
+
+  // No HPM
+  else begin
+    assign addr_hit[12] = 1'b0;
+    assign addr_hit[13] = 1'b0;
+    assign addr_hit[14] = 1'b0;
+
+    for (int unsigned i = 0; i < 31; i++) begin
+      assign addr_hit[15+i]     = 1'b0;
+      assign addr_hit[15+31+i]  = 1'b0;
+    end
+  end
+
+  assign addr_hit[12+65] = (reg_addr == IOMMU_ICVEC_OFFSET);
+  assign addr_hit[13+65] = (reg_addr == IOMMU_MSI_ADDR_0_OFFSET);
+  assign addr_hit[14+65] = (reg_addr == IOMMU_MSI_DATA_0_OFFSET);
+  assign addr_hit[15+65] = (reg_addr == IOMMU_MSI_VEC_CTL_0_OFFSET);
+  assign addr_hit[16+65] = (reg_addr == IOMMU_MSI_ADDR_1_OFFSET);
+  assign addr_hit[17+65] = (reg_addr == IOMMU_MSI_DATA_1_OFFSET);
+  assign addr_hit[18+65] = (reg_addr == IOMMU_MSI_VEC_CTL_1_OFFSET);
+  assign addr_hit[19+65] = (reg_addr == IOMMU_MSI_ADDR_2_OFFSET);
+  assign addr_hit[20+65] = (reg_addr == IOMMU_MSI_DATA_2_OFFSET);
+  assign addr_hit[21+65] = (reg_addr == IOMMU_MSI_VEC_CTL_2_OFFSET);
+  assign addr_hit[22+65] = (reg_addr == IOMMU_MSI_ADDR_3_OFFSET);
+  assign addr_hit[23+65] = (reg_addr == IOMMU_MSI_DATA_3_OFFSET);
+  assign addr_hit[24+65] = (reg_addr == IOMMU_MSI_VEC_CTL_3_OFFSET);
+  assign addr_hit[25+65] = (reg_addr == IOMMU_MSI_ADDR_4_OFFSET);
+  assign addr_hit[26+65] = (reg_addr == IOMMU_MSI_DATA_4_OFFSET);
+  assign addr_hit[27+65] = (reg_addr == IOMMU_MSI_VEC_CTL_4_OFFSET);
+  assign addr_hit[28+65] = (reg_addr == IOMMU_MSI_ADDR_5_OFFSET);
+  assign addr_hit[29+65] = (reg_addr == IOMMU_MSI_DATA_5_OFFSET);
+  assign addr_hit[30+65] = (reg_addr == IOMMU_MSI_VEC_CTL_5_OFFSET);
+  assign addr_hit[31+65] = (reg_addr == IOMMU_MSI_ADDR_6_OFFSET);
+  assign addr_hit[32+65] = (reg_addr == IOMMU_MSI_DATA_6_OFFSET);
+  assign addr_hit[33+65] = (reg_addr == IOMMU_MSI_VEC_CTL_6_OFFSET);
+  assign addr_hit[34+65] = (reg_addr == IOMMU_MSI_ADDR_7_OFFSET);
+  assign addr_hit[35+65] = (reg_addr == IOMMU_MSI_DATA_7_OFFSET);
+  assign addr_hit[36+65] = (reg_addr == IOMMU_MSI_VEC_CTL_7_OFFSET);
+  assign addr_hit[37+65] = (reg_addr == IOMMU_MSI_ADDR_8_OFFSET);
+  assign addr_hit[38+65] = (reg_addr == IOMMU_MSI_DATA_8_OFFSET);
+  assign addr_hit[39+65] = (reg_addr == IOMMU_MSI_VEC_CTL_8_OFFSET);
+  assign addr_hit[40+65] = (reg_addr == IOMMU_MSI_ADDR_9_OFFSET);
+  assign addr_hit[41+65] = (reg_addr == IOMMU_MSI_DATA_9_OFFSET);
+  assign addr_hit[42+65] = (reg_addr == IOMMU_MSI_VEC_CTL_9_OFFSET);
+  assign addr_hit[43+65] = (reg_addr == IOMMU_MSI_ADDR_10_OFFSET);
+  assign addr_hit[44+65] = (reg_addr == IOMMU_MSI_DATA_10_OFFSET);
+  assign addr_hit[45+65] = (reg_addr == IOMMU_MSI_VEC_CTL_10_OFFSET);
+  assign addr_hit[46+65] = (reg_addr == IOMMU_MSI_ADDR_11_OFFSET);
+  assign addr_hit[47+65] = (reg_addr == IOMMU_MSI_DATA_11_OFFSET);
+  assign addr_hit[48+65] = (reg_addr == IOMMU_MSI_VEC_CTL_11_OFFSET);
+  assign addr_hit[49+65] = (reg_addr == IOMMU_MSI_ADDR_12_OFFSET);
+  assign addr_hit[50+65] = (reg_addr == IOMMU_MSI_DATA_12_OFFSET);
+  assign addr_hit[51+65] = (reg_addr == IOMMU_MSI_VEC_CTL_12_OFFSET);
+  assign addr_hit[52+65] = (reg_addr == IOMMU_MSI_ADDR_13_OFFSET);
+  assign addr_hit[53+65] = (reg_addr == IOMMU_MSI_DATA_13_OFFSET);
+  assign addr_hit[54+65] = (reg_addr == IOMMU_MSI_VEC_CTL_13_OFFSET);
+  assign addr_hit[55+65] = (reg_addr == IOMMU_MSI_ADDR_14_OFFSET);
+  assign addr_hit[56+65] = (reg_addr == IOMMU_MSI_DATA_14_OFFSET);
+  assign addr_hit[57+65] = (reg_addr == IOMMU_MSI_VEC_CTL_14_OFFSET);
+  assign addr_hit[58+65] = (reg_addr == IOMMU_MSI_ADDR_15_OFFSET);
+  assign addr_hit[59+65] = (reg_addr == IOMMU_MSI_DATA_15_OFFSET);
+  assign addr_hit[60+65] = (reg_addr == IOMMU_MSI_VEC_CTL_15_OFFSET);
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;  // a miss occurs when reading or writing and no addr_hit flag is set
 
-  // Check sub-word write is permitted
-  // EXP: wr_err is set when trying to write to non-existent fields in a register
-  always_comb begin
-    wr_err = (reg_we &
-              ((addr_hit[ 0] & (|(IOMMU_PERMIT[ 0] & ~reg_be))) |
-               (addr_hit[ 1] & (|(IOMMU_PERMIT[ 1] & ~reg_be))) |
-               (addr_hit[ 2] & (|(IOMMU_PERMIT[ 2] & ~reg_be))) |
-               (addr_hit[ 3] & (|(IOMMU_PERMIT[ 3] & ~reg_be))) |
-               (addr_hit[ 4] & (|(IOMMU_PERMIT[ 4] & ~reg_be))) |
-               (addr_hit[ 5] & (|(IOMMU_PERMIT[ 5] & ~reg_be))) |
-               (addr_hit[ 6] & (|(IOMMU_PERMIT[ 6] & ~reg_be))) |
-               (addr_hit[ 7] & (|(IOMMU_PERMIT[ 7] & ~reg_be))) |
-               (addr_hit[ 8] & (|(IOMMU_PERMIT[ 8] & ~reg_be))) |
-               (addr_hit[ 9] & (|(IOMMU_PERMIT[ 9] & ~reg_be))) |
-               (addr_hit[10] & (|(IOMMU_PERMIT[10] & ~reg_be))) |
-               (addr_hit[11] & (|(IOMMU_PERMIT[11] & ~reg_be))) |
-               (addr_hit[12] & (|(IOMMU_PERMIT[12] & ~reg_be))) |
-               (addr_hit[13] & (|(IOMMU_PERMIT[13] & ~reg_be))) |
-               (addr_hit[14] & (|(IOMMU_PERMIT[14] & ~reg_be))) |
-               (addr_hit[15] & (|(IOMMU_PERMIT[15] & ~reg_be))) |
-               (addr_hit[16] & (|(IOMMU_PERMIT[16] & ~reg_be))) |
-               (addr_hit[17] & (|(IOMMU_PERMIT[17] & ~reg_be))) |
-               (addr_hit[18] & (|(IOMMU_PERMIT[18] & ~reg_be))) |
-               (addr_hit[19] & (|(IOMMU_PERMIT[19] & ~reg_be))) |
-               (addr_hit[20] & (|(IOMMU_PERMIT[20] & ~reg_be))) |
-               (addr_hit[21] & (|(IOMMU_PERMIT[21] & ~reg_be))) |
-               (addr_hit[22] & (|(IOMMU_PERMIT[22] & ~reg_be))) |
-               (addr_hit[23] & (|(IOMMU_PERMIT[23] & ~reg_be))) |
-               (addr_hit[24] & (|(IOMMU_PERMIT[24] & ~reg_be))) |
-               (addr_hit[25] & (|(IOMMU_PERMIT[25] & ~reg_be))) |
-               (addr_hit[26] & (|(IOMMU_PERMIT[26] & ~reg_be))) |
-               (addr_hit[27] & (|(IOMMU_PERMIT[27] & ~reg_be))) |
-               (addr_hit[28] & (|(IOMMU_PERMIT[28] & ~reg_be))) |
-               (addr_hit[29] & (|(IOMMU_PERMIT[29] & ~reg_be))) |
-               (addr_hit[30] & (|(IOMMU_PERMIT[30] & ~reg_be))) |
-               (addr_hit[31] & (|(IOMMU_PERMIT[31] & ~reg_be))) |
-               (addr_hit[32] & (|(IOMMU_PERMIT[32] & ~reg_be))) |
-               (addr_hit[33] & (|(IOMMU_PERMIT[33] & ~reg_be))) |
-               (addr_hit[34] & (|(IOMMU_PERMIT[34] & ~reg_be))) |
-               (addr_hit[35] & (|(IOMMU_PERMIT[35] & ~reg_be))) |
-               (addr_hit[36] & (|(IOMMU_PERMIT[36] & ~reg_be))) |
-               (addr_hit[37] & (|(IOMMU_PERMIT[37] & ~reg_be))) |
-               (addr_hit[38] & (|(IOMMU_PERMIT[38] & ~reg_be))) |
-               (addr_hit[39] & (|(IOMMU_PERMIT[39] & ~reg_be))) |
-               (addr_hit[40] & (|(IOMMU_PERMIT[40] & ~reg_be))) |
-               (addr_hit[41] & (|(IOMMU_PERMIT[41] & ~reg_be))) |
-               (addr_hit[42] & (|(IOMMU_PERMIT[42] & ~reg_be))) |
-               (addr_hit[43] & (|(IOMMU_PERMIT[43] & ~reg_be))) |
-               (addr_hit[44] & (|(IOMMU_PERMIT[44] & ~reg_be))) |
-               (addr_hit[45] & (|(IOMMU_PERMIT[45] & ~reg_be))) |
-               (addr_hit[46] & (|(IOMMU_PERMIT[46] & ~reg_be))) |
-               (addr_hit[47] & (|(IOMMU_PERMIT[47] & ~reg_be))) |
-               (addr_hit[48] & (|(IOMMU_PERMIT[48] & ~reg_be))) |
-               (addr_hit[49] & (|(IOMMU_PERMIT[49] & ~reg_be))) |
-               (addr_hit[50] & (|(IOMMU_PERMIT[50] & ~reg_be))) |
-               (addr_hit[51] & (|(IOMMU_PERMIT[51] & ~reg_be))) |
-               (addr_hit[52] & (|(IOMMU_PERMIT[52] & ~reg_be))) |
-               (addr_hit[53] & (|(IOMMU_PERMIT[53] & ~reg_be))) |
-               (addr_hit[54] & (|(IOMMU_PERMIT[54] & ~reg_be))) |
-               (addr_hit[55] & (|(IOMMU_PERMIT[55] & ~reg_be))) |
-               (addr_hit[56] & (|(IOMMU_PERMIT[56] & ~reg_be))) |
-               (addr_hit[57] & (|(IOMMU_PERMIT[57] & ~reg_be))) |
-               (addr_hit[58] & (|(IOMMU_PERMIT[58] & ~reg_be))) |
-               (addr_hit[59] & (|(IOMMU_PERMIT[59] & ~reg_be))) |
-               (addr_hit[60] & (|(IOMMU_PERMIT[60] & ~reg_be)))));
+  //# Check whether sub-word write is permitted
+  // Mandatory registers
+  assign wr_err[ 0] = (addr_hit[ 0] & (|(IOMMU_PERMIT[ 0] & ~reg_be)));
+  assign wr_err[ 1] = (addr_hit[ 1] & (|(IOMMU_PERMIT[ 1] & ~reg_be)));
+  assign wr_err[ 2] = (addr_hit[ 2] & (|(IOMMU_PERMIT[ 2] & ~reg_be)));
+  assign wr_err[ 3] = (addr_hit[ 3] & (|(IOMMU_PERMIT[ 3] & ~reg_be)));
+  assign wr_err[ 4] = (addr_hit[ 4] & (|(IOMMU_PERMIT[ 4] & ~reg_be)));
+  assign wr_err[ 5] = (addr_hit[ 5] & (|(IOMMU_PERMIT[ 5] & ~reg_be)));
+  assign wr_err[ 6] = (addr_hit[ 6] & (|(IOMMU_PERMIT[ 6] & ~reg_be)));
+  assign wr_err[ 7] = (addr_hit[ 7] & (|(IOMMU_PERMIT[ 7] & ~reg_be)));
+  assign wr_err[ 8] = (addr_hit[ 8] & (|(IOMMU_PERMIT[ 8] & ~reg_be)));
+  assign wr_err[ 9] = (addr_hit[ 9] & (|(IOMMU_PERMIT[ 9] & ~reg_be)));
+  assign wr_err[10] = (addr_hit[10] & (|(IOMMU_PERMIT[10] & ~reg_be)));
+  assign wr_err[11] = (addr_hit[11] & (|(IOMMU_PERMIT[11] & ~reg_be)));
+
+  // HPM (optional)
+  if (N_IOHPMCTR > 0 ) begin
+
+    assign wr_err[12] = (addr_hit[12] & (|(IOMMU_PERMIT[12] & ~reg_be)));
+    assign wr_err[13] = (addr_hit[13] & (|(IOMMU_PERMIT[13] & ~reg_be)));
+    assign wr_err[14] = (addr_hit[14] & (|(IOMMU_PERMIT[14] & ~reg_be)));
+
+    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+      assign wr_err[15+i]     = (addr_hit[15+i] & (|(IOMMU_PERMIT[15] & ~reg_be)));
+      assign wr_err[15+31+i]  = (addr_hit[15+31+i] & (|(IOMMU_PERMIT[16] & ~reg_be)));
+    end
+
+    // Hardwire unused bits to 0
+    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+      assign wr_err[15+i]     = 1'b0;
+      assign wr_err[15+31+i]  = 1'b0;
+    end
   end
 
-  //# Write data logic
-  //
-  // EXP: The WE signal for each FIELD is set if global WE is set, and the corresponding REG addr_hit flag is set, and there is no error
-  //      The WD for each FIELD is connected to the correspondind bits of the reg_wdata input signal
-  // NOTE:  Writes are performed by REG, not by FIELD. It is up to the software to maintain the same values in the other fields when it is desired
-  //        to write to a particular field
+  // No HPM
+  else begin
 
+    assign wr_err[12] = 1'b0;
+    assign wr_err[13] = 1'b0;
+    assign wr_err[14] = 1'b0;
+    
+    for (int unsigned i = 0; i < 31; i++) begin
+      assign wr_err[15+i]     = 1'b0;
+      assign wr_err[15+31+i]  = 1'b0;
+    end
+  end
+
+  // Mandatory registers
+  assign wr_err[12+65] = (addr_hit[12+65] & (|(IOMMU_PERMIT[17] & ~reg_be)));
+  assign wr_err[13+65] = (addr_hit[13+65] & (|(IOMMU_PERMIT[18] & ~reg_be)));
+  assign wr_err[14+65] = (addr_hit[14+65] & (|(IOMMU_PERMIT[19] & ~reg_be)));
+  assign wr_err[15+65] = (addr_hit[15+65] & (|(IOMMU_PERMIT[20] & ~reg_be)));
+  assign wr_err[16+65] = (addr_hit[16+65] & (|(IOMMU_PERMIT[21] & ~reg_be)));
+  assign wr_err[17+65] = (addr_hit[17+65] & (|(IOMMU_PERMIT[22] & ~reg_be)));
+  assign wr_err[18+65] = (addr_hit[18+65] & (|(IOMMU_PERMIT[23] & ~reg_be)));
+  assign wr_err[19+65] = (addr_hit[19+65] & (|(IOMMU_PERMIT[24] & ~reg_be)));
+  assign wr_err[20+65] = (addr_hit[20+65] & (|(IOMMU_PERMIT[25] & ~reg_be)));
+  assign wr_err[21+65] = (addr_hit[21+65] & (|(IOMMU_PERMIT[26] & ~reg_be)));
+  assign wr_err[22+65] = (addr_hit[22+65] & (|(IOMMU_PERMIT[27] & ~reg_be)));
+  assign wr_err[23+65] = (addr_hit[23+65] & (|(IOMMU_PERMIT[28] & ~reg_be)));
+  assign wr_err[24+65] = (addr_hit[24+65] & (|(IOMMU_PERMIT[29] & ~reg_be)));
+  assign wr_err[25+65] = (addr_hit[25+65] & (|(IOMMU_PERMIT[30] & ~reg_be)));
+  assign wr_err[26+65] = (addr_hit[26+65] & (|(IOMMU_PERMIT[31] & ~reg_be)));
+  assign wr_err[27+65] = (addr_hit[27+65] & (|(IOMMU_PERMIT[32] & ~reg_be)));
+  assign wr_err[28+65] = (addr_hit[28+65] & (|(IOMMU_PERMIT[33] & ~reg_be)));
+  assign wr_err[29+65] = (addr_hit[29+65] & (|(IOMMU_PERMIT[34] & ~reg_be)));
+  assign wr_err[30+65] = (addr_hit[30+65] & (|(IOMMU_PERMIT[35] & ~reg_be)));
+  assign wr_err[31+65] = (addr_hit[31+65] & (|(IOMMU_PERMIT[36] & ~reg_be)));
+  assign wr_err[32+65] = (addr_hit[32+65] & (|(IOMMU_PERMIT[37] & ~reg_be)));
+  assign wr_err[33+65] = (addr_hit[33+65] & (|(IOMMU_PERMIT[38] & ~reg_be)));
+  assign wr_err[34+65] = (addr_hit[34+65] & (|(IOMMU_PERMIT[39] & ~reg_be)));
+  assign wr_err[35+65] = (addr_hit[35+65] & (|(IOMMU_PERMIT[40] & ~reg_be)));
+  assign wr_err[36+65] = (addr_hit[36+65] & (|(IOMMU_PERMIT[41] & ~reg_be)));
+  assign wr_err[37+65] = (addr_hit[37+65] & (|(IOMMU_PERMIT[42] & ~reg_be)));
+  assign wr_err[38+65] = (addr_hit[38+65] & (|(IOMMU_PERMIT[43] & ~reg_be)));
+  assign wr_err[39+65] = (addr_hit[39+65] & (|(IOMMU_PERMIT[44] & ~reg_be)));
+  assign wr_err[40+65] = (addr_hit[40+65] & (|(IOMMU_PERMIT[45] & ~reg_be)));
+  assign wr_err[41+65] = (addr_hit[41+65] & (|(IOMMU_PERMIT[46] & ~reg_be)));
+  assign wr_err[42+65] = (addr_hit[42+65] & (|(IOMMU_PERMIT[47] & ~reg_be)));
+  assign wr_err[43+65] = (addr_hit[43+65] & (|(IOMMU_PERMIT[48] & ~reg_be)));
+  assign wr_err[44+65] = (addr_hit[44+65] & (|(IOMMU_PERMIT[49] & ~reg_be)));
+  assign wr_err[45+65] = (addr_hit[45+65] & (|(IOMMU_PERMIT[50] & ~reg_be)));
+  assign wr_err[46+65] = (addr_hit[46+65] & (|(IOMMU_PERMIT[51] & ~reg_be)));
+  assign wr_err[47+65] = (addr_hit[47+65] & (|(IOMMU_PERMIT[52] & ~reg_be)));
+  assign wr_err[48+65] = (addr_hit[48+65] & (|(IOMMU_PERMIT[53] & ~reg_be)));
+  assign wr_err[49+65] = (addr_hit[49+65] & (|(IOMMU_PERMIT[54] & ~reg_be)));
+  assign wr_err[50+65] = (addr_hit[50+65] & (|(IOMMU_PERMIT[55] & ~reg_be)));
+  assign wr_err[51+65] = (addr_hit[51+65] & (|(IOMMU_PERMIT[56] & ~reg_be)));
+  assign wr_err[52+65] = (addr_hit[52+65] & (|(IOMMU_PERMIT[57] & ~reg_be)));
+  assign wr_err[53+65] = (addr_hit[53+65] & (|(IOMMU_PERMIT[58] & ~reg_be)));
+  assign wr_err[54+65] = (addr_hit[54+65] & (|(IOMMU_PERMIT[59] & ~reg_be)));
+  assign wr_err[55+65] = (addr_hit[55+65] & (|(IOMMU_PERMIT[60] & ~reg_be)));
+  assign wr_err[56+65] = (addr_hit[56+65] & (|(IOMMU_PERMIT[61] & ~reg_be)));
+  assign wr_err[57+65] = (addr_hit[57+65] & (|(IOMMU_PERMIT[62] & ~reg_be)));
+  assign wr_err[58+65] = (addr_hit[58+65] & (|(IOMMU_PERMIT[63] & ~reg_be)));
+  assign wr_err[59+65] = (addr_hit[59+65] & (|(IOMMU_PERMIT[64] & ~reg_be)));
+  assign wr_err[60+65] = (addr_hit[60+65] & (|(IOMMU_PERMIT[65] & ~reg_be)));
+
+  //# Write data logic
 	// Hardwire fctl.BE since we are only using little-endian processing
 	// assign fctl_be_we = addr_hit[1] & reg_we & !reg_error;
 	// assign fctl_be_wd = reg_wdata[0];
@@ -3899,160 +4406,238 @@ module iommu_regmap_wrapper #(
   assign ipsr_pip_we = addr_hit[11] & reg_we & !reg_error;
   assign ipsr_pip_wd = reg_wdata[3];
 
-  assign icvec_civ_we = addr_hit[12] & reg_we & !reg_error;
+  // HPM
+  if (N_IOHPMCTR > 0) begin
+    
+    assign iocountinh_cy_we = addr_hit[13] & reg_we & !reg_error;
+    assign iocountinh_cy_wd = reg_wdata[0];
+
+    assign iocountinh_hpm_we = addr_hit[13] & reg_we & !reg_error;
+    assign iocountinh_hpm_wd = reg_wdata[31:1];
+
+    assign iohpmcycles_counter_we = addr_hit[14] & reg_we & !reg_error;
+    assign iohpmcycles_counter_wd = reg_wdata[62:0];
+
+    assign iohpmcycles_of_we = addr_hit[14] & reg_we & !reg_error;
+    assign iohpmcycles_of_wd = reg_wdata[63];
+
+    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+      
+      assign iohpmctr_counter_we[i] = addr_hit[15+i] & reg_we & !reg_error;
+      assign iohpmctr_counter_wd[i] = reg_wdata[63:0];
+
+      assign iohpmevt_eventid_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_eventid_wd[i]   = reg_wdata[14:0];
+      assign iohpmevt_dmask_we[i]     = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_dmask_wd[i]     = reg_wdata[15];
+      assign iohpmevt_pid_pscid_we[i] = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_pid_pscid_wd[i] = reg_wdata[35:16];
+      assign iohpmevt_did_gscid_we[i] = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_did_gscid_wd[i] = reg_wdata[59:36];
+      assign iohpmevt_pv_pscv_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_pv_pscv_wd[i]   = reg_wdata[60];
+      assign iohpmevt_dv_gscv_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_dv_gscv_wd[i]   = reg_wdata[61];
+      assign iohpmevt_idt_we[i]       = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_idt_wd[i]       = reg_wdata[62];
+      assign iohpmevt_of_we[i]        = addr_hit[15+31+i] & reg_we & !reg_error;
+      assign iohpmevt_of_wd[i]        = reg_wdata[63];
+    end
+  end
+
+  // No HPM
+  else begin
+    
+    assign iocountinh_cy_we = 1'b0;
+    assign iocountinh_cy_wd = '0;
+
+    assign iocountinh_hpm_we = 1'b0;
+    assign iocountinh_hpm_wd = '0;
+
+    assign iohpmcycles_counter_we = 1'b0;
+    assign iohpmcycles_counter_wd = '0;
+
+    assign iohpmcycles_of_we = 1'b0;
+    assign iohpmcycles_of_wd = '0;
+
+    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+
+      assign iohpmctr_counter_we[i] = 1'b0;
+      assign iohpmctr_counter_wd[i] = '0;
+
+      assign iohpmevt_eventid_we[i]   = 1'b0;
+      assign iohpmevt_eventid_wd[i]   = '0;
+      assign iohpmevt_dmask_we[i]     = 1'b0;
+      assign iohpmevt_dmask_wd[i]     = '0
+      assign iohpmevt_pid_pscid_we[i] = 1'b0;
+      assign iohpmevt_pid_pscid_wd[i] = '0;
+      assign iohpmevt_did_gscid_we[i] = 1'b0;
+      assign iohpmevt_did_gscid_wd[i] = '0;
+      assign iohpmevt_pv_pscv_we[i]   = 1'b0;
+      assign iohpmevt_pv_pscv_wd[i]   = '0;
+      assign iohpmevt_dv_gscv_we[i]   = 1'b0;
+      assign iohpmevt_dv_gscv_wd[i]   = '0;
+      assign iohpmevt_idt_we[i]       = 1'b0;
+      assign iohpmevt_idt_wd[i]       = '0;
+      assign iohpmevt_of_we[i]        = 1'b0;
+      assign iohpmevt_of_wd[i]        = '0;
+    end
+  end
+
+  assign icvec_civ_we = addr_hit[12+65] & reg_we & !reg_error;
   assign icvec_civ_wd = reg_wdata[(LOG2_INTVEC-1)+0:0];
 
-  assign icvec_fiv_we = addr_hit[12] & reg_we & !reg_error;
+  assign icvec_fiv_we = addr_hit[12+65] & reg_we & !reg_error;
   assign icvec_fiv_wd = reg_wdata[(LOG2_INTVEC-1)+4:4];
 
-  assign icvec_pmiv_we = addr_hit[12] & reg_we & !reg_error;
+  assign icvec_pmiv_we = addr_hit[12+65] & reg_we & !reg_error;
   assign icvec_pmiv_wd = reg_wdata[(LOG2_INTVEC-1)+8:8];
 
-  assign icvec_piv_we = addr_hit[12] & reg_we & !reg_error;
+  assign icvec_piv_we = addr_hit[12+65] & reg_we & !reg_error;
   assign icvec_piv_wd = reg_wdata[(LOG2_INTVEC-1)+12:12];
 
-  assign msi_addr_0_addr_we = addr_hit[13] & reg_we & !reg_error;
+  assign msi_addr_0_addr_we = addr_hit[13+65] & reg_we & !reg_error;
   assign msi_addr_0_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_0_we = addr_hit[14] & reg_we & !reg_error;
+  assign msi_data_0_we = addr_hit[14+65] & reg_we & !reg_error;
   assign msi_data_0_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_0_we = addr_hit[15] & reg_we & !reg_error;
+  assign msi_vec_ctl_0_we = addr_hit[15+65] & reg_we & !reg_error;
   assign msi_vec_ctl_0_wd = reg_wdata[0];
 
-  assign msi_addr_1_addr_we = addr_hit[16] & reg_we & !reg_error;
+  assign msi_addr_1_addr_we = addr_hit[16+65] & reg_we & !reg_error;
   assign msi_addr_1_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_1_we = addr_hit[17] & reg_we & !reg_error;
+  assign msi_data_1_we = addr_hit[17+65] & reg_we & !reg_error;
   assign msi_data_1_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_1_we = addr_hit[18] & reg_we & !reg_error;
+  assign msi_vec_ctl_1_we = addr_hit[18+65] & reg_we & !reg_error;
   assign msi_vec_ctl_1_wd = reg_wdata[0];
 
-  assign msi_addr_2_addr_we = addr_hit[19] & reg_we & !reg_error;
+  assign msi_addr_2_addr_we = addr_hit[19+65] & reg_we & !reg_error;
   assign msi_addr_2_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_2_we = addr_hit[20] & reg_we & !reg_error;
+  assign msi_data_2_we = addr_hit[20+65] & reg_we & !reg_error;
   assign msi_data_2_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_2_we = addr_hit[21] & reg_we & !reg_error;
+  assign msi_vec_ctl_2_we = addr_hit[21+65] & reg_we & !reg_error;
   assign msi_vec_ctl_2_wd = reg_wdata[0];
 
-  assign msi_addr_3_addr_we = addr_hit[22] & reg_we & !reg_error;
+  assign msi_addr_3_addr_we = addr_hit[22+65] & reg_we & !reg_error;
   assign msi_addr_3_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_3_we = addr_hit[23] & reg_we & !reg_error;
+  assign msi_data_3_we = addr_hit[23+65] & reg_we & !reg_error;
   assign msi_data_3_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_3_we = addr_hit[24] & reg_we & !reg_error;
+  assign msi_vec_ctl_3_we = addr_hit[24+65] & reg_we & !reg_error;
   assign msi_vec_ctl_3_wd = reg_wdata[0];
 
-  assign msi_addr_4_addr_we = addr_hit[25] & reg_we & !reg_error;
+  assign msi_addr_4_addr_we = addr_hit[25+65] & reg_we & !reg_error;
   assign msi_addr_4_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_4_we = addr_hit[26] & reg_we & !reg_error;
+  assign msi_data_4_we = addr_hit[26+65] & reg_we & !reg_error;
   assign msi_data_4_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_4_we = addr_hit[27] & reg_we & !reg_error;
+  assign msi_vec_ctl_4_we = addr_hit[27+65] & reg_we & !reg_error;
   assign msi_vec_ctl_4_wd = reg_wdata[0];
 
-  assign msi_addr_5_addr_we = addr_hit[28] & reg_we & !reg_error;
+  assign msi_addr_5_addr_we = addr_hit[28+65] & reg_we & !reg_error;
   assign msi_addr_5_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_5_we = addr_hit[29] & reg_we & !reg_error;
+  assign msi_data_5_we = addr_hit[29+65] & reg_we & !reg_error;
   assign msi_data_5_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_5_we = addr_hit[30] & reg_we & !reg_error;
+  assign msi_vec_ctl_5_we = addr_hit[30+65] & reg_we & !reg_error;
   assign msi_vec_ctl_5_wd = reg_wdata[0];
 
-  assign msi_addr_6_addr_we = addr_hit[31] & reg_we & !reg_error;
+  assign msi_addr_6_addr_we = addr_hit[31+65] & reg_we & !reg_error;
   assign msi_addr_6_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_6_we = addr_hit[32] & reg_we & !reg_error;
+  assign msi_data_6_we = addr_hit[32+65] & reg_we & !reg_error;
   assign msi_data_6_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_6_we = addr_hit[33] & reg_we & !reg_error;
+  assign msi_vec_ctl_6_we = addr_hit[33+65] & reg_we & !reg_error;
   assign msi_vec_ctl_6_wd = reg_wdata[0];
 
-  assign msi_addr_7_addr_we = addr_hit[34] & reg_we & !reg_error;
+  assign msi_addr_7_addr_we = addr_hit[34+65] & reg_we & !reg_error;
   assign msi_addr_7_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_7_we = addr_hit[35] & reg_we & !reg_error;
+  assign msi_data_7_we = addr_hit[35+65] & reg_we & !reg_error;
   assign msi_data_7_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_7_we = addr_hit[36] & reg_we & !reg_error;
+  assign msi_vec_ctl_7_we = addr_hit[36+65] & reg_we & !reg_error;
   assign msi_vec_ctl_7_wd = reg_wdata[0];
 
-  assign msi_addr_8_addr_we = addr_hit[37] & reg_we & !reg_error;
+  assign msi_addr_8_addr_we = addr_hit[37+65] & reg_we & !reg_error;
   assign msi_addr_8_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_8_we = addr_hit[38] & reg_we & !reg_error;
+  assign msi_data_8_we = addr_hit[38+65] & reg_we & !reg_error;
   assign msi_data_8_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_8_we = addr_hit[39] & reg_we & !reg_error;
+  assign msi_vec_ctl_8_we = addr_hit[39+65] & reg_we & !reg_error;
   assign msi_vec_ctl_8_wd = reg_wdata[0];
 
-  assign msi_addr_9_addr_we = addr_hit[40] & reg_we & !reg_error;
+  assign msi_addr_9_addr_we = addr_hit[40+65] & reg_we & !reg_error;
   assign msi_addr_9_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_9_we = addr_hit[41] & reg_we & !reg_error;
+  assign msi_data_9_we = addr_hit[41+65] & reg_we & !reg_error;
   assign msi_data_9_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_9_we = addr_hit[42] & reg_we & !reg_error;
+  assign msi_vec_ctl_9_we = addr_hit[42+65] & reg_we & !reg_error;
   assign msi_vec_ctl_9_wd = reg_wdata[0];
 
-  assign msi_addr_10_addr_we = addr_hit[43] & reg_we & !reg_error;
+  assign msi_addr_10_addr_we = addr_hit[43+65] & reg_we & !reg_error;
   assign msi_addr_10_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_10_we = addr_hit[44] & reg_we & !reg_error;
+  assign msi_data_10_we = addr_hit[44+65] & reg_we & !reg_error;
   assign msi_data_10_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_10_we = addr_hit[45] & reg_we & !reg_error;
+  assign msi_vec_ctl_10_we = addr_hit[45+65] & reg_we & !reg_error;
   assign msi_vec_ctl_10_wd = reg_wdata[0];
 
-  assign msi_addr_11_addr_we = addr_hit[46] & reg_we & !reg_error;
+  assign msi_addr_11_addr_we = addr_hit[46+65] & reg_we & !reg_error;
   assign msi_addr_11_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_11_we = addr_hit[47] & reg_we & !reg_error;
+  assign msi_data_11_we = addr_hit[47+65] & reg_we & !reg_error;
   assign msi_data_11_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_11_we = addr_hit[48] & reg_we & !reg_error;
+  assign msi_vec_ctl_11_we = addr_hit[48+65] & reg_we & !reg_error;
   assign msi_vec_ctl_11_wd = reg_wdata[0];
 
-  assign msi_addr_12_addr_we = addr_hit[49] & reg_we & !reg_error;
+  assign msi_addr_12_addr_we = addr_hit[49+65] & reg_we & !reg_error;
   assign msi_addr_12_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_12_we = addr_hit[50] & reg_we & !reg_error;
+  assign msi_data_12_we = addr_hit[50+65] & reg_we & !reg_error;
   assign msi_data_12_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_12_we = addr_hit[51] & reg_we & !reg_error;
+  assign msi_vec_ctl_12_we = addr_hit[51+65] & reg_we & !reg_error;
   assign msi_vec_ctl_12_wd = reg_wdata[0];
 
-  assign msi_addr_13_addr_we = addr_hit[52] & reg_we & !reg_error;
+  assign msi_addr_13_addr_we = addr_hit[52+65] & reg_we & !reg_error;
   assign msi_addr_13_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_13_we = addr_hit[53] & reg_we & !reg_error;
+  assign msi_data_13_we = addr_hit[53+65] & reg_we & !reg_error;
   assign msi_data_13_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_13_we = addr_hit[54] & reg_we & !reg_error;
+  assign msi_vec_ctl_13_we = addr_hit[54+65] & reg_we & !reg_error;
   assign msi_vec_ctl_13_wd = reg_wdata[0];
 
-  assign msi_addr_14_addr_we = addr_hit[55] & reg_we & !reg_error;
+  assign msi_addr_14_addr_we = addr_hit[55+65] & reg_we & !reg_error;
   assign msi_addr_14_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_14_we = addr_hit[56] & reg_we & !reg_error;
+  assign msi_data_14_we = addr_hit[56+65] & reg_we & !reg_error;
   assign msi_data_14_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_14_we = addr_hit[57] & reg_we & !reg_error;
+  assign msi_vec_ctl_14_we = addr_hit[57+65] & reg_we & !reg_error;
   assign msi_vec_ctl_14_wd = reg_wdata[0];
 
-  assign msi_addr_15_addr_we = addr_hit[58] & reg_we & !reg_error;
+  assign msi_addr_15_addr_we = addr_hit[58+65] & reg_we & !reg_error;
   assign msi_addr_15_addr_wd = reg_wdata[55:2];
 
-  assign msi_data_15_we = addr_hit[59] & reg_we & !reg_error;
+  assign msi_data_15_we = addr_hit[59+65] & reg_we & !reg_error;
   assign msi_data_15_wd = reg_wdata[31:0];
 
-  assign msi_vec_ctl_15_we = addr_hit[60] & reg_we & !reg_error;
+  assign msi_vec_ctl_15_we = addr_hit[60+65] & reg_we & !reg_error;
   assign msi_vec_ctl_15_wd = reg_wdata[0];
 
   // # Read data logic
@@ -4183,6 +4768,53 @@ module iommu_regmap_wrapper #(
       end
 
       addr_hit[12]: begin
+        reg_rdata_next[0] = iohpmcycles_of_qs;
+        for (unsigned int i = 1; i < (N_IOHPMCTR + 1); i++) begin
+          reg_rdata_next[i] = iohpmevt_of_qs[i-1];
+        end
+        reg_rdata_next[63:N_IOHPMCTR+1] = '0;
+      end
+
+      addr_hit[13]: begin
+        reg_rdata_next[31:0] = '0;
+        reg_rdata_next[32] = iocountinh_cy_qs;
+        for (unsigned int i = 33; i < (33 + N_IOHPMCTR); i++) begin
+          reg_rdata_next[i] = iocountinh_hpm_qs[i-33];
+        end
+        if (N_IOHPMCTR != 31) 
+          reg_rdata_next[63:N_IOHPMCTR+33] = '0;
+      end
+
+      addr_hit[14]: begin
+        reg_rdata_next[62:0] = iohpmcycles_counter_qs;
+        reg_rdata_next[63] = iohpmcycles_of_qs;
+      end
+
+      (|addr_hit[(15+N_IOHPMCTR-1):15]): begin
+
+        for (int unsigned i = 15; i < (15+N_IOHPMCTR); i++) begin
+          if (addr_hit[i])
+            reg_rdata_next[63:0] = iohpmctr_counter_qs[i-15];
+        end
+      end
+
+      (|addr_hit[(15+(2*N_IOHPMCTR)-1):(15+N_IOHPMCTR)]): begin
+
+        for (int unsigned i = 15+N_IOHPMCTR; i < (15+2*N_IOHPMCTR); i++) begin
+          if (addr_hit[i]) begin
+            reg_rdata_next[14:0]  = iohpmevt_eventid_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[15]    = iohpmevt_dmask_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[35:16] = iohpmevt_pid_pscid_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[59:36] = iohpmevt_did_gscid_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[60]    = iohpmevt_pv_pscv_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[61]    = iohpmevt_dv_gscv_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[62]    = iohpmevt_idt_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[63]    = iohpmevt_of_qs[i-(15+N_IOHPMCTR)];
+          end 
+        end
+      end
+
+      addr_hit[12+65]: begin
         reg_rdata_next[(LOG2_INTVEC-1)+0:0] = icvec_civ_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+4:4] = icvec_fiv_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+8:8] = icvec_pmiv_qs;
@@ -4190,273 +4822,273 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[63:16] = '0;
       end
 
-      addr_hit[13]: begin
+      addr_hit[13+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_0_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[14]: begin
+      addr_hit[14+65]: begin
         reg_rdata_next[31:0] = msi_data_0_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[15]: begin
+      addr_hit[15+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_0_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[16]: begin
+      addr_hit[16+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_1_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[17]: begin
+      addr_hit[17+65]: begin
         reg_rdata_next[31:0] = msi_data_1_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[18]: begin
+      addr_hit[18+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_1_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[19]: begin
+      addr_hit[19+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_2_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[20]: begin
+      addr_hit[20+65]: begin
         reg_rdata_next[31:0] = msi_data_2_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[21]: begin
+      addr_hit[21+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_2_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[22]: begin
+      addr_hit[22+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_3_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[23]: begin
+      addr_hit[23+65]: begin
         reg_rdata_next[31:0] = msi_data_3_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[24]: begin
+      addr_hit[24+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_3_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[25]: begin
+      addr_hit[25+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_4_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[26]: begin
+      addr_hit[26+65]: begin
         reg_rdata_next[31:0] = msi_data_4_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[27]: begin
+      addr_hit[27+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_4_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[28]: begin
+      addr_hit[28+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_5_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[29]: begin
+      addr_hit[29+65]: begin
         reg_rdata_next[31:0] = msi_data_5_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[30]: begin
+      addr_hit[30+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_5_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[31]: begin
+      addr_hit[31+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_6_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[32]: begin
+      addr_hit[32+65]: begin
         reg_rdata_next[31:0] = msi_data_6_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[33]: begin
+      addr_hit[33+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_6_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[34]: begin
+      addr_hit[34+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_7_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[35]: begin
+      addr_hit[35+65]: begin
         reg_rdata_next[31:0] = msi_data_7_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[36]: begin
+      addr_hit[36+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_7_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[37]: begin
+      addr_hit[37+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_8_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[38]: begin
+      addr_hit[38+65]: begin
         reg_rdata_next[31:0] = msi_data_8_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[39]: begin
+      addr_hit[39+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_8_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[40]: begin
+      addr_hit[40+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_9_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[41]: begin
+      addr_hit[41+65]: begin
         reg_rdata_next[31:0] = msi_data_9_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[42]: begin
+      addr_hit[42+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_9_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[43]: begin
+      addr_hit[43+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_10_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[44]: begin
+      addr_hit[44+65]: begin
         reg_rdata_next[31:0] = msi_data_10_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[45]: begin
+      addr_hit[45+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_10_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[46]: begin
+      addr_hit[46+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_11_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[47]: begin
+      addr_hit[47+65]: begin
         reg_rdata_next[31:0] = msi_data_11_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[48]: begin
+      addr_hit[48+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_11_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[49]: begin
+      addr_hit[49+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_12_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[50]: begin
+      addr_hit[50+65]: begin
         reg_rdata_next[31:0] = msi_data_12_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[51]: begin
+      addr_hit[51+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_12_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[52]: begin
+      addr_hit[52+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_13_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[53]: begin
+      addr_hit[53+65]: begin
         reg_rdata_next[31:0] = msi_data_13_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[54]: begin
+      addr_hit[54+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_13_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[55]: begin
+      addr_hit[55+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_14_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[56]: begin
+      addr_hit[56+65]: begin
         reg_rdata_next[31:0] = msi_data_14_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[57]: begin
+      addr_hit[57+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_14_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
       end
 
-      addr_hit[58]: begin
+      addr_hit[58+65]: begin
         reg_rdata_next[1:0] = '0;
         reg_rdata_next[55:2] = msi_addr_15_addr_qs;
         reg_rdata_next[63:56] = '0;
       end
 
-      addr_hit[59]: begin
+      addr_hit[59+65]: begin
         reg_rdata_next[31:0] = msi_data_15_qs;
         reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[60]: begin
+      addr_hit[60+65]: begin
         reg_rdata_next[32] = msi_vec_ctl_15_qs;
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[63:33] = '0;
