@@ -401,6 +401,24 @@ package iommu_pkg;
     } ddtp_t;
 
     //--------------------------
+    //#  HPM Event IDs
+    //--------------------------
+
+    typedef enum logic[14:0] {
+      NOT_COUNT,
+      UT_REQ,
+      T_REQ,
+      ATS_REQ,
+      IOTLB_MISS,
+      DDTW,
+      PDTW,
+      S1_PTW,
+      S2_PTW
+      // rsv [1 , 16383]
+      // custom [16384 , 32767]
+    } eventid_t;
+
+    //--------------------------
     //#  IOMMU functions
     //--------------------------
 

@@ -269,7 +269,7 @@ package iommu_reg_pkg;
     } pv_pscv;
     struct packed {
       logic        q;
-    } dv_dscv;
+    } dv_gscv;
     struct packed {
       logic        q;
     } idt;
@@ -1068,7 +1068,7 @@ package iommu_reg_pkg;
     iommu_hw2reg_cqcsr_reg_t cqcsr; // [1495:1480]
     iommu_hw2reg_fqcsr_reg_t fqcsr; // [1479:1468]
     iommu_hw2reg_iohpmcycles_reg_t iohpmcycles;
-    iommu_hw2reg_iohpmctr_reg_t iohpmctr;
+    iommu_hw2reg_iohpmctr_reg_t [30:0] iohpmctr;
     iommu_hw2reg_iohpmevt_reg_t [30:0] iohpmevt;
     iommu_hw2reg_ipsr_reg_t ipsr; // [1467:1460]
     iommu_hw2reg_icvec_reg_t icvec; // [1459:1440]

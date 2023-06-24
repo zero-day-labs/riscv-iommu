@@ -42,8 +42,7 @@ module iommu_regmap_wrapper #(
 
     // DO NOT MODIFY MANUALLY
 	  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8),
-    parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC),
-    parameter int unsigned  LOG2_IOHPMCTR = $clog2(N_IOHPMCTR)
+    parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC)
 ) (
 	input logic clk_i,
 	input logic rst_ni,
@@ -61,7 +60,7 @@ module iommu_regmap_wrapper #(
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
-  localparam N_HPM_REGS = (N_IOHPMCTR > 0) ? (3 + (2*N_IOHPMCTR)) : 0;
+  localparam logic [30:0] IOCOUNTINH_RESVAL = {N_IOHPMCTR{1'b1}};
 
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
@@ -2016,7 +2015,7 @@ module iommu_regmap_wrapper #(
     iommu_field #(
       .DATA_WIDTH      (N_IOHPMCTR),
       .SwAccess(SwAccessRW),
-      .RESVAL  ('1)
+      .RESVAL  (IOCOUNTINH_RESVAL)
     ) u_iocountinh_hpm (
       .clk_i   (clk_i    ),
       .rst_ni  (rst_ni  ),
