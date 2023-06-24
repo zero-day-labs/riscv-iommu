@@ -120,6 +120,15 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic [riscv::PLEN-1:0]      translated_addr_o,  // Translated address
     output logic                        trans_error_o,
 
+    // to HPM
+    output logic                        iotlb_miss_o,       // IOTLB miss happened
+    output logic                        ddt_walk_o,         // DDT walk triggered
+    output logic                        pdt_walk_o,         // PDT walk triggered
+    output logic                        s1_ptw_o,           // first-stage PT walk triggered
+    output logic                        s2_ptw_o,           // second-stage PT walk triggered
+    output logic [GSCID_WIDTH-1:0]      gscid_o;
+    output logic [PSCID_WIDTH-1:0]      pscid_o;
+
     output logic                        is_fq_fifo_full_o
 );
 
@@ -242,6 +251,16 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // To indicate if the IOMMU supports and uses MSI as interrupt generation mechanism
     logic   msi_ig_en;
     assign  msi_ig_en = (!fctl_i.wsi.q);
+
+    // HPM event indicators
+    logic cdw_active, ptw_active;
+    assign iotlb_miss_o = iotlb_access & (~iotlb_lu_hit);
+    assign ddt_walk_o   = cdw_active & (is_ddt_walk);
+    assign pdt_walk_o   = cdw_active & (~is_ddt_walk);
+    assign s1_ptw_o     = ptw_active & (ptw_en_stage1);
+    assign s2_ptw_o     = ptw_active & (ptw_en_stage2);
+    assign gscid_o      = gscid;
+    assign pscid_o      = pscid;
 
 
     // Update wires
@@ -449,7 +468,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
         
         // Error signaling
-        .ptw_active_o           (),                     // Set when PTW is walking memory
+        .ptw_active_o           (ptw_active),           // Set when PTW is walking memory
         .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
         .ptw_error_stage2_o     (ptw_error_stage2),     // set when the fault occurred in stage 2
         .ptw_error_stage2_int_o (ptw_error_stage2_int), // set when fault occurred during an implicit access for 1st-stage translation
@@ -516,7 +535,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         .rst_ni                 (rst_ni),               // Asynchronous reset active low
         
         // Error signaling
-        .cdw_active_o           (),                     // Set when CDW is walking memory
+        .cdw_active_o           (cdw_active),                     // Set when CDW is walking memory
         .cdw_error_o            (cdw_error),            // set when an error occurred
         .cause_code_o           (cdw_cause_code),       // Fault code as defined by IOMMU and Priv Spec
 

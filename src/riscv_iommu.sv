@@ -118,6 +118,13 @@ module riscv_iommu #(
     logic                           trans_valid;
     logic                           trans_error;
     logic [riscv::PLEN-1:0]         spaddr;
+    logic                           iotlb_miss;
+    logic                           ddt_walk;
+    logic                           pdt_walk;
+    logic                           s1_ptw;
+    logic                           s2_ptw;
+    logic [GSCID_WIDTH-1:0]         gscid;
+    logic [PSCID_WIDTH-1:0]         pscid;
 
     // Boundary violation
     logic                           bound_violation;
@@ -310,56 +317,56 @@ module riscv_iommu #(
         .InclPID            (InclPID            ),
         .InclMSI_IG         (InclMSI_IG         )
     ) i_translation_wrapper (
-        .clk_i          (clk_i),
-        .rst_ni         (rst_ni),
+        .clk_i          (clk_i  ),
+        .rst_ni         (rst_ni ),
 
         .req_trans_i    (allow_request & !is_fq_fifo_full),        // Trigger translation
 
         // Translation request data
-        .device_id_i    (device_id),            // AxID
-        .pid_v_i        (1'b0),                 // We are not using process id by now
-        .process_id_i   ('0),                   // Set to zero
-        .iova_i         (iova),                 // AxADDR
+        .device_id_i    (device_id  ),          // AxID
+        .pid_v_i        (1'b0       ),          // We are not using process id by now
+        .process_id_i   ('0         ),          // Set to zero
+        .iova_i         (iova       ),          // AxADDR
         
-        .trans_type_i   (trans_type),           // Always untranslated requests as PCIe is not implemented
-        .priv_lvl_i     (riscv::PRIV_LVL_U),    // Always U-mode as we do not use process_id (See Spec)
+        .trans_type_i   (trans_type         ),  // Always untranslated requests as PCIe is not implemented
+        .priv_lvl_i     (riscv::PRIV_LVL_U  ),  // Always U-mode as we do not use process_id (See Spec)
 
         // Memory Bus
-        .mem_resp_i     (mem_resp_i),           // Simply connect AXI channels
-        .mem_req_o      (mem_req_o),
+        .mem_resp_i     (mem_resp_i ),           // Simply connect AXI channels
+        .mem_req_o      (mem_req_o  ),
 
         // From Regmap
         .capabilities_i (reg2hw.capabilities),
-        .fctl_i         (reg2hw.fctl),
-        .ddtp_i         (reg2hw.ddtp),
+        .fctl_i         (reg2hw.fctl        ),
+        .ddtp_i         (reg2hw.ddtp        ),
         // CQ
-        .cqb_ppn_i      (reg2hw.cqb.ppn.q),
-        .cqb_size_i     (reg2hw.cqb.log2sz_1.q),
-        .cqh_i          (reg2hw.cqh.q),
-        .cqh_o          (hw2reg.cqh.d),     // WE always set to 1
-        .cqt_i          (reg2hw.cqt.q),
+        .cqb_ppn_i      (reg2hw.cqb.ppn.q       ),
+        .cqb_size_i     (reg2hw.cqb.log2sz_1.q  ),
+        .cqh_i          (reg2hw.cqh.q           ),
+        .cqh_o          (hw2reg.cqh.d           ),     // WE always set to 1
+        .cqt_i          (reg2hw.cqt.q           ),
         // FQ
-        .fqb_ppn_i      (reg2hw.fqb.ppn.q),
-        .fqb_size_i     (reg2hw.fqb.log2sz_1.q),
-        .fqh_i          (reg2hw.fqh.q),
-        .fqt_i          (reg2hw.fqt.q),
-        .fqt_o          (hw2reg.fqt.d),     // WE always set to 1
+        .fqb_ppn_i      (reg2hw.fqb.ppn.q       ),
+        .fqb_size_i     (reg2hw.fqb.log2sz_1.q  ),
+        .fqh_i          (reg2hw.fqh.q           ),
+        .fqt_i          (reg2hw.fqt.q           ),
+        .fqt_o          (hw2reg.fqt.d           ),     // WE always set to 1
         // cqcsr
-        .cq_en_i        (reg2hw.cqcsr.cqen.q),
-        .cq_ie_i        (reg2hw.cqcsr.cie.q),
-        .cq_mf_i        (reg2hw.cqcsr.cqmf.q),
-        .cq_cmd_to_i    (reg2hw.cqcsr.cmd_to.q),    
-        .cq_cmd_ill_i   (reg2hw.cqcsr.cmd_ill.q),
-        .cq_fence_w_ip_i(reg2hw.cqcsr.fence_w_ip.q),
-        .cq_mf_o        (hw2reg.cqcsr.cqmf.d),      // WE driven by cq_error_wen
-        .cq_cmd_to_o    (hw2reg.cqcsr.cmd_to.d),
-        .cq_cmd_ill_o   (hw2reg.cqcsr.cmd_ill.d),
-        .cq_fence_w_ip_o(hw2reg.cqcsr.fence_w_ip.d),
-        .cq_on_o        (hw2reg.cqcsr.cqon.d),      // WE always set to 1
-        .cq_busy_o      (hw2reg.cqcsr.busy.d),
+        .cq_en_i        (reg2hw.cqcsr.cqen.q        ),
+        .cq_ie_i        (reg2hw.cqcsr.cie.q         ),
+        .cq_mf_i        (reg2hw.cqcsr.cqmf.q        ),
+        .cq_cmd_to_i    (reg2hw.cqcsr.cmd_to.q      ),    
+        .cq_cmd_ill_i   (reg2hw.cqcsr.cmd_ill.q     ),
+        .cq_fence_w_ip_i(reg2hw.cqcsr.fence_w_ip.q  ),
+        .cq_mf_o        (hw2reg.cqcsr.cqmf.d        ),      // WE driven by cq_error_wen
+        .cq_cmd_to_o    (hw2reg.cqcsr.cmd_to.d      ),
+        .cq_cmd_ill_o   (hw2reg.cqcsr.cmd_ill.d     ),
+        .cq_fence_w_ip_o(hw2reg.cqcsr.fence_w_ip.d  ),
+        .cq_on_o        (hw2reg.cqcsr.cqon.d        ),      // WE always set to 1
+        .cq_busy_o      (hw2reg.cqcsr.busy.d    ),
         // fqcsr
         .fq_en_i        (reg2hw.fqcsr.fqen.q),
-        .fq_ie_i        (reg2hw.fqcsr.fie.q),
+        .fq_ie_i        (reg2hw.fqcsr.fie.q ),
         .fq_mf_i        (reg2hw.fqcsr.fqmf.q),
         .fq_of_i        (reg2hw.fqcsr.fqof.q),
         .fq_mf_o        (hw2reg.fqcsr.fqmf.d),      // WE driven by fq_error_wen
@@ -388,6 +395,15 @@ module riscv_iommu #(
         .translated_addr_o  (spaddr),       // Translated address
         .trans_error_o      (trans_error),  // Translation error
 
+        // to HPM
+        .iotlb_miss_o       (iotlb_miss ),   // IOTLB miss
+        .ddt_walk_o         (ddt_walk   ),
+        .pdt_walk_o         (pdt_walk   ),
+        .s1_ptw_o           (s1_ptw     ),
+        .s2_ptw_o           (s2_ptw     ),
+        .gscid_o            (gscid      ),
+        .pscid_o            (pscid      ),
+
         .is_fq_fifo_full_o  (is_fq_fifo_full)
     );
 
@@ -413,6 +429,40 @@ module riscv_iommu #(
 
         .reg2hw_o        (reg2hw          ),
         .hw2reg_i        (hw2reg          )
+    );
+
+    iommu_hpm #(
+        // Number of Performance monitoring event counters (set to zero to disable HPM)
+        .N_IOHPMCTR     (N_IOHPMCTR) // max 31
+    ) i_iommu_hpm (
+        .clk_i          (clk_i  ),
+        .rst_ni         (rst_ni ),
+
+        // Event indicators
+        .tr_request_i   (allow_request & !is_fq_fifo_full   ),
+        .iotlb_miss_i   (iotlb_miss                         ),
+        .ddt_walk_i     (ddt_walk                           ),
+        .pdt_walk_i     (pdt_walk                           ),
+        .s1_ptw_i       (s1_ptw                             ),
+        .s2_ptw_i       (s2_ptw                             ),
+
+        // ID filters
+        .did_i          (device_id  ),     // device_id associated with event
+        .pid_i          ('0         ),     // process_id associated with event
+        .pscid_i        (pscid      ),     // PSCID 
+        .gscid_i        (gscid      ),     // GSCID
+        .pid_v_i        (1'b0       ),     // process_id is valid
+
+        // from HPM registers
+        .iocountinh_i   (reg2hw.iocountinh),    // inhibit 63-bit cycles counter
+        .iohpmcycles_i  (reg2hw.iohpmcycles),   // clock cycle counter register
+        .iohpmctr_i     (reg2hw.iohpmctr),      // event counters
+        .iohpmevt_i     (reg2hw.iohpmevt),      // event configuration registers
+
+        // to HPM registers
+        .iohpmcycles_o  (hw2reg.iohpmcycles),   // clock cycle counter value
+        .iohpmctr_o     (hw2reg.iohpmctr),      // event counters value
+        .iohpmevt_o     (hw2reg.iohpmevt)       // event configuration registers
     );
 
     //# Channel selection

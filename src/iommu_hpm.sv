@@ -26,7 +26,7 @@
         3.  Not all input ID's are known at the moment an event happens. For example, GSCID/PSCID values are
             determined after performing a DDT/PDT walk, if they are not present in the context caches. Event
             counters programmed with ID matching using unknown ID values upon event occurrence will always
-            increment without verifying the match condition 
+            increment without verifying the match condition.
 */
 
 module iommu_hpm #(

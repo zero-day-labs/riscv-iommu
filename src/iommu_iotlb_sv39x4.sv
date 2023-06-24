@@ -38,7 +38,6 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic [PSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
     // Update signals
-    // input  tlb_update_sv39x4_t      update_i,
     input  logic                    update_i,
     input  logic                    up_is_s_2M_i,
     input  logic                    up_is_s_1G_i,
@@ -57,11 +56,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic [PSCID_WIDTH-1:0]  lu_pscid_i,               // PSCID to look for
     input  logic [GSCID_WIDTH-1:0]  lu_gscid_i,               // GSCID to look for
     output logic [riscv::GPLEN-1:0] lu_gpaddr_o,              // GPA to return in case of an exception
-    // Yes, i need both PTE ports. Different PPNs are needed according to the size of the page
     output riscv::pte_t             lu_content_o,             // S/VS-stage PTE (GPA PPN)
     output riscv::pte_t             lu_g_content_o,           // G-stage PTE (SPA PPN)
-    // External logic needs to know the size of the 
-    //final page, in order to construct the final PA
     output logic                    lu_is_s_2M_o,               
     output logic                    lu_is_s_1G_o,
     output logic                    lu_is_g_2M_o,               
