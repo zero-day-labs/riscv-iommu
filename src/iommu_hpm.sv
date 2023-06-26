@@ -32,7 +32,7 @@
 module iommu_hpm #(
 
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned  N_IOHPMCTR          = 8     // max 31
+    parameter int unsigned  N_IOHPMCTR          = 0     // max 31
 ) (
 
     input  logic clk_i,

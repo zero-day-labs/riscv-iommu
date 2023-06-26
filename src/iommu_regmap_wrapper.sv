@@ -32,10 +32,10 @@ module iommu_regmap_wrapper #(
     parameter bit           InclWSI_IG = 1,
     // Include IOMMU MSI generation support
     parameter bit           InclMSI_IG = 0,
-    // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned  N_IOHPMCTR = 8, // max 31
     // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
     parameter int unsigned  N_INT_VEC = 16,
+    // Number of Performance monitoring event counters (set to zero to disable HPM)
+    parameter int unsigned  N_IOHPMCTR = 0, // max 31
 
     parameter type 			reg_req_t = logic,
     parameter type 			reg_rsp_t = logic,
@@ -2344,8 +2344,6 @@ module iommu_regmap_wrapper #(
       assign reg2hw.iohpmevt[i].dv_gscv.q   = '0;
       assign reg2hw.iohpmevt[i].idt.q       = '0;
       assign reg2hw.iohpmevt[i].of.q        = '0;
-
-      assign hw2reg.iohpmevt[i].of.de       = 1'b0;
     end
   end
 
@@ -2355,15 +2353,6 @@ module iommu_regmap_wrapper #(
     assign iocountinh_hpm_qs      = '0;
     assign iohpmcycles_counter_qs = '0;
     assign iohpmcycles_of_qs      = '0;
-    assign iohpmctr_counter_qs    = '0;
-    assign iohpmevt_eventid_qs    = '0;
-    assign iohpmevt_dmask_qs      = '0;
-    assign iohpmevt_pid_pscid_qs  = '0;
-    assign iohpmevt_did_gscid_qs  = '0;
-    assign iohpmevt_pv_pscv_qs    = '0;
-    assign iohpmevt_dv_gscv_qs    = '0;
-    assign iohpmevt_idt_qs        = '0;
-    assign iohpmevt_of_qs         = '0;
 
     assign reg2hw.iocountinh.cy.q       = '0;
     assign reg2hw.iocountinh.hpm.q      = '0;
@@ -2371,6 +2360,16 @@ module iommu_regmap_wrapper #(
     assign reg2hw.iohpmcycles.of.q      = '0;
 
     for (int unsigned i = 0; i < 31; i++) begin
+
+      assign iohpmctr_counter_qs[i]    = '0;
+      assign iohpmevt_eventid_qs[i]    = '0;
+      assign iohpmevt_dmask_qs[i]      = '0;
+      assign iohpmevt_pid_pscid_qs[i]  = '0;
+      assign iohpmevt_did_gscid_qs[i]  = '0;
+      assign iohpmevt_pv_pscv_qs[i]    = '0;
+      assign iohpmevt_dv_gscv_qs[i]    = '0;
+      assign iohpmevt_idt_qs[i]        = '0;
+      assign iohpmevt_of_qs[i]         = '0;
 
       assign reg2hw.iohpmctr[i].counter.q   = '0;
       assign reg2hw.iohpmevt[i].eventid.q   = '0;
@@ -2381,8 +2380,6 @@ module iommu_regmap_wrapper #(
       assign reg2hw.iohpmevt[i].dv_gscv.q   = '0;
       assign reg2hw.iohpmevt[i].idt.q       = '0;
       assign reg2hw.iohpmevt[i].of.q        = '0;
-
-      assign hw2reg.iohpmevt[i].of.de       = 1'b0;
     end
   end
 

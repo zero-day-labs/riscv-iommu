@@ -41,6 +41,8 @@ module riscv_iommu #(
     parameter bit           InclMSI_IG          = 0,
     // Number of interrupt vectors supported
     parameter int unsigned  N_INT_VEC           = 16,
+    // Number of Performance monitoring event counters (set to zero to disable HPM)
+    parameter int unsigned  N_IOHPMCTR          = 0,     // max 31
 
     /// AXI Bus Addr width.
     parameter int   ADDR_WIDTH      = -1,
@@ -408,62 +410,75 @@ module riscv_iommu #(
     );
 
     iommu_regmap_if #(
-        .ADDR_WIDTH      (ADDR_WIDTH      ),
-        .DATA_WIDTH      (DATA_WIDTH      ),
-        .ID_WIDTH        (ID_SLV_WIDTH    ),
-        .USER_WIDTH      (USER_WIDTH      ),
-        .DECOUPLE_W      (1               ), // Channel W is decoupled with registers
-        .InclWSI_IG      (InclWSI_IG      ),
-        .InclMSI_IG      (InclMSI_IG      ),
-        .N_INT_VEC       (N_INT_VEC       ),
-        .axi_req_t       (axi_req_slv_t   ),
-        .axi_rsp_t       (axi_rsp_slv_t   ),
-        .reg_req_t       (reg_req_t       ),
-        .reg_rsp_t       (reg_rsp_t       )
+        .ADDR_WIDTH     (ADDR_WIDTH    ),
+        .DATA_WIDTH     (DATA_WIDTH    ),
+        .ID_WIDTH       (ID_SLV_WIDTH  ),
+        .USER_WIDTH     (USER_WIDTH    ),
+        .DECOUPLE_W     (1             ), // Channel W is decoupled with registers
+        .InclWSI_IG     (InclWSI_IG    ),
+        .InclMSI_IG     (InclMSI_IG    ),
+        .N_INT_VEC      (N_INT_VEC     ),
+        .N_IOHPMCTR     (N_IOHPMCTR    ),
+        .axi_req_t      (axi_req_slv_t ),
+        .axi_rsp_t      (axi_rsp_slv_t ),
+        .reg_req_t      (reg_req_t     ),
+        .reg_rsp_t      (reg_rsp_t     )
     ) i_iommu_regmap_if (
-        .clk_i           (clk_i           ),
-        .rst_ni          (rst_ni          ),
+        .clk_i          (clk_i           ),
+        .rst_ni         (rst_ni          ),
 
-        .prog_req_i      (prog_req_i      ),
-        .prog_resp_o     (prog_resp_o     ),
+        .prog_req_i     (prog_req_i      ),
+        .prog_resp_o    (prog_resp_o     ),
 
-        .reg2hw_o        (reg2hw          ),
-        .hw2reg_i        (hw2reg          )
+        .reg2hw_o       (reg2hw          ),
+        .hw2reg_i       (hw2reg          )
     );
 
-    iommu_hpm #(
-        // Number of Performance monitoring event counters (set to zero to disable HPM)
-        .N_IOHPMCTR     (N_IOHPMCTR) // max 31
-    ) i_iommu_hpm (
-        .clk_i          (clk_i  ),
-        .rst_ni         (rst_ni ),
+    //# Hardware Performance Monitor
+    if (N_IOHPMCTR > 0) begin : gen_hpm
 
-        // Event indicators
-        .tr_request_i   (allow_request & !is_fq_fifo_full   ),
-        .iotlb_miss_i   (iotlb_miss                         ),
-        .ddt_walk_i     (ddt_walk                           ),
-        .pdt_walk_i     (pdt_walk                           ),
-        .s1_ptw_i       (s1_ptw                             ),
-        .s2_ptw_i       (s2_ptw                             ),
+        iommu_hpm #(
+            // Number of Performance monitoring event counters (set to zero to disable HPM)
+            .N_IOHPMCTR     (N_IOHPMCTR) // max 31
+        ) i_iommu_hpm (
+            .clk_i          (clk_i  ),
+            .rst_ni         (rst_ni ),
 
-        // ID filters
-        .did_i          (device_id  ),     // device_id associated with event
-        .pid_i          ('0         ),     // process_id associated with event
-        .pscid_i        (pscid      ),     // PSCID 
-        .gscid_i        (gscid      ),     // GSCID
-        .pid_v_i        (1'b0       ),     // process_id is valid
+            // Event indicators
+            .tr_request_i   (allow_request & !is_fq_fifo_full   ),
+            .iotlb_miss_i   (iotlb_miss                         ),
+            .ddt_walk_i     (ddt_walk                           ),
+            .pdt_walk_i     (pdt_walk                           ),
+            .s1_ptw_i       (s1_ptw                             ),
+            .s2_ptw_i       (s2_ptw                             ),
 
-        // from HPM registers
-        .iocountinh_i   (reg2hw.iocountinh),    // inhibit 63-bit cycles counter
-        .iohpmcycles_i  (reg2hw.iohpmcycles),   // clock cycle counter register
-        .iohpmctr_i     (reg2hw.iohpmctr),      // event counters
-        .iohpmevt_i     (reg2hw.iohpmevt),      // event configuration registers
+            // ID filters
+            .did_i          (device_id  ),     // device_id associated with event
+            .pid_i          ('0         ),     // process_id associated with event
+            .pscid_i        (pscid      ),     // PSCID 
+            .gscid_i        (gscid      ),     // GSCID
+            .pid_v_i        (1'b0       ),     // process_id is valid
 
-        // to HPM registers
-        .iohpmcycles_o  (hw2reg.iohpmcycles),   // clock cycle counter value
-        .iohpmctr_o     (hw2reg.iohpmctr),      // event counters value
-        .iohpmevt_o     (hw2reg.iohpmevt)       // event configuration registers
-    );
+            // from HPM registers
+            .iocountinh_i   (reg2hw.iocountinh),    // inhibit 63-bit cycles counter
+            .iohpmcycles_i  (reg2hw.iohpmcycles),   // clock cycle counter register
+            .iohpmctr_i     (reg2hw.iohpmctr),      // event counters
+            .iohpmevt_i     (reg2hw.iohpmevt),      // event configuration registers
+
+            // to HPM registers
+            .iohpmcycles_o  (hw2reg.iohpmcycles),   // clock cycle counter value
+            .iohpmctr_o     (hw2reg.iohpmctr),      // event counters value
+            .iohpmevt_o     (hw2reg.iohpmevt)       // event configuration registers
+        );
+    end
+
+    else begin : gen_hpm_disabled
+
+        // hardwire outputs to 0
+        assign hw2reg.iohpmcycles   = '0;
+        assign hw2reg.iohpmctr      = '0;
+        assign hw2reg.iohpmevt      = '0;
+    end
 
     //# Channel selection
     // Monitor incoming request and select parameters according to the source channel
@@ -640,13 +655,16 @@ module riscv_iommu #(
 
     initial begin : p_assertions
         assert ((InclMSI_IG) || (InclWSI_IG))
-        else begin $error("At least one Interrupt Generation method must be supported (See spec)."); $stop(); end
+        else begin $error("RISC-V IOMMU: At least one Interrupt Generation method must be supported (WSI/MSI)."); $stop(); end
 
         assert ((ADDR_WIDTH >= 1) && (DATA_WIDTH >= 1) && (ID_WIDTH >= 1) && (ID_SLV_WIDTH >= 1) && (USER_WIDTH >= 1))
-        else begin $error("Invalid AXI parameter width"); $stop(); end
+        else begin $error("RISC-V IOMMU: Invalid AXI parameter width"); $stop(); end
 
         assert ((N_INT_VEC == 1) || (N_INT_VEC == 2) || (N_INT_VEC == 4) || (N_INT_VEC == 8) || (N_INT_VEC == 16))
-        else begin $error("Number of interrupt vectors MUST be a power of two and max 16"); $stop(); end
+        else begin $error("RISC-V IOMMU: Number of interrupt vectors MUST be a power of two and max 16"); $stop(); end
+
+        assert (N_IOHPMCTR <= 31)
+        else begin $error("RISC-V IOMMU: HPM may only support up to 31 event counters."); $stop(); end
     end
 
     `endif
