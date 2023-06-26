@@ -27,6 +27,12 @@
             determined after performing a DDT/PDT walk, if they are not present in the context caches. Event
             counters programmed with ID matching using unknown ID values upon event occurrence will always
             increment without verifying the match condition.
+
+        4.  Counter OF bits generate an interrupt when they undergo a transition from 0 to 1. However,
+            these bits may be written by SW to disable interrupts. The logic must be implemented in a way
+            that SW writes do not generate interrupts:
+            -   Setting ipsr.pmip should not depend on OF transition only, but, when the OF bit of a counter
+                is set, it cannot generate interrupts.
 */
 
 module iommu_hpm #(
@@ -62,17 +68,24 @@ module iommu_hpm #(
     // to HPM registers
     output iommu_hw2reg_iohpmcycles_reg_t               iohpmcycles_o,  // clock cycle counter value
     output iommu_hw2reg_iohpmctr_reg_t [N_IOHPMCTR-1:0] iohpmctr_o,     // event counters value
-    output iommu_hw2reg_iohpmevt_reg_t [N_IOHPMCTR-1:0] iohpmevt_o      // event configuration registers
+    output iommu_hw2reg_iohpmevt_reg_t [N_IOHPMCTR-1:0] iohpmevt_o,      // event configuration registers
+
+    // ipsr.pmip
+    output logic hpm_ip_o
 );
 
     // To signal event counters increment
-    logic [N_IOHPMCTR-1:0] increment_ctr;
+    logic [N_IOHPMCTR-1:0]  increment_ctr;
 
     // ID matching
-    logic [N_IOHPMCTR-1:0] did_match;
-    logic [N_IOHPMCTR-1:0] pid_match;
-    logic [N_IOHPMCTR-1:0] gscid_match;
-    logic [N_IOHPMCTR-1:0] pscid_match;
+    logic [N_IOHPMCTR-1:0]  did_match;
+    logic [N_IOHPMCTR-1:0]  pid_match;
+    logic [N_IOHPMCTR-1:0]  gscid_match;
+    logic [N_IOHPMCTR-1:0]  pscid_match;
+
+    // Interrupt wires
+    logic [N_IOHPMCTR:0]    hpm_ip;
+    assign                  hpm_ip_o    = |hpm_ip;
 
     // Event and ID matching logic
     always_comb begin : event_logic
@@ -248,6 +261,9 @@ module iommu_hpm #(
         iohpmcycles_o.of.de = (~iocountinh_i.cy.q) & (&iohpmcycles_i.counter.q);
         iohpmcycles_o.of.d  = 1'b1;
 
+        // also set ipsr.pmip if OF bit is clear
+        hpm_ip[0]           = (~iocountinh_i.cy.q) & (&iohpmcycles_i.counter.q) & (!iohpmcycles_i.of.q);
+
         for (int unsigned j = 0; j < N_IOHPMCTR; j++) begin
             
             // Default values for event counters
@@ -263,8 +279,11 @@ module iommu_hpm #(
                 
                 iohpmctr_o[j].counter.de    = 1'b1;
 
-                // set OF when counter enabled, counter == '1 and event occurs
+                // enable OF setting when counter enabled, counter == '1 (will overflow) and event occurs
                 iohpmevt_o[j].of.de         = (~iocountinh_i.hpm.q[j]) & (&iohpmctr_i[j].counter.q);
+
+                // also set ipsr.pmip if the corresponding OF bit is clear
+                hpm_ip[j+1]                 = (~iocountinh_i.hpm.q[j]) & (&iohpmctr_i[j].counter.q) & (!iohpmevt_i[j].of.q);
             end
         end
     end

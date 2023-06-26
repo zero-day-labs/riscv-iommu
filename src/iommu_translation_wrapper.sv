@@ -100,11 +100,13 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // ipsr
     input  logic                        cq_ip_i,
     input  logic                        fq_ip_i,
+    input  logic                        hpm_ip_i,
     output logic                        cq_ip_o,
     output logic                        fq_ip_o,
     // icvec
     input  logic[(LOG2_INTVEC-1):0]     civ_i,
     input  logic[(LOG2_INTVEC-1):0]     fiv_i,
+    input  logic[(LOG2_INTVEC-1):0]     pmiv_i,
     // MSI config table
     input  logic [53:0]                 msi_addr_x_i[16],
     input  logic [31:0]                 msi_data_x_i[16],
@@ -735,9 +737,11 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
             .cip_i              (cq_ip_i),
             .fip_i              (fq_ip_i),
+            .pmip_i             (hpm_ip_i),
 
             .civ_i              (civ_i),
             .fiv_i              (fiv_i),
+            .pmiv_i             (pmiv_i),
 
             .msi_addr_x_i       (msi_addr_x_i),
             .msi_data_x_i       (msi_data_x_i),

@@ -29,10 +29,12 @@ module iommu_wsi_ig #(
     // ipsr
     input  logic        cip_i,
     input  logic        fip_i,
+    input  logic        pmip_i,
 
     // icvec
     input  logic[(LOG2_INTVEC-1):0]   civ_i,
     input  logic[(LOG2_INTVEC-1):0]   fiv_i,
+    input  logic[(LOG2_INTVEC-1):0]   pmiv_i,
 
     // interrupt wires
     output logic [(N_INT_VEC-1):0] wsi_wires_o
@@ -45,8 +47,11 @@ module iommu_wsi_ig #(
         if (wsi_en_i) begin
 
             for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-                wsi_wires_o[i] = ((cip_i & (civ_i == iommu_pkg::icvec_vals[i] )) 
-                                    | (fip_i & (fiv_i == iommu_pkg::icvec_vals[i] )));
+                wsi_wires_o[i] = (    
+                                      (cip_i &  (civ_i == iommu_pkg::icvec_vals[i]  )) 
+                                    | (fip_i &  (fiv_i == iommu_pkg::icvec_vals[i]  ))
+                                    | (pmip_i & (pmiv_i == iommu_pkg::icvec_vals[i] ))
+                                    );
             end
         end
         /* verilator lint_on WIDTH */

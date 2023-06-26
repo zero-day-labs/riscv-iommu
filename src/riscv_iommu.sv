@@ -162,6 +162,7 @@ module riscv_iommu #(
     assign  hw2reg.fqcsr.busy.de        = 1'b1;
     assign  hw2reg.ipsr.cip.de          = hw2reg.ipsr.cip.d;
     assign  hw2reg.ipsr.fip.de          = hw2reg.ipsr.fip.d;
+    assign  hw2reg.ipsr.pmip.de         = hw2reg.ipsr.pmip.d;
 
     assign  msi_addr_x = '{
         reg2hw.msi_addr_0.addr.q,
@@ -287,15 +288,17 @@ module riscv_iommu #(
             .N_INT_VEC      (N_INT_VEC)
         ) i_iommu_wsi_ig (
             // fctl.wsi
-            .wsi_en_i       (reg2hw.fctl.wsi.q),
+            .wsi_en_i       (reg2hw.fctl.wsi.q  ),
 
             // ipsr
-            .cip_i          (reg2hw.ipsr.cip.q),
-            .fip_i          (reg2hw.ipsr.fip.q),
+            .cip_i          (reg2hw.ipsr.cip.q  ),
+            .fip_i          (reg2hw.ipsr.fip.q  ),
+            .pmip_i         (reg2hw.ipsr.pmip.q ),
 
             // icvec
-            .civ_i          (reg2hw.icvec.civ.q),
-            .fiv_i          (reg2hw.icvec.fiv.q),
+            .civ_i          (reg2hw.icvec.civ.q ),
+            .fiv_i          (reg2hw.icvec.fiv.q ),
+            .pmiv_i         (reg2hw.icvec.pmiv.q),
 
             // interrupt wires
             .wsi_wires_o    (wsi_wires_o)
@@ -378,11 +381,13 @@ module riscv_iommu #(
         // ipsr
         .cq_ip_i        (reg2hw.ipsr.cip.q),
         .fq_ip_i        (reg2hw.ipsr.fip.q),
+        .hpm_ip_i       (reg2hw.ipsr.pmip.q),
         .cq_ip_o        (hw2reg.ipsr.cip.d),        // WE driven by itself
         .fq_ip_o        (hw2reg.ipsr.fip.d),        // WE driven by itself
         // icvec
         .civ_i          (reg2hw.icvec.civ.q),
         .fiv_i          (reg2hw.icvec.fiv.q),
+        .pmiv_i         (reg2hw.icvec.fiv.q),
         // msi_cfg_tbl
         .msi_addr_x_i       (msi_addr_x),
         .msi_data_x_i       (msi_data_x),
@@ -468,7 +473,9 @@ module riscv_iommu #(
             // to HPM registers
             .iohpmcycles_o  (hw2reg.iohpmcycles),   // clock cycle counter value
             .iohpmctr_o     (hw2reg.iohpmctr),      // event counters value
-            .iohpmevt_o     (hw2reg.iohpmevt)       // event configuration registers
+            .iohpmevt_o     (hw2reg.iohpmevt),      // event configuration registers
+
+            .hpm_ip_o       (hw2reg.ipsr.pmip.d)    // HPM IP bit. WE driven by itself
         );
     end
 
@@ -478,6 +485,7 @@ module riscv_iommu #(
         assign hw2reg.iohpmcycles   = '0;
         assign hw2reg.iohpmctr      = '0;
         assign hw2reg.iohpmevt      = '0;
+        assign hw2reg.ipsr.pmip.d   = '0;
     end
 
     //# Channel selection

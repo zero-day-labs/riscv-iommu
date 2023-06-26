@@ -17,11 +17,13 @@
 
 //! NOTES:
 /*
-    -   Interrupt generation is triggered on a possitive transition of cip or fip.
+    -   Interrupt generation is triggered on a possitive transition of cip, fip or pmip.
     -   The IOMMU must not send MSIs for interrupt vectors with mask M = 1. These messages must be saved and later sent if
         the corresponding mask is cleared to 0.
-    -   A register could be used for each source to save messages from vectors with M = 1 (Remember that the same vector 
-        can be used by different sources. That's why we can have more than one pending message per vector).
+    -   A register could be used for each vector to save messages M = 1. When a source generates an interrupt whose MSI 
+        vector is masked, the index is saved so that the corresponding MSI is sent after clearing the flag. This means
+        that the mask is associated with one vector, but may be associated with multiple interrupt sources if they 
+        share the same MSI vector.
 */
 
 module iommu_msi_ig #(
@@ -38,10 +40,13 @@ module iommu_msi_ig #(
     // Interrupt pending bits
     input  logic cip_i,
     input  logic fip_i,
+    input  logic pmip_i,
 
     // icvec
-    input  logic[(LOG2_INTVEC-1):0]   civ_i,
-    input  logic[(LOG2_INTVEC-1):0]   fiv_i,
+    // TODO: Set as sources vector. Include parameter to define number of sources
+    input  logic [(LOG2_INTVEC-1):0]    civ_i,
+    input  logic [(LOG2_INTVEC-1):0]    fiv_i,
+    input  logic [(LOG2_INTVEC-1):0]    pmiv_i,
 
     // MSI config table
     input  logic [53:0] msi_addr_x_i[16],
@@ -70,15 +75,16 @@ module iommu_msi_ig #(
         B_RESP
     }   wr_state_q, wr_state_n;
 
-    // To detect rising edge transition of cip/fip
+    // To detect rising edge transition of IP bits
     logic   edged_cip_q, edged_cip_n;
     logic   edged_fip_q, edged_fip_n;
+    logic   edged_pmip_q, edged_pmip_n;
 
-    // Control signal to indicate interrupt source
-    logic   is_cq_int_q, is_cq_int_n;
+    // Interrupt source mux
+    logic [(LOG2_INTVEC-1):0]   intv_q, intv_n;
 
     // Pending interrupts
-    logic [(N_INT_VEC-1):0] pending_q, pending_n;
+    logic [(N_INT_VEC-1):0]     pending_q, pending_n;
 
     always_comb begin : int_generation_fsm
 
@@ -87,7 +93,7 @@ module iommu_msi_ig #(
         // AW
         /* verilator lint_off WIDTH */
         mem_req_o.aw.id         = 4'b0010;
-        mem_req_o.aw.addr       = (is_cq_int_q) ? ({msi_addr_x_i[civ_i], 2'b0}) : ({msi_addr_x_i[fiv_i], 2'b0});
+        mem_req_o.aw.addr       = {msi_addr_x_i[intv_q], 2'b0};      // TODO: set index depending on the interrupt source (CQ, FQ, HPM)
         mem_req_o.aw.len        = 8'd0;         // MSI writes only 32 bits
         mem_req_o.aw.size       = 3'b010;       // 4-bytes beat
         mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
@@ -102,7 +108,7 @@ module iommu_msi_ig #(
         mem_req_o.aw_valid      = 1'b0;
 
         // W
-        mem_req_o.w.data        = (is_cq_int_q) ? (msi_data_x_i[civ_i]) : (msi_data_x_i[fiv_i]); // set accordingly to the cause
+        mem_req_o.w.data        = msi_data_x_i[intv_q];  // TODO: set index depending on the interrupt source (CQ, FQ, HPM)
         /* verilator lint_on WIDTH */
         mem_req_o.w.strb        = '1;
         mem_req_o.w.last        = 1'b0;
@@ -135,9 +141,10 @@ module iommu_msi_ig #(
 
         state_n         = state_q;
         wr_state_n      = wr_state_q;
-        is_cq_int_n     = is_cq_int_q;
+        intv_n          = intv_q;
         edged_cip_n     = edged_cip_q;
         edged_fip_n     = edged_fip_q;
+        edged_pmip_n    = edged_pmip_q;
         pending_n       = pending_q;
 
         case (state_q)
@@ -145,13 +152,15 @@ module iommu_msi_ig #(
             // Monitor interrupt-pending bits. Select corresponding vector (addr, data and mask).
             IDLE: begin
 
-                // If the IOMMU does not support or use MSI as IG mechanism, do nothing
+                // If MSI IG is not enabled, do nothing
                 if (msi_ig_enabled_i) begin
+
+                    //# Prioritize pending messages
 
                     /* verilator lint_off WIDTH */
                     // Send CQ pending messages if the mask was cleared
                     if (pending_q[civ_i] && !msi_vec_masked_x_i[civ_i]) begin
-                            is_cq_int_n         = 1'b1;
+                            intv_n              = civ_i;
                             pending_n[civ_i]    = 1'b0;
                             state_n             = WRITE;
                     end
@@ -160,12 +169,24 @@ module iommu_msi_ig #(
                     /* verilator lint_off WIDTH */
                     // Send FQ pending messages if the mask was cleared
                     else if (pending_q[fiv_i] && !msi_vec_masked_x_i[fiv_i]) begin
-                            is_cq_int_n         = 1'b0;
+                            intv_n              = fiv_i;
                             pending_n[fiv_i]    = 1'b0;
                             state_n             = WRITE;
                     end
                     /* verilator lint_on WIDTH */
 
+                    /* verilator lint_off WIDTH */
+                    // Send HPM pending messages if the mask was cleared
+                    else if (pending_q[pmiv_i] && !msi_vec_masked_x_i[pmiv_i]) begin
+                            intv_n              = pmiv_i;
+                            pending_n[pmiv_i]   = 1'b0;
+                            state_n             = WRITE;
+                    end
+                    /* verilator lint_on WIDTH */
+
+                    //# Incoming interrupt
+
+                    // TODO: May use reverse unique case
                     // CQ Interrupt
                     else if (cip_i && !edged_cip_q) begin
                         
@@ -176,7 +197,7 @@ module iommu_msi_ig #(
                         /* verilator lint_off WIDTH */
                         // cip bit was set in the last cycle, send MSI if vector is not masked
                         if (!msi_vec_masked_x_i[civ_i]) begin
-                            is_cq_int_n = 1'b1;
+                            intv_n      = civ_i;
                             state_n     = WRITE;
                         end
                         /* verilator lint_on WIDTH */
@@ -197,7 +218,7 @@ module iommu_msi_ig #(
                         /* verilator lint_off WIDTH */
                         // fip bit was set in the last cycle, send MSI if vector is not masked
                         if (!msi_vec_masked_x_i[fiv_i]) begin
-                            is_cq_int_n = 1'b0;
+                            intv_n      = fiv_i;
                             state_n     = WRITE;
                         end
                         /* verilator lint_on WIDTH */
@@ -208,12 +229,36 @@ module iommu_msi_ig #(
                         end
                     end
 
+                    // HPM Interrupt
+                    else if (pmip_i && !edged_pmip_q) begin
+
+                        // We do not attribute pmip_i directly to avoid missing 
+                        // any IP bit transition while sending another interrupt.
+                        edged_pmip_n = 1'b1;
+
+                        /* verilator lint_off WIDTH */
+                        // pmip bit was set in the last cycle, send MSI if vector is not masked
+                        if (!msi_vec_masked_x_i[pmiv_i]) begin
+                            intv_n      = pmiv_i;
+                            state_n     = WRITE;
+                        end
+                        /* verilator lint_on WIDTH */
+
+                        // if vector is masked, then save request for FQ
+                        else begin
+                            pending_n[pmiv_i]    = 1'b1;
+                        end
+                    end
+
                     // Clear edged IP bits when input is clear
                     if (!cip_i && edged_cip_q) begin
                         edged_cip_n = 1'b0;
                     end
                     if (!fip_i && edged_fip_q) begin
                         edged_fip_n = 1'b0;
+                    end
+                    if (!pmip_i && edged_pmip_q) begin
+                        edged_pmip_n = 1'b0;
                     end
                 end
             end 
@@ -278,18 +323,20 @@ module iommu_msi_ig #(
             // Reset values
             state_q         <= IDLE;
             wr_state_q      <= AW_REQ;
-            is_cq_int_q     <= 1'b0;
+            intv_q          <= 1'b0;
             edged_cip_q     <= 1'b0;
             edged_fip_q     <= 1'b0;
+            edged_pmip_q    <= 1'b0;
             pending_q       <= '0;
         end
 
         else begin
             state_q         <= state_n;
             wr_state_q      <= wr_state_n;
-            is_cq_int_q     <= is_cq_int_n;
+            intv_q          <= intv_n;
             edged_cip_q     <= edged_cip_n;
             edged_fip_q     <= edged_fip_n;
+            edged_pmip_q    <= edged_pmip_n;
             pending_q       <= pending_n;
         end
     end

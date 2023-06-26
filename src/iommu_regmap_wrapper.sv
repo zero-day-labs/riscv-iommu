@@ -2442,33 +2442,30 @@ module iommu_regmap_wrapper #(
 
 
     //   F[pmiv]: 11:8
-    // iommu_field #(
-    //   .DATA_WIDTH      (LOG2_INTVEC),
-    //   .SwAccess(SwAccessRW),
-    //   .RESVAL  (4'h0)
-    // ) u_icvec_pmiv (
-    //   .clk_i   (clk_i    ),
-    //   .rst_ni  (rst_ni  ),
+    iommu_field #(
+      .DATA_WIDTH      (LOG2_INTVEC),
+      .SwAccess(SwAccessRW),
+      .RESVAL  ('0)
+    ) u_icvec_pmiv (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
 
-    //   // from register interface
-    //   .we     (icvec_pmiv_we),
-    //   .wd     (icvec_pmiv_wd),
+      // from register interface
+      .we     (icvec_pmiv_we),
+      .wd     (icvec_pmiv_wd),
 
-    //   // from internal hardware
-    //   .de     (hw2reg.icvec.pmiv.de),
-    //   .ds     (),
-    //   .d      (hw2reg.icvec.pmiv.d ),
+      // from internal hardware
+      .de     (hw2reg.icvec.pmiv.de),
+      .ds     (),
+      .d      (hw2reg.icvec.pmiv.d ),
 
-    //   // to internal hardware
-    //   .qe     (),
-    //   .q      (reg2hw.icvec.pmiv.q ),
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.icvec.pmiv.q ),
 
-    //   // to register interface (read)
-    //   .qs     (icvec_pmiv_qs)
-    // );
-    
-    assign icvec_pmiv_qs = '0;
-    assign reg2hw.icvec.pmiv.q = '0;
+      // to register interface (read)
+      .qs     (icvec_pmiv_qs)
+    );
 
 
     //   F[piv]: 15:12
