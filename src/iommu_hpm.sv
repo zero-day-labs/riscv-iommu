@@ -60,15 +60,15 @@ module iommu_hpm #(
     input  logic                        pid_v_i,    // process_id is valid
 
     // from HPM registers
-    input  iommu_reg2hw_iocountinh_reg_t                iocountinh_i,   // inhibit 63-bit cycles counter
-    input  iommu_reg2hw_iohpmcycles_reg_t               iohpmcycles_i,  // clock cycle counter register
-    input  iommu_reg2hw_iohpmctr_reg_t [N_IOHPMCTR-1:0] iohpmctr_i, // event counters
-    input  iommu_reg2hw_iohpmevt_reg_t [N_IOHPMCTR-1:0] iohpmevt_i, // event configuration registers
+    input  iommu_reg_pkg::iommu_reg2hw_iocountinh_reg_t                 iocountinh_i,   // inhibit 63-bit cycles counter
+    input  iommu_reg_pkg::iommu_reg2hw_iohpmcycles_reg_t                iohpmcycles_i,  // clock cycle counter register
+    input  iommu_reg_pkg::iommu_reg2hw_iohpmctr_reg_t [N_IOHPMCTR-1:0]  iohpmctr_i,     // event counters
+    input  iommu_reg_pkg::iommu_reg2hw_iohpmevt_reg_t [N_IOHPMCTR-1:0]  iohpmevt_i,     // event configuration registers
 
     // to HPM registers
-    output iommu_hw2reg_iohpmcycles_reg_t               iohpmcycles_o,  // clock cycle counter value
-    output iommu_hw2reg_iohpmctr_reg_t [N_IOHPMCTR-1:0] iohpmctr_o,     // event counters value
-    output iommu_hw2reg_iohpmevt_reg_t [N_IOHPMCTR-1:0] iohpmevt_o,      // event configuration registers
+    output iommu_reg_pkg::iommu_hw2reg_iohpmcycles_reg_t                iohpmcycles_o,  // clock cycle counter value
+    output iommu_reg_pkg::iommu_hw2reg_iohpmctr_reg_t [N_IOHPMCTR-1:0]  iohpmctr_o,     // event counters value
+    output iommu_reg_pkg::iommu_hw2reg_iohpmevt_reg_t [N_IOHPMCTR-1:0]  iohpmevt_o,     // event configuration registers
 
     // ipsr.pmip
     output logic hpm_ip_o
@@ -106,7 +106,7 @@ module iommu_hpm #(
                 ((iohpmevt_i[i].eventid.q == iommu_pkg::DDTW) && ddt_walk_i         ) ||
                 ((iohpmevt_i[i].eventid.q == iommu_pkg::PDTW) && pdt_walk_i         ) ||
                 ((iohpmevt_i[i].eventid.q == iommu_pkg::S1_PTW) && s1_ptw_i         ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::S2_PTW) && s2_ptw_i         ) ||
+                ((iohpmevt_i[i].eventid.q == iommu_pkg::S2_PTW) && s2_ptw_i         )
             ) begin
                 
                 // ID filtering
@@ -128,9 +128,8 @@ module iommu_hpm #(
                                 if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                     // Increment if bits [23:(k+1)] match
-                                    increment_ctr[i] =  (k == 23)   ? 
-                                                        (1'b1)      :   // no filtering performed
-                                                        (did_i[23:(k+1)] == iohpmevt_i[i].did_gscid.q[23:(k+1)]);
+                                    // If k = 23, match always occurs
+                                    increment_ctr[i] = ((did_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
                                     break;
                                 end
                             end
@@ -152,9 +151,7 @@ module iommu_hpm #(
                                 if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                     // Increment if bits [23:(k+1)] match
-                                    increment_ctr[i] =  (k == 23)   ? 
-                                                        (1'b1)      :   // no DID_GSCID filtering performed
-                                                        (did_i[23:(k+1)] == iohpmevt_i[i].did_gscid.q[23:(k+1)]);
+                                    increment_ctr[i] = ((did_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
                                     break;
                                 end
                             end
@@ -189,9 +186,7 @@ module iommu_hpm #(
                                     if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                         // Increment if bits [15:(k+1)] match
-                                        increment_ctr[i] =  (k == 15)   ? 
-                                                            (1'b1)      :   // no filtering performed
-                                                            (gscid_i[15:(k+1)] == iohpmevt_i[i].did_gscid.q[15:(k+1)]);
+                                        increment_ctr[i] = ((gscid_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
                                         break;
                                     end
                                 end
@@ -222,9 +217,7 @@ module iommu_hpm #(
                                     if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                         // Increment if bits [15:(k+1)] match
-                                        increment_ctr[i] =  (k == 15)   ? 
-                                                            (1'b1)      :   // no DID_GSCID filtering performed
-                                                            (gscid_i[15:(k+1)] == iohpmevt_i[i].did_gscid.q[15:(k+1)]);
+                                        increment_ctr[i] = ((gscid_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
                                         break;
                                     end
                                 end

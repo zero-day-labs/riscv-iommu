@@ -128,8 +128,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        pdt_walk_o,         // PDT walk triggered
     output logic                        s1_ptw_o,           // first-stage PT walk triggered
     output logic                        s2_ptw_o,           // second-stage PT walk triggered
-    output logic [GSCID_WIDTH-1:0]      gscid_o;
-    output logic [PSCID_WIDTH-1:0]      pscid_o;
+    output logic [GSCID_WIDTH-1:0]      gscid_o,
+    output logic [PSCID_WIDTH-1:0]      pscid_o,
 
     output logic                        is_fq_fifo_full_o
 );
@@ -318,6 +318,14 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     // More wires
     logic                       ptw_error_stage2;   // Set when a guest page fault occurs
     logic [riscv::GPLEN-1:0]    ptw_bad_gpaddr;
+
+    // Interrupt vectors
+    // Priority is defined by the order of the vector: The lower the index, the higher the priority
+    logic [(LOG2_INTVEC-1):0]   intv[3] = '{
+        civ_i,  // CQ
+        fiv_i,  // FQ
+        pmiv_i  // HPM
+    };
 
     //# Arbitration and mux logic to assign AXI4 Master IF to a module
     mem_if_wrapper i_mem_if_wrapper (
@@ -728,20 +736,18 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     if (InclMSI_IG) begin : gen_msi_ig_support
 
         iommu_msi_ig #(
-            .N_INT_VEC          (N_INT_VEC)
+            .N_INT_VEC          (N_INT_VEC  ),
+            .N_SOURCES          (3          )
         ) i_iommu_msi_ig (
             .clk_i              (clk_i),
             .rst_ni             (rst_ni),
 
             .msi_ig_enabled_i   (msi_ig_en),
 
-            .cip_i              (cq_ip_i),
-            .fip_i              (fq_ip_i),
-            .pmip_i             (hpm_ip_i),
-
-            .civ_i              (civ_i),
-            .fiv_i              (fiv_i),
-            .pmiv_i             (pmiv_i),
+            // Indexes in IV and IP vectors must be consistent!
+            // 2: HPM; 1: FQ; 0: CQ
+            .intp_i             ({hpm_ip_i,fq_ip_i,cq_ip_i}),
+            .intv_i             (intv),
 
             .msi_addr_x_i       (msi_addr_x_i),
             .msi_data_x_i       (msi_data_x_i),

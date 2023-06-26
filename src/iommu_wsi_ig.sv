@@ -18,6 +18,8 @@
 module iommu_wsi_ig #(
     // Number of supported interrupt vectors
     parameter int unsigned N_INT_VEC = 16,
+    // Number of interrupt sources
+    parameter int unsigned N_SOURCES = 3,
     
     // DO NOT MODIFY
     parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
@@ -26,18 +28,14 @@ module iommu_wsi_ig #(
     // fctl.wsi
     input  logic        wsi_en_i,
 
-    // ipsr
-    input  logic        cip_i,
-    input  logic        fip_i,
-    input  logic        pmip_i,
+    // Interrupt pending bits
+    input  logic [(N_SOURCES-1):0]      intp_i,
 
-    // icvec
-    input  logic[(LOG2_INTVEC-1):0]   civ_i,
-    input  logic[(LOG2_INTVEC-1):0]   fiv_i,
-    input  logic[(LOG2_INTVEC-1):0]   pmiv_i,
+    // Interrupt vectors
+    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_SOURCES],
 
     // interrupt wires
-    output logic [(N_INT_VEC-1):0] wsi_wires_o
+    output logic [(N_INT_VEC-1):0]      wsi_wires_o
 );
 
     always_comb begin : wsi_support
@@ -47,11 +45,9 @@ module iommu_wsi_ig #(
         if (wsi_en_i) begin
 
             for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-                wsi_wires_o[i] = (    
-                                      (cip_i &  (civ_i == iommu_pkg::icvec_vals[i]  )) 
-                                    | (fip_i &  (fiv_i == iommu_pkg::icvec_vals[i]  ))
-                                    | (pmip_i & (pmiv_i == iommu_pkg::icvec_vals[i] ))
-                                    );
+                for (int unsigned j = 0; j < N_SOURCES; j++) begin
+                    wsi_wires_o[i] = (intp_i[j] & (intv_i[j] == iommu_pkg::icvec_vals[i]));
+                end
             end
         end
         /* verilator lint_on WIDTH */

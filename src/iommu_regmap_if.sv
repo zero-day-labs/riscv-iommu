@@ -40,6 +40,8 @@ module iommu_regmap_if #(
     parameter bit           InclMSI_IG = 0,
     // Number of interrupt vectors supported
     parameter int unsigned  N_INT_VEC = 16,
+    // Number of Performance monitoring event counters (set to zero to disable HPM)
+    parameter int unsigned  N_IOHPMCTR = 0, // max 31
     /// AXI Full request struct type
     parameter type  axi_req_t = logic,
     /// AXI Full response struct type
@@ -98,13 +100,14 @@ module iommu_regmap_if #(
     // Register map wrapper module
     //
     iommu_regmap_wrapper #(
-        .ADDR_WIDTH (ADDR_WIDTH),
-        .DATA_WIDTH (DATA_WIDTH),
-        .InclWSI_IG (InclWSI_IG),
-        .InclMSI_IG (InclMSI_IG),
-        .N_INT_VEC  (N_INT_VEC),
-        .reg_req_t  (reg_req_t),
-        .reg_rsp_t  (reg_rsp_t)
+        .ADDR_WIDTH (ADDR_WIDTH ),
+        .DATA_WIDTH (DATA_WIDTH ),
+        .InclWSI_IG (InclWSI_IG ),
+        .InclMSI_IG (InclMSI_IG ),
+        .N_INT_VEC  (N_INT_VEC  ),
+        .N_IOHPMCTR (N_IOHPMCTR ),
+        .reg_req_t  (reg_req_t  ),
+        .reg_rsp_t  (reg_rsp_t  )
     ) i_iommu_regmap_wrapper (
         .clk_i      (clk_i),
         .rst_ni     (rst_ni),

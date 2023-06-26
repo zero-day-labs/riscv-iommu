@@ -75,7 +75,10 @@ module riscv_iommu #(
     /// Regbus request struct type.
     parameter type  reg_req_t       = logic,
     /// Regbus response struct type.
-    parameter type  reg_rsp_t       = logic
+    parameter type  reg_rsp_t       = logic,
+
+    // DO NOT MODIFY MANUALLY
+    parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
 ) (
     input  logic clk_i,
     input  logic rst_ni,
@@ -146,6 +149,13 @@ module riscv_iommu #(
 
     // We must wait for the FQ to write a record for a given error before letting the error slave respond to a subsequent request
     logic                           is_fq_fifo_full;
+
+    // Interrupt vectors
+    logic [(LOG2_INTVEC-1):0]   intv[3] = '{
+        reg2hw.icvec.civ.q,  // CQ
+        reg2hw.icvec.fiv.q,  // FQ
+        reg2hw.icvec.pmiv.q  // HPM
+    };
 
     // WE signals
     assign  hw2reg.cqh.de               = 1'b1;
@@ -285,23 +295,20 @@ module riscv_iommu #(
     if (InclWSI_IG) begin : gen_wsi_ig_support
         
         iommu_wsi_ig #(
-            .N_INT_VEC      (N_INT_VEC)
+            .N_INT_VEC      (N_INT_VEC  ),
+            .N_SOURCES      (3          )
         ) i_iommu_wsi_ig (
             // fctl.wsi
             .wsi_en_i       (reg2hw.fctl.wsi.q  ),
 
             // ipsr
-            .cip_i          (reg2hw.ipsr.cip.q  ),
-            .fip_i          (reg2hw.ipsr.fip.q  ),
-            .pmip_i         (reg2hw.ipsr.pmip.q ),
+            .intp_i          ({reg2hw.ipsr.pmip.q,reg2hw.ipsr.fip.q,reg2hw.ipsr.cip.q}),
 
             // icvec
-            .civ_i          (reg2hw.icvec.civ.q ),
-            .fiv_i          (reg2hw.icvec.fiv.q ),
-            .pmiv_i         (reg2hw.icvec.pmiv.q),
+            .intv_i          (intv              ),
 
             // interrupt wires
-            .wsi_wires_o    (wsi_wires_o)
+            .wsi_wires_o    (wsi_wires_o        )
         );
     end
 

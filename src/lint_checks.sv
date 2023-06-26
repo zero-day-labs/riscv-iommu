@@ -57,6 +57,7 @@ module lint_checks (
 		.InclWSI_IG         ( 1'b1						),
 		.InclMSI_IG         ( 1'b1						),
 		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),
+		.N_IOHPMCTR			( 8							),
 
 		.ADDR_WIDTH			( 64						),
 		.DATA_WIDTH			( 64						),

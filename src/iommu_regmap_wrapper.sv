@@ -60,7 +60,7 @@ module iommu_regmap_wrapper #(
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
-  localparam logic [30:0] IOCOUNTINH_RESVAL = {N_IOHPMCTR{1'b1}};
+  localparam logic [N_IOHPMCTR-1:0] IOCOUNTINH_RESVAL = '1;
 
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
@@ -221,12 +221,12 @@ module iommu_regmap_wrapper #(
   logic 		fqcsr_busy_qs;
 
   // iocountinh
-  logic 		    iocountinh_cy_qs;
-  logic 		    iocountinh_cy_wd;
-  logic 		    iocountinh_cy_we;
-  logic [30:0]	iocountinh_hpm_qs;
-  logic [30:0]	iocountinh_hpm_wd;
-  logic 		    iocountinh_hpm_we;
+  logic 		              iocountinh_cy_qs;
+  logic 		              iocountinh_cy_wd;
+  logic 		              iocountinh_cy_we;
+  logic [N_IOHPMCTR-1:0]	iocountinh_hpm_qs;
+  logic [N_IOHPMCTR-1:0]	iocountinh_hpm_wd;
+  logic 		              iocountinh_hpm_we;
 
   // iohpmcycles
   logic [62:0]	iohpmcycles_counter_qs;
@@ -2031,7 +2031,7 @@ module iommu_regmap_wrapper #(
 
       // to internal hardware
       .qe     (),
-      .q      (reg2hw.iocountinh.hpm.q ),
+      .q      (reg2hw.iocountinh.hpm.q[N_IOHPMCTR-1:0]),
 
       // to register interface (read)
       .qs     (iocountinh_hpm_qs)
@@ -2333,7 +2333,7 @@ module iommu_regmap_wrapper #(
     end
 
     // Hardwire unused ports to 0
-    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
 
       assign reg2hw.iohpmctr[i].counter.q   = '0;
       assign reg2hw.iohpmevt[i].eventid.q   = '0;
@@ -2359,7 +2359,7 @@ module iommu_regmap_wrapper #(
     assign reg2hw.iohpmcycles.counter.q = '0;
     assign reg2hw.iohpmcycles.of.q      = '0;
 
-    for (int unsigned i = 0; i < 31; i++) begin
+    for (genvar i = 0; i < 31; i++) begin
 
       assign iohpmctr_counter_qs[i]    = '0;
       assign iohpmevt_eventid_qs[i]    = '0;
@@ -2455,13 +2455,13 @@ module iommu_regmap_wrapper #(
       .wd     (icvec_pmiv_wd),
 
       // from internal hardware
-      .de     (hw2reg.icvec.pmiv.de),
+      .de     ('0),
+      .d      ('0),
       .ds     (),
-      .d      (hw2reg.icvec.pmiv.d ),
 
       // to internal hardware
       .qe     (),
-      .q      (reg2hw.icvec.pmiv.q ),
+      .q      (reg2hw.icvec.pmiv.q[(LOG2_INTVEC-1):0]),
 
       // to register interface (read)
       .qs     (icvec_pmiv_qs)
@@ -4142,13 +4142,13 @@ module iommu_regmap_wrapper #(
     assign addr_hit[13] = (reg_addr == IOMMU_IOCNTINH_OFFSET);
     assign addr_hit[14] = (reg_addr == IOMMU_IOHPMCYCLES_OFFSET);
 
-    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
       assign addr_hit[15+i]     = (reg_addr == (IOMMU_IOHPMCTR_OFFSET + i*8));
       assign addr_hit[15+31+i]  = (reg_addr == (IOMMU_IOHPMEVT_OFFSET + i*8));
     end
 
     // Hardwire unused bits to 0
-    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
       assign addr_hit[15+i]     = 1'b0;
       assign addr_hit[15+31+i]  = 1'b0;
     end
@@ -4160,7 +4160,7 @@ module iommu_regmap_wrapper #(
     assign addr_hit[13] = 1'b0;
     assign addr_hit[14] = 1'b0;
 
-    for (int unsigned i = 0; i < 31; i++) begin
+    for (genvar i = 0; i < 31; i++) begin
       assign addr_hit[15+i]     = 1'b0;
       assign addr_hit[15+31+i]  = 1'b0;
     end
@@ -4240,13 +4240,13 @@ module iommu_regmap_wrapper #(
     assign wr_err[13] = (addr_hit[13] & (|(IOMMU_PERMIT[13] & ~reg_be)));
     assign wr_err[14] = (addr_hit[14] & (|(IOMMU_PERMIT[14] & ~reg_be)));
 
-    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
       assign wr_err[15+i]     = (addr_hit[15+i] & (|(IOMMU_PERMIT[15] & ~reg_be)));
       assign wr_err[15+31+i]  = (addr_hit[15+31+i] & (|(IOMMU_PERMIT[16] & ~reg_be)));
     end
 
     // Hardwire unused bits to 0
-    for (int unsigned i = N_IOHPMCTR; i < 31; i++) begin
+    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
       assign wr_err[15+i]     = 1'b0;
       assign wr_err[15+31+i]  = 1'b0;
     end
@@ -4259,7 +4259,7 @@ module iommu_regmap_wrapper #(
     assign wr_err[13] = 1'b0;
     assign wr_err[14] = 1'b0;
     
-    for (int unsigned i = 0; i < 31; i++) begin
+    for (genvar i = 0; i < 31; i++) begin
       assign wr_err[15+i]     = 1'b0;
       assign wr_err[15+31+i]  = 1'b0;
     end
@@ -4406,7 +4406,7 @@ module iommu_regmap_wrapper #(
     assign iocountinh_cy_wd = reg_wdata[0];
 
     assign iocountinh_hpm_we = addr_hit[13] & reg_we & !reg_error;
-    assign iocountinh_hpm_wd = reg_wdata[31:1];
+    assign iocountinh_hpm_wd = reg_wdata[N_IOHPMCTR:1];
 
     assign iohpmcycles_counter_we = addr_hit[14] & reg_we & !reg_error;
     assign iohpmcycles_counter_wd = reg_wdata[62:0];
@@ -4414,7 +4414,7 @@ module iommu_regmap_wrapper #(
     assign iohpmcycles_of_we = addr_hit[14] & reg_we & !reg_error;
     assign iohpmcycles_of_wd = reg_wdata[63];
 
-    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
       
       assign iohpmctr_counter_we[i] = addr_hit[15+i] & reg_we & !reg_error;
       assign iohpmctr_counter_wd[i] = reg_wdata[63:0];
@@ -4453,7 +4453,7 @@ module iommu_regmap_wrapper #(
     assign iohpmcycles_of_we = 1'b0;
     assign iohpmcycles_of_wd = '0;
 
-    for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
 
       assign iohpmctr_counter_we[i] = 1'b0;
       assign iohpmctr_counter_wd[i] = '0;
@@ -4461,7 +4461,7 @@ module iommu_regmap_wrapper #(
       assign iohpmevt_eventid_we[i]   = 1'b0;
       assign iohpmevt_eventid_wd[i]   = '0;
       assign iohpmevt_dmask_we[i]     = 1'b0;
-      assign iohpmevt_dmask_wd[i]     = '0
+      assign iohpmevt_dmask_wd[i]     = '0;
       assign iohpmevt_pid_pscid_we[i] = 1'b0;
       assign iohpmevt_pid_pscid_wd[i] = '0;
       assign iohpmevt_did_gscid_we[i] = 1'b0;
@@ -4762,7 +4762,7 @@ module iommu_regmap_wrapper #(
 
       addr_hit[12]: begin
         reg_rdata_next[0] = iohpmcycles_of_qs;
-        for (unsigned int i = 1; i < (N_IOHPMCTR + 1); i++) begin
+        for (int unsigned i = 1; i < (N_IOHPMCTR + 1); i++) begin
           reg_rdata_next[i] = iohpmevt_of_qs[i-1];
         end
         reg_rdata_next[63:N_IOHPMCTR+1] = '0;
@@ -4771,7 +4771,7 @@ module iommu_regmap_wrapper #(
       addr_hit[13]: begin
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[32] = iocountinh_cy_qs;
-        for (unsigned int i = 33; i < (33 + N_IOHPMCTR); i++) begin
+        for (int unsigned i = 33; i < (33 + N_IOHPMCTR); i++) begin
           reg_rdata_next[i] = iocountinh_hpm_qs[i-33];
         end
         if (N_IOHPMCTR != 31) 
