@@ -18,11 +18,8 @@
 
 //# Disabled verilator_lint_off WIDTH
 
-module iommu_cdw import ariane_pkg::*; #(
-    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
-    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
-
-    parameter bit           InclPID             = 0
+module iommu_cdw #(
+    parameter bit   InclPID = 0
 ) (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
@@ -30,7 +27,7 @@ module iommu_cdw import ariane_pkg::*; #(
     // Error signaling
     output logic                                cdw_active_o,           // Set when PTW is walking memory
     output logic                                cdw_error_o,            // set when an error occurred
-    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,           // Fault code as defined by IOMMU and Priv Spec
+    output logic [(rv_iommu::CAUSE_LEN-1):0]    cause_code_o,           // Fault code as defined by IOMMU and Priv Spec
 
     // Leaf checks
     // DC checks
@@ -52,16 +49,16 @@ module iommu_cdw import ariane_pkg::*; #(
 
     // Update logic
     output  logic                           update_dc_o,
-    output  logic [DEVICE_ID_WIDTH-1:0]     up_did_o,
-    output  iommu_pkg::dc_ext_t             up_dc_content_o,
+    output  logic [23:0]                    up_did_o,
+    output  rv_iommu::dc_ext_t              up_dc_content_o,
 
     output logic                            update_pc_o,
-    output logic [PROCESS_ID_WIDTH-1:0]     up_pid_o,
-    output iommu_pkg::pc_t                  up_pc_content_o,
+    output logic [19:0]                     up_pid_o,
+    output rv_iommu::pc_t                   up_pc_content_o,
 
     // CDC tags
-    input  logic [DEVICE_ID_WIDTH-1:0]  req_did_i,    // device_id associated with request
-    input  logic [PROCESS_ID_WIDTH-1:0] req_pid_i,    // process_id associated with request
+    input  logic [23:0]                     req_did_i,    // device_id associated with request
+    input  logic [19:0]                     req_pid_i,    // process_id associated with request
 
     // from DDTC / PDTC, to monitor misses
     input  logic                        ddtc_access_i,
@@ -95,32 +92,32 @@ module iommu_cdw import ariane_pkg::*; #(
 );
 
     // DC/PC Update register
-    iommu_pkg::dc_ext_t dc_q, dc_n;
-    iommu_pkg::pc_t pc_q, pc_n;
+    rv_iommu::dc_ext_t dc_q, dc_n;
+    rv_iommu::pc_t pc_q, pc_n;
 
     // Cast read port to corresponding data structure
-    iommu_pkg::nl_entry_t nl;
-    iommu_pkg::tc_t dc_tc;
-    iommu_pkg::iohgatp_t dc_iohgatp;
-    iommu_pkg::dc_ta_t dc_ta;
-    iommu_pkg::fsc_t dc_fsc;
-    iommu_pkg::msiptp_t dc_msiptp;
-    iommu_pkg::msi_addr_mask_t dc_msi_addr_mask;
-    iommu_pkg::msi_addr_pattern_t dc_msi_addr_patt;
-    iommu_pkg::pc_ta_t pc_ta;
-    iommu_pkg::fsc_t pc_fsc;
+    rv_iommu::nl_entry_t nl;
+    rv_iommu::tc_t dc_tc;
+    rv_iommu::iohgatp_t dc_iohgatp;
+    rv_iommu::dc_ta_t dc_ta;
+    rv_iommu::fsc_t dc_fsc;
+    rv_iommu::msiptp_t dc_msiptp;
+    rv_iommu::msi_addr_mask_t dc_msi_addr_mask;
+    rv_iommu::msi_addr_pattern_t dc_msi_addr_patt;
+    rv_iommu::pc_ta_t pc_ta;
+    rv_iommu::fsc_t pc_fsc;
 
-    assign dc_tc = iommu_pkg::tc_t'(mem_resp_i.r.data);
-    assign dc_iohgatp = iommu_pkg::iohgatp_t'(mem_resp_i.r.data);
-    assign dc_ta = iommu_pkg::dc_ta_t'(mem_resp_i.r.data);
-    assign dc_fsc = iommu_pkg::fsc_t'(mem_resp_i.r.data);
-    assign dc_msiptp = iommu_pkg::msiptp_t'(mem_resp_i.r.data);
-    assign dc_msi_addr_mask = iommu_pkg::msi_addr_mask_t'(mem_resp_i.r.data);
-    assign dc_msi_addr_patt = iommu_pkg::msi_addr_pattern_t'(mem_resp_i.r.data);
-    assign pc_ta = iommu_pkg::pc_ta_t'(mem_resp_i.r.data);
-    assign pc_fsc = iommu_pkg::fsc_t'(mem_resp_i.r.data);
+    assign dc_tc = rv_iommu::tc_t'(mem_resp_i.r.data);
+    assign dc_iohgatp = rv_iommu::iohgatp_t'(mem_resp_i.r.data);
+    assign dc_ta = rv_iommu::dc_ta_t'(mem_resp_i.r.data);
+    assign dc_fsc = rv_iommu::fsc_t'(mem_resp_i.r.data);
+    assign dc_msiptp = rv_iommu::msiptp_t'(mem_resp_i.r.data);
+    assign dc_msi_addr_mask = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
+    assign dc_msi_addr_patt = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
+    assign pc_ta = rv_iommu::pc_ta_t'(mem_resp_i.r.data);
+    assign pc_fsc = rv_iommu::fsc_t'(mem_resp_i.r.data);
 
-    assign nl = iommu_pkg::nl_entry_t'(mem_resp_i.r.data);
+    assign nl = rv_iommu::nl_entry_t'(mem_resp_i.r.data);
 
     // PTW states
     typedef enum logic[2:0] {
@@ -145,8 +142,8 @@ module iommu_cdw import ariane_pkg::*; #(
     logic is_ddt_walk_q, is_ddt_walk_n;
 
     // Save and propagate the input device_id/process id to walk multiple levels
-    logic [DEVICE_ID_WIDTH-1:0]  device_id_q, device_id_n;
-    logic [PROCESS_ID_WIDTH-1:0] process_id_q, process_id_n;
+    logic [23:0] device_id_q, device_id_n;
+    logic [19:0] process_id_q, process_id_n;
 
     // Physical pointer to access memory bus
     logic [riscv::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
@@ -164,7 +161,7 @@ module iommu_cdw import ariane_pkg::*; #(
     logic dc_fully_loaded, pc_fully_loaded;
 
     // Cause propagation
-    logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
+    logic [(rv_iommu::CAUSE_LEN-1):0] cause_q, cause_n;
 
     // To know whether we have to wait for the AXI transaction to complete
     logic wait_rlast_q, wait_rlast_n;
@@ -370,8 +367,8 @@ module iommu_cdw import ariane_pkg::*; #(
                     // "If ddte/pdte.V == 0, stop and report "DDT entry not valid" (cause = 258/266)"
                     if (!nl.v && mem_resp_i.r_valid) begin
                         state_n = ERROR;
-                        if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_ENTRY_INVALID;
-                        else cause_n = iommu_pkg::PDT_ENTRY_INVALID;
+                        if (is_ddt_walk_q) cause_n = rv_iommu::DDT_ENTRY_INVALID;
+                        else cause_n = rv_iommu::PDT_ENTRY_INVALID;
                     end
 
                     //# Valid non-leaf entry
@@ -408,7 +405,7 @@ module iommu_cdw import ariane_pkg::*; #(
                     // "stop and report "DDT entry misconfigured" (cause = 259)"
                     if (mem_resp_i.r_valid && ((|nl.reserved_1) || (|nl.reserved_2))) begin
                         state_n = ERROR;
-                        cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                        cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                     end
 
                     // Abort walk and go to IDLE if PTW raised a second-stage translation error
@@ -455,14 +452,14 @@ module iommu_cdw import ariane_pkg::*; #(
                             // "If pdte.V == 0, stop and report "PDT entry not valid" (cause = 266)"
                             if (!pc_ta.v) begin
                                 state_n         = ERROR;
-                                cause_n         = iommu_pkg::PDT_ENTRY_INVALID;
+                                cause_n         = rv_iommu::PDT_ENTRY_INVALID;
                                 wait_rlast_n    = 1'b1;
                             end
 
                             // Config checks
                             if ((|pc_ta.reserved_1) || (|pc_ta.reserved_2)) begin
                                 state_n         = ERROR;
-                                cause_n         = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
+                                cause_n         = rv_iommu::PDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -479,7 +476,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                                  (!caps_sv57_i && pc_fsc.mode == 4'd10))) ||
                                 (dc_sxl_i && (!caps_sv32_i && pc_fsc.mode == 4'd8))) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::PDT_ENTRY_MISCONFIGURED;
                             end
                         end
 
@@ -492,7 +489,7 @@ module iommu_cdw import ariane_pkg::*; #(
                             // "If ddte.V == 0, stop and report "DDT entry not valid" (cause = 258)"
                             if (!dc_tc.v) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_INVALID;
+                                cause_n = rv_iommu::DDT_ENTRY_INVALID;
                                 wait_rlast_n    = 1'b1;
                             end
 
@@ -505,7 +502,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 (fctl_be_i != dc_tc.sbe) ||
                                 (dc_tc.sxl != fctl_gxl_i)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -523,7 +520,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 (fctl_gxl_i && (!caps_sv32x4_i && dc_iohgatp.mode == 4'd8)) ||
                                 (|dc_iohgatp.mode && |dc_iohgatp.ppn[1:0])) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -535,7 +532,7 @@ module iommu_cdw import ariane_pkg::*; #(
                             // Config checks
                             if ((|dc_ta.reserved_1) || (|dc_ta.reserved_2)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -555,7 +552,7 @@ module iommu_cdw import ariane_pkg::*; #(
                                 (!dc_q.tc.pdtv && dc_q.tc.sxl && (!caps_sv32_i && dc_fsc.mode == 4'd8)) ||
                                 (|dc_fsc.reserved)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -568,7 +565,7 @@ module iommu_cdw import ariane_pkg::*; #(
                             if ((caps_msi_flat_i && !(dc_msiptp.mode inside {4'd0, 4'd1})) ||
                                 (|dc_msiptp.reserved)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -580,7 +577,7 @@ module iommu_cdw import ariane_pkg::*; #(
                             // Config checks
                             if ((|dc_msi_addr_mask.reserved)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
                             end
                         end
@@ -595,7 +592,7 @@ module iommu_cdw import ariane_pkg::*; #(
                             // Config checks
                             if ((|dc_msi_addr_patt.reserved)) begin
                                 state_n = ERROR;
-                                cause_n = iommu_pkg::DDT_ENTRY_MISCONFIGURED;
+                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                             end
                         end
                         
@@ -623,14 +620,14 @@ module iommu_cdw import ariane_pkg::*; #(
                         // "If pdte.V == 0, stop and report "PDT entry not valid" (cause = 258/266)"
                         if (!nl.v) begin
                             state_n = ERROR;
-                            cause_n = iommu_pkg::PDT_ENTRY_INVALID;
+                            cause_n = rv_iommu::PDT_ENTRY_INVALID;
                         end
 
                         // "If if any bits or encoding that are reserved for future standard use are set within ddte,"
                         // "stop and report "DDT entry misconfigured" (cause = 259)"
                         else if ((|nl.reserved_1) || (|nl.reserved_2)) begin
                             state_n = ERROR;
-                            cause_n = iommu_pkg::PDT_ENTRY_MISCONFIGURED;
+                            cause_n = rv_iommu::PDT_ENTRY_MISCONFIGURED;
                         end
 
                         // Set pdt_ppn with nl.ppn and trigger PTW
@@ -680,8 +677,8 @@ module iommu_cdw import ariane_pkg::*; #(
             wait_rlast_n    = ~mem_resp_i.r.last;
 
             // set cause code
-            if (is_ddt_walk_q) cause_n = iommu_pkg::DDT_DATA_CORRUPTION;
-            else cause_n = iommu_pkg::PDT_DATA_CORRUPTION;
+            if (is_ddt_walk_q) cause_n = rv_iommu::DDT_DATA_CORRUPTION;
+            else cause_n = rv_iommu::PDT_DATA_CORRUPTION;
 
             // return faulting address in bad_addr
             cdw_pptr_n = cdw_pptr_q;

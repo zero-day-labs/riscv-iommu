@@ -17,11 +17,9 @@
 //              Fully-associative cache to store Process Contexts.
 
 
-module iommu_pdtc import ariane_pkg::*; #(
-    parameter int unsigned PDTC_ENTRIES = 4,
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20
-)(
+module iommu_pdtc #(
+    parameter int unsigned PDTC_ENTRIES = 4
+) (
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
 
@@ -29,20 +27,20 @@ module iommu_pdtc import ariane_pkg::*; #(
     input  logic                        flush_i,        // IODIR.INVAL_DDT or IODIR.INVAL_PDT
     input  logic                        flush_dv_i,     // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
     input  logic                        flush_pv_i,     // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
-    input  logic [DEVICE_ID_WIDTH-1:0]  flush_did_i,    // device_id to be flushed
-    input  logic [PROCESS_ID_WIDTH-1:0] flush_pid_i,    // process_id to be flushed (if flush_pv_i = 1)
+    input  logic [23:0]                 flush_did_i,    // device_id to be flushed
+    input  logic [19:0]                 flush_pid_i,    // process_id to be flushed (if flush_pv_i = 1)
 
     // Update signals
     input  logic                        update_i,       // update flag
-    input  logic [DEVICE_ID_WIDTH-1:0]  up_did_i,       // device ID to be inserted
-    input  logic [PROCESS_ID_WIDTH-1:0] up_pid_i,       // process ID to be inserted
-    input  iommu_pkg::pc_t               up_content_i,   // PC to be inserted
+    input  logic [23:0]                 up_did_i,       // device ID to be inserted
+    input  logic [19:0]                 up_pid_i,       // process ID to be inserted
+    input  rv_iommu::pc_t               up_content_i,   // PC to be inserted
 
     // Lookup signals
     input  logic                        lookup_i,       // lookup flag
-    input  logic [DEVICE_ID_WIDTH-1:0]  lu_did_i,       // device_id to look for
-    input  logic [PROCESS_ID_WIDTH-1:0] lu_pid_i,       // process_id to look for
-    output iommu_pkg::pc_t              lu_content_o,   // PC
+    input  logic [23:0]                 lu_did_i,       // device_id to look for
+    input  logic [19:0]                 lu_pid_i,       // process_id to look for
+    output rv_iommu::pc_t               lu_content_o,   // PC
     output logic                        lu_hit_o        // hit flag
 );
 
@@ -50,14 +48,14 @@ module iommu_pdtc import ariane_pkg::*; #(
     // 24-bits device_id may be divided into up to three levels.
     // 20-bits process_id may be divided into up to three levels.
     struct packed {
-        logic [DEVICE_ID_WIDTH-1:0]     device_id;  // device_id
-        logic [PROCESS_ID_WIDTH-1:0]    process_id; // process_id
-        logic                           valid;      // valid bit
+        logic [23:0]    device_id;  // device_id
+        logic [19:0]    process_id; // process_id
+        logic           valid;      // valid bit
     } [PDTC_ENTRIES-1:0] tags_q, tags_n;
 
     //# DDTC entries: Device Contexts
     struct packed {
-        iommu_pkg::pc_t pc;     // process context
+        rv_iommu::pc_t pc;     // process context
     } [PDTC_ENTRIES-1:0] content_q, content_n;
 
     logic [PDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
@@ -251,8 +249,6 @@ module iommu_pdtc import ariane_pkg::*; #(
     initial begin : p_assertions
         assert ((PDTC_ENTRIES % 2 == 0) && (PDTC_ENTRIES > 1))
         else begin $error("PDTC size must be a multiple of 2 and greater than 1"); $stop(); end
-        assert ((PROCESS_ID_WIDTH == 20) || (PROCESS_ID_WIDTH == 17) || (PROCESS_ID_WIDTH == 8))
-        else begin $error("process_id can be only 8, 17 or 20 bits wide"); $stop(); end
     end
 
     // Just for checking

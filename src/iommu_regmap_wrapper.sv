@@ -25,36 +25,34 @@
 `include "register_interface/typedef.svh"
 
 module iommu_regmap_wrapper #(
-    parameter int 			ADDR_WIDTH = 64,
-    parameter int 			DATA_WIDTH = 64,
+  parameter int 			        ADDR_WIDTH = 64,
+  parameter int 			        DATA_WIDTH = 64,
 
-    // Include IOMMU WSI generation support
-    parameter bit           InclWSI_IG = 1,
-    // Include IOMMU MSI generation support
-    parameter bit           InclMSI_IG = 0,
-    // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
-    parameter int unsigned  N_INT_VEC = 16,
-    // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned  N_IOHPMCTR = 0, // max 31
+  // Interrupt Generation Support
+  parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
+  // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
+  parameter int unsigned      N_INT_VEC = 16,
+  // Number of Performance monitoring event counters (set to zero to disable HPM)
+  parameter int unsigned      N_IOHPMCTR = 0, // max 31
 
-    parameter type 			reg_req_t = logic,
-    parameter type 			reg_rsp_t = logic,
+  parameter type 			        reg_req_t = logic,
+  parameter type 			        reg_rsp_t = logic,
 
-    // DO NOT MODIFY MANUALLY
-	  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8),
-    parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC)
-) (
-	input logic clk_i,
-	input logic rst_ni,
-	// From SW
-	input  reg_req_t 						reg_req_i,
-	output reg_rsp_t 						reg_rsp_o,
-	// To HW
-	output iommu_reg_pkg::iommu_reg2hw_t 	reg2hw, // Write
-	input  iommu_reg_pkg::iommu_hw2reg_t 	hw2reg, // Read
+  // DO NOT MODIFY MANUALLY
+  parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8),
+  parameter int unsigned  LOG2_INTVEC = $clog2(N_INT_VEC)
+  ) (
+  input logic clk_i,
+  input logic rst_ni,
+  // From SW
+  input  reg_req_t 						reg_req_i,
+  output reg_rsp_t 						reg_rsp_o,
+  // To HW
+  output iommu_reg_pkg::iommu_reg2hw_t 	reg2hw, // Write
+  input  iommu_reg_pkg::iommu_hw2reg_t 	hw2reg, // Read
 
-	// Config
-	input logic devmode_i // If 1, explicit error return for unmapped register access
+  // Config
+  input logic devmode_i // If 1, explicit error return for unmapped register access
 );
 
   import iommu_reg_pkg::* ;
@@ -924,19 +922,19 @@ module iommu_regmap_wrapper #(
   // );
 
   // MSI support only
-  if (InclMSI_IG && !InclWSI_IG) begin
+  if (IGS == rv_iommu::MSI_ONLY) begin
       assign reg2hw.capabilities.igs.q = 2'h0;
       assign capabilities_igs_qs = 2'h0;
   end
 
   // WSI support only
-  else if (!InclMSI_IG && InclWSI_IG) begin
+  else if (IGS == rv_iommu::WSI_ONLY) begin
       assign reg2hw.capabilities.igs.q = 2'h1;
       assign capabilities_igs_qs = 2'h1;
   end
 
   // MSI and WSI support
-  else if (InclMSI_IG && InclWSI_IG) begin
+  else if (IGS == rv_iommu::BOTH) begin
       assign reg2hw.capabilities.igs.q = 2'h2;
       assign capabilities_igs_qs = 2'h2;
   end
@@ -964,8 +962,15 @@ module iommu_regmap_wrapper #(
   //   // to register interface (read)
   //   .qs     (capabilities_hpm_qs)
   // );
-  assign reg2hw.capabilities.hpm.q = 1'h0;
-  assign capabilities_hpm_qs = 1'h0;
+
+  if (N_IOHPMCTR > 0) begin
+    assign reg2hw.capabilities.hpm.q = 1'h1;
+    assign capabilities_hpm_qs = 1'h1;
+  end
+  else begin
+    assign reg2hw.capabilities.hpm.q = 1'h0;
+    assign capabilities_hpm_qs = 1'h0;
+  end
 
 
   //   F[dbg]: 31:31
@@ -2512,9 +2517,9 @@ module iommu_regmap_wrapper #(
     assign reg2hw.icvec.piv.q = '0;
   end
   
-
+  // TODO: Reduce code size
   // Generate MSI Configuration Table if IOMMU includes MSI gen support
-  if (InclMSI_IG) begin : gen_msi_cfg_tbl
+  if ((IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_msi_cfg_tbl
     // R[msi_addr_0]: V(False)
 
     //   F[addr]: 55:2

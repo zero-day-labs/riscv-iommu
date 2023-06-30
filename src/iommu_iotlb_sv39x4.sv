@@ -20,9 +20,7 @@
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
 
 module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
-    parameter int unsigned IOTLB_ENTRIES = 4,
-    parameter int unsigned PSCID_WIDTH  = 20,
-    parameter int unsigned GSCID_WIDTH  = 16
+    parameter int unsigned IOTLB_ENTRIES = 4
 )(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
@@ -34,8 +32,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    flush_gv_i,       // GSCID valid
     input  logic                    flush_pscv_i,     // PSCID valid
     input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN to be flushed
-    input  logic [GSCID_WIDTH-1:0]  flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
-    input  logic [PSCID_WIDTH-1:0]  flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
+    input  logic [15:0]             flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
+    input  logic [19:0]             flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
     // Update signals
     input  logic                    update_i,
@@ -45,16 +43,16 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    up_is_g_1G_i,
     input  logic                    up_is_msi_i,
     input  logic [riscv::GPPNW-1:0] up_vpn_i,
-    input  logic [PSCID_WIDTH-1:0]  up_pscid_i,
-    input  logic [GSCID_WIDTH-1:0]  up_gscid_i,
+    input  logic [19:0]             up_pscid_i,
+    input  logic [15:0]             up_gscid_i,
     input riscv::pte_t              up_content_i,
     input riscv::pte_t              up_g_content_i,
 
     // Lookup signals
     input  logic                    lookup_i,                 // lookup flag
     input  logic [riscv::VLEN-1:0]  lu_iova_i,                // IOVA to look for 
-    input  logic [PSCID_WIDTH-1:0]  lu_pscid_i,               // PSCID to look for
-    input  logic [GSCID_WIDTH-1:0]  lu_gscid_i,               // GSCID to look for
+    input  logic [19:0]             lu_pscid_i,               // PSCID to look for
+    input  logic [15:0]             lu_gscid_i,               // GSCID to look for
     output logic [riscv::GPLEN-1:0] lu_gpaddr_o,              // GPA to return in case of an exception
     output riscv::pte_t             lu_content_o,             // S/VS-stage PTE (GPA PPN)
     output riscv::pte_t             lu_g_content_o,           // G-stage PTE (SPA PPN)
@@ -74,8 +72,8 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     // GSCID is analogous to VMID. Helps to identify entries that correspond to a specific virtual machine, to avoid flushing when a context switch between two different VMs occur.
     // PSCID is analogous to ASID. Helps to identify processes address spaces within the same VM, to avoid flushing TLB when switching context between different processes.asid
     struct packed {
-        logic [PSCID_WIDTH-1:0] pscid;      // process address space identifier
-        logic [GSCID_WIDTH-1:0] gscid;      // virtual machine identifier
+        logic [19:0] pscid;      // process address space identifier
+        logic [15:0] gscid;      // virtual machine identifier
         logic [riscv::GPPN2:0] vpn2;        // 3-level VPN (VPN[2] is the segment expanded by two bits in Sv39x4)
         logic [8:0]            vpn1;
         logic [8:0]            vpn0;
@@ -501,10 +499,6 @@ module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     initial begin : p_assertions
         assert ((IOTLB_ENTRIES % 2 == 0) && (IOTLB_ENTRIES > 1))
         else begin $error("TLB size must be a multiple of 2 and greater than 1"); $stop(); end
-        assert (PSCID_WIDTH >= 1)
-        else begin $error("PSCID width must be at least 1"); $stop(); end
-        assert (GSCID_WIDTH >= 1)
-        else begin $error("GSCID width must be at least 1"); $stop(); end
     end
 
     // Just for checking

@@ -24,19 +24,16 @@
       a stronger implementation (+ HW cost).
 */
 
-module iommu_translation_wrapper import ariane_pkg::*; #(
+module iommu_translation_wrapper #(
 
     parameter int unsigned  IOTLB_ENTRIES       = 4,
     parameter int unsigned  DDTC_ENTRIES        = 4,
     parameter int unsigned  PDTC_ENTRIES        = 4,
-    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
-    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
-    parameter int unsigned  PSCID_WIDTH         = 20,
-    parameter int unsigned  GSCID_WIDTH         = 16,
-    parameter int unsigned  N_INT_VEC           = 16,
 
-    parameter bit           InclPID             = 0,
-    parameter bit           InclMSI_IG          = 0,
+    parameter int unsigned      N_INT_VEC       = 16,
+
+    parameter bit               InclPID         = 0,
+    parameter rv_iommu::igs_t   IGS             = rv_iommu::WSI_ONLY,
 
     // DO NOT MODIFY
     parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
@@ -47,17 +44,17 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     input  logic    req_trans_i,            // Trigger translation
 
     // Translation request data
-    input  logic [DEVICE_ID_WIDTH-1:0]      device_id_i,
+    input  logic [23:0]                     device_id_i,
     input  logic                            pid_v_i,                // A valid process_id is associated with the request
-    input  logic [PROCESS_ID_WIDTH-1:0]     process_id_i,
+    input  logic [19:0]                     process_id_i,
     input  logic [riscv::VLEN-1:0]          iova_i,
     
-    input  logic [iommu_pkg::TTYP_LEN-1:0]  trans_type_i,
+    input  logic [rv_iommu::TTYP_LEN-1:0]   trans_type_i,
     input  riscv::priv_lvl_t                priv_lvl_i,             // Privilege mode associated with the transaction
 
     // Memory Bus
-    input  ariane_axi::resp_t       mem_resp_i,
-    output ariane_axi::req_t        mem_req_o,
+    input  ariane_axi::resp_t               mem_resp_i,
+    output ariane_axi::req_t                mem_req_o,
 
     // From Regmap
     input  iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities_i,
@@ -128,20 +125,20 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     output logic                        pdt_walk_o,         // PDT walk triggered
     output logic                        s1_ptw_o,           // first-stage PT walk triggered
     output logic                        s2_ptw_o,           // second-stage PT walk triggered
-    output logic [GSCID_WIDTH-1:0]      gscid_o,
-    output logic [PSCID_WIDTH-1:0]      pscid_o,
+    output logic [15:0]                 gscid_o,
+    output logic [19:0]                 pscid_o,
 
     output logic                        is_fq_fifo_full_o
 );
 
     // DDTC
     logic                       ddtc_access;
-    iommu_pkg::dc_ext_t         ddtc_lu_content;
+    rv_iommu::dc_ext_t         ddtc_lu_content;
     logic                       ddtc_lu_hit;
 
     // PDTC
     logic                       pdtc_access;
-    iommu_pkg::pc_t             pdtc_lu_content;
+    rv_iommu::pc_t             pdtc_lu_content;
     logic                       pdtc_lu_hit;
 
     // IOTLB
@@ -161,16 +158,16 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     // PTW error
     logic ptw_error;
-    logic [(iommu_pkg::CAUSE_LEN-1):0]  ptw_cause_code;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  ptw_cause_code;
 
     // CDW error
     logic cdw_error;
-    logic [(iommu_pkg::CAUSE_LEN-1):0]  cdw_cause_code;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  cdw_cause_code;
 
     // Address translation parameters
     logic en_stage1, en_stage2;
-    logic [GSCID_WIDTH-1:0] gscid;
-    logic [PSCID_WIDTH-1:0] pscid;
+    logic [15:0] gscid;
+    logic [19:0] pscid;
     logic [riscv::PPNW-1:0] iohgatp_ppn, iosatp_ppn;
 
     // PTW implicit translations for CDW walks
@@ -182,7 +179,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic                           is_ddt_walk;
 
     // If DC.tc.DPE is 1 and no valid process_id is given by the device, default value of zero is used
-    logic [PROCESS_ID_WIDTH-1:0] process_id;
+    logic [19:0] process_id;
     assign process_id = (!pid_v_i && ddtc_lu_content.tc.dpe) ? '0 : process_id_i;
 
     // To check whether first and second-stage translation modes are Bare
@@ -206,7 +203,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     // To determine if request is a PCIe ATS TR
     logic is_pcie_tr_req;
-    assign is_pcie_tr_req = (trans_type_i == iommu_pkg::PCIE_ATS_TRANS_REQ);
+    assign is_pcie_tr_req = (trans_type_i == rv_iommu::PCIE_ATS_TRANS_REQ);
 
     // To determine if transaction is a store
     logic is_store;
@@ -233,7 +230,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic   report_always;
     // Error/fault signaling according to the spec
     logic                               trans_error;
-    logic [(iommu_pkg::CAUSE_LEN-1):0]  cause_code;       // Fault code as defined by IOMMU and Priv Spec
+    logic [(rv_iommu::CAUSE_LEN-1):0]  cause_code;       // Fault code as defined by IOMMU and Priv Spec
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
     logic   report_fault;
@@ -267,12 +264,12 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     // Update wires
     logic                           ddtc_update;
-    logic [DEVICE_ID_WIDTH-1:0]     ddtc_up_did;
-    iommu_pkg::dc_ext_t             ddtc_up_content;
+    logic [23:0]     ddtc_up_did;
+    rv_iommu::dc_ext_t             ddtc_up_content;
 
     logic                           pdtc_update;
-    logic [PROCESS_ID_WIDTH-1:0]    pdtc_up_pid;
-    iommu_pkg::pc_t                 pdtc_up_content;
+    logic [19:0]    pdtc_up_pid;
+    rv_iommu::pc_t                 pdtc_up_content;
 
     logic                           iotlb_update;
     logic                           iotlb_up_is_s_2M;
@@ -281,26 +278,26 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     logic                           iotlb_up_is_g_1G;
     logic                           iotlb_up_is_msi;
     logic [riscv::GPPNW-1:0]        iotlb_up_vpn;
-    logic [PSCID_WIDTH-1:0]         iotlb_up_pscid;
-    logic [GSCID_WIDTH-1:0]         iotlb_up_gscid;
+    logic [19:0]         iotlb_up_pscid;
+    logic [15:0]         iotlb_up_gscid;
     riscv::pte_t                    iotlb_up_content;
     riscv::pte_t                    iotlb_up_g_content;
 
     // Flush wires
     logic                           flush_ddtc;
     logic                           flush_dv;
-    logic [DEVICE_ID_WIDTH-1:0]     flush_did;
+    logic [23:0]     flush_did;
     logic                           flush_pdtc;
     logic                           flush_pv;
-    logic [PROCESS_ID_WIDTH-1:0]    flush_pid;
+    logic [19:0]    flush_pid;
     logic                           flush_vma;
     logic                           flush_gvma;
     logic                           flush_av;
     logic                           flush_gv;
     logic                           flush_pscv;
     logic [riscv::GPPNW-1:0]        flush_vpn;
-    logic [GSCID_WIDTH-1:0]         flush_gscid;
-    logic [PSCID_WIDTH-1:0]         flush_pscid;
+    logic [15:0]         flush_gscid;
+    logic [19:0]         flush_pscid;
 
     // AXI interfaces
     ariane_axi::resp_t  ptw_axi_resp;
@@ -359,8 +356,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     //# Device Directory Table Cache
     iommu_ddtc #(
-        .DDTC_ENTRIES       (DDTC_ENTRIES),
-        .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH)
+        .DDTC_ENTRIES       (DDTC_ENTRIES)
     ) i_iommu_ddtc (
         .clk_i              (clk_i),            // Clock
         .rst_ni             (rst_ni),           // Asynchronous reset active low
@@ -384,9 +380,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     //# Process Directory Table Cache
     if (InclPID) begin : gen_pid_support
         iommu_pdtc #(
-            .PDTC_ENTRIES       (PDTC_ENTRIES),
-            .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
-            .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH)
+            .PDTC_ENTRIES       (PDTC_ENTRIES)
         ) i_iommu_pdtc (
             .clk_i              (clk_i),            // Clock
             .rst_ni             (rst_ni),           // Asynchronous reset active low
@@ -421,9 +415,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     //# IOTLB: Address Translation Cache
     iommu_iotlb_sv39x4 #(
-        .IOTLB_ENTRIES      (IOTLB_ENTRIES),
-        .PSCID_WIDTH        (PSCID_WIDTH),
-        .GSCID_WIDTH        (GSCID_WIDTH)
+        .IOTLB_ENTRIES      (IOTLB_ENTRIES)
     ) i_iommu_iotlb_sv39x4 (
         .clk_i              (clk_i),    // Clock
         .rst_ni             (rst_ni),   // Asynchronous reset active low
@@ -470,10 +462,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     );
 
     //# Page Table Walker
-    iommu_ptw_sv39x4 #(
-        .PSCID_WIDTH        (PSCID_WIDTH),
-        .GSCID_WIDTH        (GSCID_WIDTH)
-    ) i_iommu_ptw_sv39x4 (
+    iommu_ptw_sv39x4 i_iommu_ptw_sv39x4 (
         .clk_i              (clk_i),                  // Clock
         .rst_ni             (rst_ni),                 // Asynchronous reset active low
         
@@ -537,8 +526,6 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     //# Context Directory Walker
     iommu_cdw #(
-        .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
-        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH),
         .InclPID                (InclPID)
     ) i_iommu_cdw (
         .clk_i                  (clk_i),                // Clock
@@ -616,12 +603,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     );
 
     //# Command Queue
-    cq_handler #(
-            .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH),
-            .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH),
-            .PSCID_WIDTH        (PSCID_WIDTH),
-            .GSCID_WIDTH        (GSCID_WIDTH)
-    ) i_cq_handler (
+    cq_handler i_cq_handler (
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
@@ -681,10 +663,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
     /* verilator lint_off WIDTH */
     //# Fault/Event Queue
-    fq_handler #(
-        .DEVICE_ID_WIDTH        (DEVICE_ID_WIDTH),
-        .PROCESS_ID_WIDTH       (PROCESS_ID_WIDTH)
-    ) i_fq_handler ( 
+    fq_handler i_fq_handler ( 
         .clk_i                  (clk_i),
         .rst_ni                 (rst_ni),
 
@@ -714,7 +693,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
         // Event data
         .event_valid_i          (report_fault),     // a fault/event has occurred
         .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),     // transaction type
-        .cause_code_i           ((msi_write_error) ? (iommu_pkg::MSI_ST_ACCESS_FAULT) : (cause_code)), // Fault code as defined by IOMMU and Priv Spec
+        .cause_code_i           ((msi_write_error) ? (rv_iommu::MSI_ST_ACCESS_FAULT) : (cause_code)), // Fault code as defined by IOMMU and Priv Spec
         .iova_i                 ((msi_write_error) ? (ig_axi_req.aw.addr[55:2]) : (iova_i)),  // to report if transaction has an IOVA
         .gpaddr_i               (ptw_bad_gpaddr),   // to report bits [63:2] of the GPA in case of a Guest Page Fault
         .did_i                  (device_id_i),      // device_id associated with the transaction
@@ -733,7 +712,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
     /* verilator lint_on WIDTH */
 
     //# MSI Interrupt Generation
-    if (InclMSI_IG) begin : gen_msi_ig_support
+    if ((IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_msi_ig_support
 
         iommu_msi_ig #(
             .N_INT_VEC          (N_INT_VEC  ),
@@ -793,7 +772,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
             //# Input Checks
             // "If ddtp.iommu_mode == Off then stop and report "All inbound transactions disallowed" (cause = 256)."
             if (ddtp_i.iommu_mode.q == 4'b0000) begin
-                cause_code    = iommu_pkg::ALL_INB_TRANSACTIONS_DISALLOWED;
+                cause_code    = rv_iommu::ALL_INB_TRANSACTIONS_DISALLOWED;
                 trans_error   = 1'b1;
                 report_always   = 1'b1;
             end
@@ -803,7 +782,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                 
                 // "(*) If the transaction is a translated request or a PCIe ATS request"
                 if (is_translated || is_pcie_tr_req) begin
-                    cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                    cause_code    = rv_iommu::TRANS_TYPE_DISALLOWED;
                     trans_error   = 1'b1;
                     report_always   = 1'b1;
                 end
@@ -819,7 +798,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
 
             // "If the device_id is wider than supported by the IOMMU, then stop and report "Transaction type disallowed" (cause = 260)."
             else if ((ddtp_i.iommu_mode.q == 4'b0011 && (|device_id_i[23:15])) || (ddtp_i.iommu_mode.q == 4'b0010 && (|device_id_i[23:6]))) begin
-                cause_code = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
                 trans_error   = 1'b1;
                 report_always   = 1'b1;
             end
@@ -838,7 +817,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                 (pid_v_i && !ddtc_lu_content.tc.pdtv) ||
                 (pid_v_i && ddtc_lu_content.tc.pdtv && pid_wider_than_supported)) begin
 
-                cause_code = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
                 trans_error   = 1'b1;
             end
 
@@ -906,7 +885,7 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                     
                     // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
                     if (is_s_priv && !pdtc_lu_content.ta.ens) begin
-                        cause_code    = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                        cause_code    = rv_iommu::TRANS_TYPE_DISALLOWED;
                         trans_error   = 1'b1;
                     end
 
@@ -951,8 +930,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                          ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_content.u && en_stage1              ) ||    // (3)
                          (is_s_priv && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x) )       // (4)
                         ) begin
-                            if (is_store)   cause_code = iommu_pkg::STORE_PAGE_FAULT;
-                            else            cause_code = iommu_pkg::LOAD_PAGE_FAULT;
+                            if (is_store)   cause_code = rv_iommu::STORE_PAGE_FAULT;
+                            else            cause_code = rv_iommu::LOAD_PAGE_FAULT;
                             trans_error     = 1'b1;
                             trans_valid_o   = 1'b0;
                     end
@@ -960,8 +939,8 @@ module iommu_translation_wrapper import ariane_pkg::*; #(
                     else if ((is_store && (!iotlb_lu_g_content.w && en_stage2)  ) ||    // (1)
                              (is_rx && (!iotlb_lu_g_content.x && en_stage2)     )       // (2)
                             ) begin
-                            if (is_store)   cause_code = iommu_pkg::STORE_GUEST_PAGE_FAULT;
-                            else            cause_code = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
+                            if (is_store)   cause_code = rv_iommu::STORE_GUEST_PAGE_FAULT;
+                            else            cause_code = rv_iommu::LOAD_GUEST_PAGE_FAULT;
                             trans_error     = 1'b1;
                             trans_valid_o   = 1'b0;
                     end 

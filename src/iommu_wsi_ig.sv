@@ -46,7 +46,7 @@ module iommu_wsi_ig #(
 
             for (int unsigned i = 0; i < N_INT_VEC; i++) begin
                 for (int unsigned j = 0; j < N_SOURCES; j++) begin
-                    wsi_wires_o[i] = (intp_i[j] & (intv_i[j] == iommu_pkg::icvec_vals[i]));
+                    wsi_wires_o[i] = (intp_i[j] & (intv_i[j] == rv_iommu::icvec_vals[i]));
                 end
             end
         end

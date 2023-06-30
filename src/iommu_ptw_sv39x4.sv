@@ -20,10 +20,7 @@
 
 /* verilator lint_off WIDTH */
 
-module iommu_ptw_sv39x4 import ariane_pkg::*; #(
-        parameter int unsigned PSCID_WIDTH = 20,
-        parameter int unsigned GSCID_WIDTH = 16
-) (
+module iommu_ptw_sv39x4 (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
@@ -32,7 +29,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
     output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
     output logic                                ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
-    output logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_o,
+    output logic [(rv_iommu::CAUSE_LEN-1):0]   cause_code_o,
 
     input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
     input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
@@ -50,21 +47,21 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     output logic                    up_is_g_1G_o,
     output logic                    up_is_msi_o,
     output logic [riscv::GPPNW-1:0] up_vpn_o,
-    output logic [PSCID_WIDTH-1:0]  up_pscid_o,
-    output logic [GSCID_WIDTH-1:0]  up_gscid_o,
+    output logic [19:0]             up_pscid_o,
+    output logic [15:0]             up_gscid_o,
     output riscv::pte_t             up_content_o,
     output riscv::pte_t             up_g_content_o,
 
     // IOTLB tags
-    input  logic [riscv::VLEN-1:0]                  req_iova_i,
-    input  logic [PSCID_WIDTH-1:0]                  pscid_i,
-    input  logic [GSCID_WIDTH-1:0]                  gscid_i,
+    input  logic [riscv::VLEN-1:0]  req_iova_i,
+    input  logic [19:0]             pscid_i,
+    input  logic [15:0]             gscid_i,
 
     // MSI translation
     input  logic                                    msi_en_i,
     input  logic [(riscv::PPNW-1):0]                msiptp_ppn_i,
-    input  logic [(iommu_pkg::MSI_MASK_LEN-1):0]    msi_addr_mask_i,
-    input  logic [(iommu_pkg::MSI_PATTERN_LEN-1):0] msi_addr_pattern_i,
+    input  logic [(rv_iommu::MSI_MASK_LEN-1):0]     msi_addr_mask_i,
+    input  logic [(rv_iommu::MSI_PATTERN_LEN-1):0]  msi_addr_pattern_i,
     output logic                                    bare_translation_o,
 
     // CDW implicit translations (Second-stage only)
@@ -81,10 +78,6 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
     input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp (may be forwarded by the CDW)
 
-    // // Performance counters
-    // output logic                    itlb_miss_o,
-    // output logic                    dtlb_miss_o,
-
     output logic [riscv::GPLEN-1:0] bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
 
@@ -93,8 +86,8 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store final GPA to be updated in the IOTLB
     assign pte = riscv::pte_t'(mem_resp_i.r.data);
 
-    iommu_pkg::msi_wt_pte_t msi_pte;
-    assign msi_pte = iommu_pkg::msi_wt_pte_t'(mem_resp_i.r.data);
+    rv_iommu::msi_wt_pte_t msi_pte;
+    assign msi_pte = rv_iommu::msi_wt_pte_t'(mem_resp_i.r.data);
 
     // PTW states
     enum logic[2:0] {
@@ -122,9 +115,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
     // global mapping aux signal
     logic global_mapping_q, global_mapping_n;
     // to register PSCID to be updated
-    logic [PSCID_WIDTH-1:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
+    logic [19:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
     // to register GSCID to be updated
-    logic [GSCID_WIDTH-1:0]  iotlb_update_gscid_q, iotlb_update_gscid_n;
+    logic [15:0]  iotlb_update_gscid_q, iotlb_update_gscid_n;
     // to register the input GVA (VPNs). SV39x4 defines a 39 bit virtual address for first stage
     logic [riscv::VLEN-1:0] iova_q,   iova_n;
     // to register the final leaf GPA (GPPNs). SV39x4 defines a 41 bit GPA for second stage
@@ -215,7 +208,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
         end
     end
 
-    logic [(iommu_pkg::CAUSE_LEN-1):0] cause_q, cause_n;
+    logic [(rv_iommu::CAUSE_LEN-1):0] cause_q, cause_n;
 
     assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN-1:0] : gpaddr_q) : '0;
 
@@ -333,7 +326,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                         // MSI Address translation ( //? Exclude CDW translations? These should not trigger an MSI translation)
                         if (iova_is_imsic_addr) begin
-                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
+                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (rv_iommu::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
                             msi_translation_n = 1'b1;   // signal next cycle
                             ptw_lvl_n         = LVL3;
                             gptw_lvl_n        = LVL3;
@@ -355,7 +348,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                     // MSI Address translation may be invoked even if no stage is enabled
                     else if (iova_is_imsic_addr) begin
-                        ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i), 4'b0};
+                        ptw_pptr_n          = {msiptp_ppn_i, 12'b0} | {rv_iommu::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i), 4'b0};
                         msi_translation_n   = 1'b1;   // signal next cycle
                     end
 
@@ -406,7 +399,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                         // "If msipte.V == 0, then stop and report "MSI PTE not valid" (cause = 262)"
                         // This implementation will only support standard MSI PTE formats (msi_pte.c = 0)
                         if (!msi_pte.v || msi_pte.c) begin
-                            cause_n = iommu_pkg::MSI_PTE_INVALID;
+                            cause_n = rv_iommu::MSI_PTE_INVALID;
                             state_n = PROPAGATE_ERROR;
                         end
 
@@ -414,9 +407,9 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             update_o = 1'b1;
 
                             // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
-                            if (msi_pte.m != iommu_pkg::WRITE_THROUGH) begin
+                            if (msi_pte.m != rv_iommu::WRITE_THROUGH) begin
                                 update_o = 1'b0;
-                                cause_n = iommu_pkg::TRANS_TYPE_DISALLOWED;
+                                cause_n = rv_iommu::TRANS_TYPE_DISALLOWED;
                                 state_n = PROPAGATE_ERROR;
                             end
 
@@ -424,7 +417,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             // "stop and report "MSI PTE misconfigured" (cause = 263)."
                             if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2))begin
                                 update_o = 1'b0;
-                                cause_n = iommu_pkg::MSI_PTE_MISCONFIGURED;
+                                cause_n = rv_iommu::MSI_PTE_MISCONFIGURED;
                                 state_n = PROPAGATE_ERROR;
                             end
 
@@ -432,7 +425,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                             // "then stop and report Instruction access fault (cause = 1)."
                             if (is_rx_i) begin
                                 update_o = 1'b0;
-                                cause_n = iommu_pkg::INSTR_ACCESS_FAULT;
+                                cause_n = rv_iommu::INSTR_ACCESS_FAULT;
                                 state_n = PROPAGATE_ERROR;
                             end
 
@@ -489,7 +482,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                                         // GPA is an IMSIC address (even if Stage 2 is disabled)
                                         if (gpaddr_is_imsic_addr) begin
                                             state_n = WAIT_GRANT;
-                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {iommu_pkg::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
+                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {rv_iommu::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
                                             ptw_lvl_n = LVL3;
                                             gptw_lvl_n = LVL3;
@@ -662,7 +655,7 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
 
                     // Check for AXI errors
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
-                        cause_n = iommu_pkg::PT_DATA_CORRUPTION;
+                        cause_n = rv_iommu::PT_DATA_CORRUPTION;
                         state_n = PROPAGATE_ERROR;
 
                         update_o = 1'b0;
@@ -681,12 +674,12 @@ module iommu_ptw_sv39x4 import ariane_pkg::*; #(
                 if (page_fault_q) begin
                     if (ptw_stage_q != STAGE_1) begin
                         ptw_error_stage2_o   = 1'b1;
-                        if (is_store_i) cause_code_o = iommu_pkg::STORE_GUEST_PAGE_FAULT;
-                        else            cause_code_o = iommu_pkg::LOAD_GUEST_PAGE_FAULT;
+                        if (is_store_i) cause_code_o = rv_iommu::STORE_GUEST_PAGE_FAULT;
+                        else            cause_code_o = rv_iommu::LOAD_GUEST_PAGE_FAULT;
                     end
                     else begin
-                        if (is_store_i) cause_code_o = iommu_pkg::STORE_PAGE_FAULT;
-                        else            cause_code_o = iommu_pkg::LOAD_PAGE_FAULT;
+                        if (is_store_i) cause_code_o = rv_iommu::STORE_PAGE_FAULT;
+                        else            cause_code_o = rv_iommu::LOAD_PAGE_FAULT;
                     end
                 end
                 else cause_code_o = cause_q;

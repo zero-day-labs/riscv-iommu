@@ -33,10 +33,7 @@
 
 /* verilator lint_off WIDTH */
 
-module fq_handler import ariane_pkg::*; #(
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20
-) (
+module fq_handler (
     input  logic clk_i,
     input  logic rst_ni,
 
@@ -66,13 +63,13 @@ module fq_handler import ariane_pkg::*; #(
 
     // Event data
     input  logic                                event_valid_i,      // a fault/event has occurred
-    input  logic [iommu_pkg::TTYP_LEN-1:0]      trans_type_i,       // transaction type
-    input  logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code_i,       // Fault code as defined by IOMMU and Priv Spec
+    input  logic [rv_iommu::TTYP_LEN-1:0]      trans_type_i,       // transaction type
+    input  logic [(rv_iommu::CAUSE_LEN-1):0]   cause_code_i,       // Fault code as defined by IOMMU and Priv Spec
     input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
     input  logic [riscv::SVX-1:0]               gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
-    input  logic [DEVICE_ID_WIDTH-1:0]          did_i,              // device_id associated with the transaction
+    input  logic [23:0]                         did_i,              // device_id associated with the transaction
     input  logic                                pv_i,               // to indicate if transaction has a valid process_id
-    input  logic [PROCESS_ID_WIDTH-1:0]         pid_i,              // process_id associated with the transaction
+    input  logic [19:0]                         pid_i,              // process_id associated with the transaction
     input  logic                                is_supervisor_i,    // indicate if transaction has supervisor privilege (only if pid valid)
     input  logic                                is_guest_pf_i,      // indicate if event is a guest page fault
     input  logic                                is_implicit_i,      // Guest page fault caused by implicit access for 1st-stage addr translation
@@ -121,7 +118,7 @@ module fq_handler import ariane_pkg::*; #(
     assign  error_vector    = (fq_mf_i | fq_of_i);
 
     // FQ Record register to save event data
-    iommu_pkg::fq_record_t fq_entry_q, fq_entry_n;
+    rv_iommu::fq_record_t fq_entry_q, fq_entry_n;
 
     // Counter to send all four FQ record DWs
     logic [1:0] wr_cnt_q, wr_cnt_n;
@@ -132,16 +129,16 @@ module fq_handler import ariane_pkg::*; #(
     logic is_empty;
 
     // Wires to connect FIFO output
-    logic [iommu_pkg::TTYP_LEN-1:0]      trans_type;   
-    logic [(iommu_pkg::CAUSE_LEN-1):0]   cause_code;   
-    logic [riscv::VLEN-1:0]              iova;         
-    logic [riscv::SVX-1:0]               gpaddr;       
-    logic [DEVICE_ID_WIDTH-1:0]          did;          
-    logic                                pv;           
-    logic [PROCESS_ID_WIDTH-1:0]         pid;          
-    logic                                is_supervisor;
-    logic                                is_guest_pf;  
-    logic                                is_implicit;  
+    logic [rv_iommu::TTYP_LEN-1:0]      trans_type;   
+    logic [(rv_iommu::CAUSE_LEN-1):0]   cause_code;   
+    logic [riscv::VLEN-1:0]             iova;         
+    logic [riscv::SVX-1:0]              gpaddr;       
+    logic [23:0]                        did;          
+    logic                               pv;           
+    logic [19:0]                        pid;          
+    logic                               is_supervisor;
+    logic                               is_guest_pf;  
+    logic                               is_implicit;  
 
     // NOTE:    data is pushed into the FIFO when event_valid_i is set. Thus, this signal must be set 
     //          only one cycle after a fault/event occurred. Since it is directly driven by AXVALID, the
@@ -149,7 +146,7 @@ module fq_handler import ariane_pkg::*; #(
     fifo_v3 #(
         .FALL_THROUGH   (1),
         .DEPTH          (4),
-        .DATA_WIDTH     (iommu_pkg::TTYP_LEN + iommu_pkg::CAUSE_LEN + riscv::VLEN + riscv::SVX + DEVICE_ID_WIDTH + PROCESS_ID_WIDTH + 4)
+        .DATA_WIDTH     (rv_iommu::TTYP_LEN + rv_iommu::CAUSE_LEN + riscv::VLEN + riscv::SVX + 16 + 20 + 4)
     ) i_fifo_fq (
         .clk_i      ( clk_i           ),
         .rst_ni     ( rst_ni          ),
@@ -261,13 +258,13 @@ module fq_handler import ariane_pkg::*; #(
 
                         // If TTYP = 0 or fault occurred due to a PCIe Msg Request, nothing is reported in iotval/iotval2
                         // The DID, PV, PID, and PRIV fields are 0 if TTYP is 0
-                        if (trans_type != iommu_pkg::NONE) begin
+                        if (trans_type != rv_iommu::NONE) begin
                             fq_entry_n.did      = did;
                             fq_entry_n.pid      = (pv) ? (pid) : ('0);
                             fq_entry_n.priv     = pv & is_supervisor;
                             fq_entry_n.pv       = pv;
 
-                            if (trans_type != iommu_pkg::PCIE_MSG_REQ)
+                            if (trans_type != rv_iommu::PCIE_MSG_REQ)
                                 fq_entry_n.iotval   = iova;
                         end
 

@@ -101,12 +101,12 @@ module iommu_hpm #(
             pscid_match[i]  = (pscid_i == iohpmevt_i[i].pid_pscid.q);
 
             // Parse eventID
-            if (((iohpmevt_i[i].eventid.q == iommu_pkg::UT_REQ) && tr_request_i     ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::IOTLB_MISS) && iotlb_miss_i ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::DDTW) && ddt_walk_i         ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::PDTW) && pdt_walk_i         ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::S1_PTW) && s1_ptw_i         ) ||
-                ((iohpmevt_i[i].eventid.q == iommu_pkg::S2_PTW) && s2_ptw_i         )
+            if (((iohpmevt_i[i].eventid.q == rv_iommu::UT_REQ) && tr_request_i     ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::IOTLB_MISS) && iotlb_miss_i ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::DDTW) && ddt_walk_i         ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::PDTW) && pdt_walk_i         ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::S1_PTW) && s1_ptw_i         ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::S2_PTW) && s2_ptw_i         )
             ) begin
                 
                 // ID filtering

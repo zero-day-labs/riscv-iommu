@@ -17,8 +17,7 @@
 //              Fully-associative cache to store Device Contexts in extended format.
 
 module iommu_ddtc import ariane_pkg::*; #(
-    parameter int unsigned DDTC_ENTRIES = 4,
-    parameter int unsigned DEVICE_ID_WIDTH  = 24
+    parameter int unsigned DDTC_ENTRIES = 4
 )(
     input  logic                    clk_i,            // Clock
     input  logic                    rst_ni,           // Asynchronous reset active low
@@ -26,30 +25,30 @@ module iommu_ddtc import ariane_pkg::*; #(
     // Flush signals
     input  logic                        flush_i,        // IODIR.INVAL_DDT
     input  logic                        flush_dv_i,     // device_id valid
-    input  logic [DEVICE_ID_WIDTH-1:0]  flush_did_i,    // device_id to be flushed
+    input  logic [23:0]                 flush_did_i,    // device_id to be flushed
 
     // Update signals
     input  logic                        update_i,       // update flag
-    input  logic [DEVICE_ID_WIDTH-1:0]  up_did_i,       // device ID to be inserted
-    input iommu_pkg::dc_ext_t           up_content_i,   // DC to be inserted
+    input  logic [23:0]                 up_did_i,       // device ID to be inserted
+    input rv_iommu::dc_ext_t            up_content_i,   // DC to be inserted
 
     // Lookup signals
     input  logic                        lookup_i,       // lookup flag
-    input  logic [DEVICE_ID_WIDTH-1:0]  lu_did_i,       // device_id to look for 
-    output iommu_pkg::dc_ext_t          lu_content_o,   // DC
+    input  logic [23:0]                 lu_did_i,       // device_id to look for 
+    output rv_iommu::dc_ext_t           lu_content_o,   // DC
     output logic                        lu_hit_o        // hit flag
 );
 
     //* Tags to identify DDTC entries
     // 24-bits device_id may be divided into up to three levels
     struct packed {
-        logic [DEVICE_ID_WIDTH-1:0] device_id;  // device_id 
-        logic                       valid;      // valid bit
+        logic [23:0]    device_id;  // device_id 
+        logic           valid;      // valid bit
     } [DDTC_ENTRIES-1:0] tags_q, tags_n;
 
     //* DDTC entries: Device Contexts
     struct packed {
-        iommu_pkg::dc_ext_t dc;
+        rv_iommu::dc_ext_t dc;
     } [DDTC_ENTRIES-1:0] content_q, content_n;
 
     logic [DDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
@@ -233,8 +232,6 @@ module iommu_ddtc import ariane_pkg::*; #(
     initial begin : p_assertions
         assert ((DDTC_ENTRIES % 2 == 0) && (DDTC_ENTRIES > 1))
         else begin $error("DDTC size must be a multiple of 2 and greater than 1"); $stop(); end
-        assert ((DEVICE_ID_WIDTH == 24) || (DEVICE_ID_WIDTH == 15) || (DEVICE_ID_WIDTH == 6))
-        else begin $error("device_id can be only 6, 15 or 24 bits wide"); $stop(); end
     end
 
     // Just for checking

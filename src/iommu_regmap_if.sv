@@ -22,26 +22,24 @@
 
 module iommu_regmap_if #(
     /// The width of the address.
-    parameter int           ADDR_WIDTH = -1,
+    parameter int               ADDR_WIDTH = -1,
     /// The width of the data.
-    parameter int           DATA_WIDTH = -1,
+    parameter int               DATA_WIDTH = -1,
     /// AXI ID width
-    parameter int           ID_WIDTH  = -1,
+    parameter int               ID_WIDTH  = -1,
     /// AXI user width
-    parameter int           USER_WIDTH  = 1,
+    parameter int               USER_WIDTH  = 1,
 
     /// Whether the AXI-Lite W channel should be decoupled with a register. This
     /// can help break long paths at the expense of registers.
-    parameter bit           DECOUPLE_W = 1,
+    parameter bit               DECOUPLE_W = 1,
 
-    // Include IOMMU WSI generation support
-    parameter bit           InclWSI_IG = 1,
-    // Include IOMMU MSI generation support
-    parameter bit           InclMSI_IG = 0,
+    // Interrupt Generation Support
+    parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
-    parameter int unsigned  N_INT_VEC = 16,
+    parameter int unsigned      N_INT_VEC = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned  N_IOHPMCTR = 0, // max 31
+    parameter int unsigned      N_IOHPMCTR = 0, // max 31
     /// AXI Full request struct type
     parameter type  axi_req_t = logic,
     /// AXI Full response struct type
@@ -102,8 +100,7 @@ module iommu_regmap_if #(
     iommu_regmap_wrapper #(
         .ADDR_WIDTH (ADDR_WIDTH ),
         .DATA_WIDTH (DATA_WIDTH ),
-        .InclWSI_IG (InclWSI_IG ),
-        .InclMSI_IG (InclMSI_IG ),
+        .IGS        (IGS        ),
         .N_INT_VEC  (N_INT_VEC  ),
         .N_IOHPMCTR (N_IOHPMCTR ),
         .reg_req_t  (reg_req_t  ),

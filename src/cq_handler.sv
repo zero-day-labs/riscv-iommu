@@ -19,12 +19,7 @@
 
 /* verilator lint_off WIDTH */
 
-module cq_handler import ariane_pkg::*; #(
-    parameter int unsigned DEVICE_ID_WIDTH = 24,
-    parameter int unsigned PROCESS_ID_WIDTH  = 20,
-    parameter int unsigned PSCID_WIDTH = 20,
-    parameter int unsigned GSCID_WIDTH = 16
-) (
+module cq_handler (
     input  logic clk_i,
     input  logic rst_ni,
 
@@ -61,12 +56,12 @@ module cq_handler import ariane_pkg::*; #(
     // DDTC Invalidation
     output logic                        flush_ddtc_o,   // Flush DDTC
     output logic                        flush_dv_o,     // Indicates if device_id is valid
-    output logic [DEVICE_ID_WIDTH-1:0]  flush_did_o,    // device_id to tag entries to be flushed
+    output logic [23:0]                 flush_did_o,    // device_id to tag entries to be flushed
 
     // PDTC Invalidation
     output logic                        flush_pdtc_o,   // Flush PDTC
     output logic                        flush_pv_o,     // This is used to difference between IODIR.INVAL_DDT and IODIR.INVAL_PDT
-    output logic [PROCESS_ID_WIDTH-1:0] flush_pid_o,    // process_id to be flushed if PV = 1
+    output logic [19:0]                 flush_pid_o,    // process_id to be flushed if PV = 1
 
     // IOTLB Invalidation
     output logic                        flush_vma_o,    // Flush first-stage PTEs cached entries in IOTLB
@@ -75,8 +70,8 @@ module cq_handler import ariane_pkg::*; #(
     output logic                        flush_gv_o,     // GSCID valid
     output logic                        flush_pscv_o,   // PSCID valid
     output logic [riscv::GPPNW-1:0]     flush_vpn_o,    // IOVA to tag entries to be flushed
-    output logic [GSCID_WIDTH-1:0]      flush_gscid_o,  // GSCID (Guest physical address space identifier) to tag entries to be flushed
-    output logic [PSCID_WIDTH-1:0]      flush_pscid_o,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+    output logic [15:0]                 flush_gscid_o,  // GSCID (Guest physical address space identifier) to tag entries to be flushed
+    output logic [19:0]                 flush_pscid_o,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
     // Memory Bus
     input  ariane_axi_soc::resp_t   mem_resp_i,
@@ -129,15 +124,15 @@ module cq_handler import ariane_pkg::*; #(
     logic [127:0]   cmd_q, cmd_n;
 
     // Cast read bus to receive CQ entries from memory
-    iommu_pkg::cq_entry_t       cq_entry;
-    iommu_pkg::cq_iotinval_t    cmd_iotinval;
-    iommu_pkg::cq_iofence_t     cmd_iofence;
-    iommu_pkg::cq_iodirinval_t  cmd_iodirinval;
+    rv_iommu::cq_entry_t       cq_entry;
+    rv_iommu::cq_iotinval_t    cmd_iotinval;
+    rv_iommu::cq_iofence_t     cmd_iofence;
+    rv_iommu::cq_iodirinval_t  cmd_iodirinval;
 
-    assign cq_entry         = iommu_pkg::cq_entry_t'(cmd_q);
-    assign cmd_iotinval     = iommu_pkg::cq_iotinval_t'(cmd_q);
-    assign cmd_iofence      = iommu_pkg::cq_iofence_t'(cmd_q);
-    assign cmd_iodirinval   = iommu_pkg::cq_iodirinval_t'(cmd_q);
+    assign cq_entry         = rv_iommu::cq_entry_t'(cmd_q);
+    assign cmd_iotinval     = rv_iommu::cq_iotinval_t'(cmd_q);
+    assign cmd_iofence      = rv_iommu::cq_iofence_t'(cmd_q);
+    assign cmd_iodirinval   = rv_iommu::cq_iodirinval_t'(cmd_q);
 
 
     //# Combinational Logic
@@ -343,7 +338,7 @@ module cq_handler import ariane_pkg::*; #(
                         IOTINVAL.GVMA ensures that previous stores made to the second-stage page tables are observed
                         before all subsequent implicit reads from IOMMU to the corresponding second-stage page tables.
                     */
-                    iommu_pkg::IOTINVAL: begin
+                    rv_iommu::IOTINVAL: begin
 
                         flush_av_o      = cmd_iotinval.av;
                         flush_gv_o      = cmd_iotinval.gv;
@@ -355,7 +350,7 @@ module cq_handler import ariane_pkg::*; #(
                         // "Setting PSCV to 1 with IOTINVAL.GVMA is illegal"
                         if ((|cmd_iotinval.reserved_1) || (|cmd_iotinval.reserved_2) || 
                             (|cmd_iotinval.reserved_3) || (|cmd_iotinval.reserved_4) ||
-                            (cmd_iotinval.func3 == iommu_pkg::GVMA && cmd_iotinval.pscv)) begin
+                            (cmd_iotinval.func3 == rv_iommu::GVMA && cmd_iotinval.pscv)) begin
                             
                             cmd_ill_o       = 1'b1;
                             error_wen_o     = 1'b1;
@@ -363,12 +358,12 @@ module cq_handler import ariane_pkg::*; #(
                         end
 
                         // Check func3 to determine if command is VMA or GVMA
-                        else if (cmd_iotinval.func3 == iommu_pkg::VMA) begin
+                        else if (cmd_iotinval.func3 == rv_iommu::VMA) begin
                             flush_vma_o     = 1'b1;
                             flush_pscv_o    = cmd_iotinval.pscv;
                         end
 
-                        else if (cmd_iotinval.func3 == iommu_pkg::GVMA) begin
+                        else if (cmd_iotinval.func3 == rv_iommu::GVMA) begin
                             flush_gvma_o    = 1'b1;
                         end
 
@@ -379,7 +374,7 @@ module cq_handler import ariane_pkg::*; #(
                         command in the CQ, guarantees that all previous commands fetched from the CQ have been
                         completed and committed.
                     */
-                    iommu_pkg::IOFENCE: begin
+                    rv_iommu::IOFENCE: begin
                         /*
                             INFO:
                             I think this command makes sense when implementing ATS commands, or any other command that
@@ -423,7 +418,7 @@ module cq_handler import ariane_pkg::*; #(
                         IODIR.INVAL_PDT guarantees that any previous stores made by a RISC-V hart to the PDT are observed
                         before all subsequent implicit reads from IOMMU to PDT.
                     */
-                    iommu_pkg::IODIR: begin
+                    rv_iommu::IODIR: begin
 
                         flush_dv_o  = cmd_iodirinval.dv;
                         flush_did_o = cmd_iodirinval.did;
@@ -432,8 +427,8 @@ module cq_handler import ariane_pkg::*; #(
                         // "PID operand is reserved for IODIR.INVAL_PDT"
                         if ((|cmd_iodirinval.reserved_1) || (|cmd_iodirinval.reserved_2)    || 
                             (|cmd_iodirinval.reserved_3) || (|cmd_iodirinval.reserved_4)    ||
-                            (cmd_iodirinval.func3 == iommu_pkg::DDT && |cmd_iodirinval.pid) ||
-                            (cmd_iodirinval.func3 == iommu_pkg::PDT && !cmd_iodirinval.dv)  ) begin
+                            (cmd_iodirinval.func3 == rv_iommu::DDT && |cmd_iodirinval.pid) ||
+                            (cmd_iodirinval.func3 == rv_iommu::PDT && !cmd_iodirinval.dv)  ) begin
                             
                             cmd_ill_o   = 1'b1;
                             error_wen_o = 1'b1;
@@ -441,19 +436,19 @@ module cq_handler import ariane_pkg::*; #(
                         end
 
                         // Check func3 to determine if command is INVAL_DDT or INVAL_PDT
-                        else if (cmd_iodirinval.func3 == iommu_pkg::DDT) begin
+                        else if (cmd_iodirinval.func3 == rv_iommu::DDT) begin
                             flush_ddtc_o    = 1'b1;
                             flush_pdtc_o    = 1'b1;
                         end
 
-                        else if (cmd_iodirinval.func3 == iommu_pkg::PDT) begin
+                        else if (cmd_iodirinval.func3 == rv_iommu::PDT) begin
                             flush_pdtc_o    = 1'b1;
                             flush_pv_o      = 1'b1;
                             flush_pid_o     = cmd_iodirinval.pid;
                         end
                     end
 
-                    iommu_pkg::ATS: begin
+                    rv_iommu::ATS: begin
                         // TODO: Future Work
                     end
 

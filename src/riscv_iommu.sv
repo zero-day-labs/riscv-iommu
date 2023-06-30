@@ -28,21 +28,15 @@ module riscv_iommu #(
     parameter int unsigned  IOTLB_ENTRIES       = 4,
     parameter int unsigned  DDTC_ENTRIES        = 4,
     parameter int unsigned  PDTC_ENTRIES        = 4,
-    parameter int unsigned  DEVICE_ID_WIDTH     = 24,
-    parameter int unsigned  PROCESS_ID_WIDTH    = 20,
-    parameter int unsigned  PSCID_WIDTH         = 20,
-    parameter int unsigned  GSCID_WIDTH         = 16,
 
     // Include process_id
-    parameter bit           InclPID             = 0,
-    // Include IOMMU WSI generation support
-    parameter bit           InclWSI_IG          = 1,
-    // Include IOMMU MSI generation support
-    parameter bit           InclMSI_IG          = 0,
+    parameter bit               InclPID             = 0,
+    // Interrupt Generation Support
+    parameter rv_iommu::igs_t   IGS                 = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
-    parameter int unsigned  N_INT_VEC           = 16,
+    parameter int unsigned      N_INT_VEC           = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned  N_IOHPMCTR          = 0,     // max 31
+    parameter int unsigned      N_IOHPMCTR          = 0,     // max 31
 
     /// AXI Bus Addr width.
     parameter int   ADDR_WIDTH      = -1,
@@ -110,8 +104,8 @@ module riscv_iommu #(
 
     // Transaction request parameters, selected from AW or AR
     logic [riscv::VLEN-1:0]         iova;
-    logic [DEVICE_ID_WIDTH-1:0]     device_id;
-    logic [iommu_pkg::TTYP_LEN-1:0] trans_type;
+    logic [23:0]                    device_id;
+    logic [rv_iommu::TTYP_LEN-1:0] trans_type;
     // AxBURST
     axi_pkg::burst_t                burst_type;
     // AxLEN
@@ -128,8 +122,8 @@ module riscv_iommu #(
     logic                           pdt_walk;
     logic                           s1_ptw;
     logic                           s2_ptw;
-    logic [GSCID_WIDTH-1:0]         gscid;
-    logic [PSCID_WIDTH-1:0]         pscid;
+    logic [15:0]                    gscid;
+    logic [19:0]                    pscid;
 
     // Boundary violation
     logic                           bound_violation;
@@ -292,7 +286,7 @@ module riscv_iommu #(
     assign axi_aux_req.r_ready                  = dev_tr_req_i.r_ready;
 
     //# WSI Interrupt Generation
-    if (InclWSI_IG) begin : gen_wsi_ig_support
+    if ((IGS == rv_iommu::WSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_wsi_ig_support
         
         iommu_wsi_ig #(
             .N_INT_VEC      (N_INT_VEC  ),
@@ -321,13 +315,9 @@ module riscv_iommu #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES      ),
         .DDTC_ENTRIES       (DDTC_ENTRIES       ),
         .PDTC_ENTRIES       (PDTC_ENTRIES       ),
-        .DEVICE_ID_WIDTH    (DEVICE_ID_WIDTH    ),
-        .PROCESS_ID_WIDTH   (PROCESS_ID_WIDTH   ),
-        .PSCID_WIDTH        (PSCID_WIDTH        ),
-        .GSCID_WIDTH        (GSCID_WIDTH        ),
         .N_INT_VEC          (N_INT_VEC          ),
         .InclPID            (InclPID            ),
-        .InclMSI_IG         (InclMSI_IG         )
+        .IGS                (IGS                )
     ) i_translation_wrapper (
         .clk_i          (clk_i  ),
         .rst_ni         (rst_ni ),
@@ -427,8 +417,7 @@ module riscv_iommu #(
         .ID_WIDTH       (ID_SLV_WIDTH  ),
         .USER_WIDTH     (USER_WIDTH    ),
         .DECOUPLE_W     (1             ), // Channel W is decoupled with registers
-        .InclWSI_IG     (InclWSI_IG    ),
-        .InclMSI_IG     (InclMSI_IG    ),
+        .IGS            (IGS           ),
         .N_INT_VEC      (N_INT_VEC     ),
         .N_IOHPMCTR     (N_IOHPMCTR    ),
         .axi_req_t      (axi_req_slv_t ),
@@ -504,7 +493,7 @@ module riscv_iommu #(
         aw_request      = 1'b0;
         iova            = '0;
         device_id       = '0;
-        trans_type      = iommu_pkg::NONE;
+        trans_type      = rv_iommu::NONE;
         burst_type      = '0;
         burst_length    = '0;
         n_bytes         = '0;
@@ -516,7 +505,7 @@ module riscv_iommu #(
             iova            =  dev_tr_req_i.ar.addr;
             device_id       =  dev_tr_req_i.ar.id;
             // ARPROT[2] indicates data access (r) when LOW, instruction access (rx) when HIGH
-            trans_type      = (dev_tr_req_i.ar.prot[2]) ? (iommu_pkg::UNTRANSLATED_RX) : (iommu_pkg::UNTRANSLATED_R);
+            trans_type      = (dev_tr_req_i.ar.prot[2]) ? (rv_iommu::UNTRANSLATED_RX) : (rv_iommu::UNTRANSLATED_R);
             burst_type      =  dev_tr_req_i.ar.burst;
             burst_length    =  dev_tr_req_i.ar.len;
             n_bytes         =  dev_tr_req_i.ar.size;
@@ -529,7 +518,7 @@ module riscv_iommu #(
 
             iova            = dev_tr_req_i.aw.addr;
             device_id       = dev_tr_req_i.aw.id;
-            trans_type      = iommu_pkg::UNTRANSLATED_W;
+            trans_type      = rv_iommu::UNTRANSLATED_W;
             burst_type      = dev_tr_req_i.aw.burst;
             burst_length    = dev_tr_req_i.aw.len;
             n_bytes         = dev_tr_req_i.aw.size;
@@ -669,7 +658,7 @@ module riscv_iommu #(
     `ifndef VERILATOR
 
     initial begin : p_assertions
-        assert ((InclMSI_IG) || (InclWSI_IG))
+        assert ((IGS == rv_iommu::WSI_ONLY) || (IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH))
         else begin $error("RISC-V IOMMU: At least one Interrupt Generation method must be supported (WSI/MSI)."); $stop(); end
 
         assert ((ADDR_WIDTH >= 1) && (DATA_WIDTH >= 1) && (ID_WIDTH >= 1) && (ID_SLV_WIDTH >= 1) && (USER_WIDTH >= 1))
