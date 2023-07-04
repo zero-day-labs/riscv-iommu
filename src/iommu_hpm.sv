@@ -54,7 +54,7 @@ module iommu_hpm #(
 
     // ID filters
     input  logic [23:0]                 did_i,      // device_id associated with event
-    input  logic [19:0]                 pid_i,      // process_id associated with event
+    input  logic [19:0]                 pid_i,      // process_id associated with event // TODO: Set optional ?
     input  logic [19:0]                 pscid_i,    // PSCID 
     input  logic [15:0]                 gscid_i,    // GSCID
     input  logic                        pid_v_i,    // process_id is valid
@@ -74,6 +74,15 @@ module iommu_hpm #(
     output logic hpm_ip_o
 );
 
+    typedef enum logic[2:0] {
+      UT_REQ,
+      IOTLB_MISS,
+      DDTW,
+      PDTW,
+      S1_PTW,
+      S2_PTW
+    } hpm_events;
+
     // To signal event counters increment
     logic [N_IOHPMCTR-1:0]  increment_ctr;
 
@@ -87,6 +96,26 @@ module iommu_hpm #(
     logic [N_IOHPMCTR:0]    hpm_ip;
     assign                  hpm_ip_o    = |hpm_ip;
 
+    // Edge detection
+    logic [5:0] event_vector;
+    logic [5:0] edged_event_q, edged_event_n;
+    logic [5:0] count_q, count_n;
+    assign event_vector = { 
+        s2_ptw_i,
+        s1_ptw_i,
+        pdt_walk_i,
+        ddt_walk_i,
+        iotlb_miss_i,
+        tr_request_i
+    };
+
+    // TODO: Change to FIFO. We must consider the possibility of having multiple events simultaneously
+    logic [23:0] did_q, did_n;
+    logic [19:0] pid_q, pid_n;
+    logic [19:0] pscid_q, pscid_n;
+    logic [15:0] gscid_q, gscid_n;
+    logic        pid_v_q, pid_v_n;
+
     // Event and ID matching logic
     always_comb begin : event_logic
 
@@ -95,18 +124,18 @@ module iommu_hpm #(
             increment_ctr[i] = 1'b0;
 
             // ID matching
-            did_match[i]    = (did_i == iohpmevt_i[i].did_gscid.q);
-            pid_match[i]    = ((pid_i == iohpmevt_i[i].pid_pscid.q) & pid_v_i);
-            gscid_match[i]  = (gscid_i == iohpmevt_i[i].did_gscid.q[15:0]);
-            pscid_match[i]  = (pscid_i == iohpmevt_i[i].pid_pscid.q);
+            did_match[i]    = (did_q == iohpmevt_i[i].did_gscid.q);
+            pid_match[i]    = ((pid_q == iohpmevt_i[i].pid_pscid.q) & pid_v_q);
+            gscid_match[i]  = (gscid_q == iohpmevt_i[i].did_gscid.q[15:0]);
+            pscid_match[i]  = (pscid_q == iohpmevt_i[i].pid_pscid.q);
 
             // Parse eventID
-            if (((iohpmevt_i[i].eventid.q == rv_iommu::UT_REQ) && tr_request_i     ) ||
-                ((iohpmevt_i[i].eventid.q == rv_iommu::IOTLB_MISS) && iotlb_miss_i ) ||
-                ((iohpmevt_i[i].eventid.q == rv_iommu::DDTW) && ddt_walk_i         ) ||
-                ((iohpmevt_i[i].eventid.q == rv_iommu::PDTW) && pdt_walk_i         ) ||
-                ((iohpmevt_i[i].eventid.q == rv_iommu::S1_PTW) && s1_ptw_i         ) ||
-                ((iohpmevt_i[i].eventid.q == rv_iommu::S2_PTW) && s2_ptw_i         )
+            if (((iohpmevt_i[i].eventid.q == rv_iommu::UT_REQ)      &&   count_q[UT_REQ]    ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::IOTLB_MISS)  &&   count_q[IOTLB_MISS]) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::DDTW)        &&   count_q[DDTW]      ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::PDTW)        &&   count_q[PDTW]      ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::S1_PTW)      &&   count_q[S1_PTW]    ) ||
+                ((iohpmevt_i[i].eventid.q == rv_iommu::S2_PTW)      &&   count_q[S2_PTW]    )
             ) begin
                 
                 // ID filtering
@@ -129,7 +158,7 @@ module iommu_hpm #(
 
                                     // Increment if bits [23:(k+1)] match
                                     // If k = 23, match always occurs
-                                    increment_ctr[i] = ((did_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
+                                    increment_ctr[i] = ((did_q >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
                                     break;
                                 end
                             end
@@ -151,7 +180,7 @@ module iommu_hpm #(
                                 if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                     // Increment if bits [23:(k+1)] match
-                                    increment_ctr[i] = ((did_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
+                                    increment_ctr[i] = ((did_q >> (k+1)) == (iohpmevt_i[i].did_gscid.q >> (k+1)));
                                     break;
                                 end
                             end
@@ -164,7 +193,7 @@ module iommu_hpm #(
 
                     // PSCID filtering
                     3'b101: begin
-                        if (iotlb_miss_i || s1_ptw_i || s2_ptw_i)
+                        if (count_q[IOTLB_MISS] || count_q[S1_PTW] || count_q[S2_PTW])
                             increment_ctr[i] = pscid_match[i];
                         else
                             // PSCID is not known for other events at the moment of happening.
@@ -176,7 +205,7 @@ module iommu_hpm #(
                     3'b110: begin
                         
                         // GSCID is not known for other events at the moment of happening.
-                        if (iotlb_miss_i || s1_ptw_i || s2_ptw_i || pdt_walk_i) begin
+                        if (count_q[IOTLB_MISS] || count_q[S1_PTW] || count_q[S2_PTW] || count_q[PDTW]) begin
 
                             // DID_GSCID partial matching
                             if (iohpmevt_i[i].dmask.q) begin
@@ -186,7 +215,7 @@ module iommu_hpm #(
                                     if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                         // Increment if bits [15:(k+1)] match
-                                        increment_ctr[i] = ((gscid_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
+                                        increment_ctr[i] = ((gscid_q >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
                                         break;
                                     end
                                 end
@@ -207,7 +236,7 @@ module iommu_hpm #(
                     3'b111: begin
 
                         // PSCID is not known for other events.
-                        if (iotlb_miss_i || s1_ptw_i || s2_ptw_i) begin
+                        if (count_q[IOTLB_MISS] || count_q[S1_PTW] || count_q[S2_PTW]) begin
                         
                             // DID_GSCID partial matching (if PID_PSCID matches)
                             if (iohpmevt_i[i].dmask.q & pscid_match[i]) begin
@@ -217,7 +246,7 @@ module iommu_hpm #(
                                     if (!iohpmevt_i[i].did_gscid.q[k]) begin
 
                                         // Increment if bits [15:(k+1)] match
-                                        increment_ctr[i] = ((gscid_i >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
+                                        increment_ctr[i] = ((gscid_q >> (k+1)) == (iohpmevt_i[i].did_gscid.q[15:0] >> (k+1)));
                                         break;
                                     end
                                 end
@@ -268,17 +297,74 @@ module iommu_hpm #(
             iohpmevt_o[j].of.d          = 1'b1;
             
             // Increment event counter
-            if (increment_ctr[j]) begin
+            if ((increment_ctr[j]) && (~iocountinh_i.hpm.q[j])) begin
                 
                 iohpmctr_o[j].counter.de    = 1'b1;
 
                 // enable OF setting when counter enabled, counter == '1 (will overflow) and event occurs
-                iohpmevt_o[j].of.de         = (~iocountinh_i.hpm.q[j]) & (&iohpmctr_i[j].counter.q);
+                iohpmevt_o[j].of.de         = (&iohpmctr_i[j].counter.q);
 
                 // also set ipsr.pmip if the corresponding OF bit is clear
-                hpm_ip[j+1]                 = (~iocountinh_i.hpm.q[j]) & (&iohpmctr_i[j].counter.q) & (!iohpmevt_i[j].of.q);
+                hpm_ip[j+1]                 = (&iohpmctr_i[j].counter.q) & (!iohpmevt_i[j].of.q);
             end
         end
+    end
+
+    always_comb begin : edge_detection
+
+        // Default
+        edged_event_n   = edged_event_q;
+        count_n         = count_q;
+
+        for (int unsigned i = 0; i < 6; i++) begin
+
+            if (event_vector[i] && !edged_event_q[i]) begin
+                edged_event_n[i]    = 1'b1;
+                count_n[i]          = 1'b1;
+
+                //? One register per counter? Too much expensive...
+                did_n               = did_i;
+                pid_n               = pid_i;
+                pscid_n             = pscid_i;
+                gscid_n             = gscid_i;
+                pid_v_n             = pid_v_i;
+            end
+
+            if (event_vector[i] && edged_event_q[i])
+                count_n[i]          = 1'b0;
+
+            if (!event_vector[i] && edged_event_q[i]) begin
+                edged_event_n[i]    = 1'b0;
+                count_n[i]          = 1'b0;
+            end
+        end
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+
+        if (~rst_ni) begin
+            // reset
+            edged_event_q   <= '0;
+            count_q         <= '0;
+
+            did_q           <= '0;
+            pid_q           <= '0;
+            pscid_q         <= '0;
+            gscid_q         <= '0;
+            pid_v_q         <= '0;
+        end
+
+        else begin
+            edged_event_q   <= edged_event_n;
+            count_q         <= count_n;
+
+            did_q           <= did_n;
+            pid_q           <= pid_n;
+            pscid_q         <= pscid_n;
+            gscid_q         <= gscid_n;
+            pid_v_q         <= pid_v_n;
+        end
+        
     end
 
 endmodule

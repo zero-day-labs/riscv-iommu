@@ -17,9 +17,9 @@
 
 module iommu_wsi_ig #(
     // Number of supported interrupt vectors
-    parameter int unsigned N_INT_VEC = 16,
+    parameter int unsigned N_INT_VEC    = 16,
     // Number of interrupt sources
-    parameter int unsigned N_SOURCES = 3,
+    parameter int unsigned N_INT_SRCS   = 3,
     
     // DO NOT MODIFY
     parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
@@ -29,25 +29,27 @@ module iommu_wsi_ig #(
     input  logic        wsi_en_i,
 
     // Interrupt pending bits
-    input  logic [(N_SOURCES-1):0]      intp_i,
+    input  logic [(N_INT_SRCS-1):0]  intp_i,
 
     // Interrupt vectors
-    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_SOURCES],
+    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_INT_SRCS],
 
     // interrupt wires
     output logic [(N_INT_VEC-1):0]      wsi_wires_o
 );
 
+    logic [(N_INT_VEC-1):0]      aux;
+
     always_comb begin : wsi_support
             
         /* verilator lint_off WIDTH */
+        wsi_wires_o = '0;
+
         // If WSI generation supported and enabled
         if (wsi_en_i) begin
 
-            for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-                for (int unsigned j = 0; j < N_SOURCES; j++) begin
-                    wsi_wires_o[i] = (intp_i[j] & (intv_i[j] == rv_iommu::icvec_vals[i]));
-                end
+            for (int unsigned i = 0; i < N_INT_SRCS; i++) begin
+                wsi_wires_o[intv_i[i]] = intp_i[i];
             end
         end
         /* verilator lint_on WIDTH */

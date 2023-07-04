@@ -30,7 +30,7 @@ module iommu_msi_ig #(
     // Number of interrupt vectors implemented
     parameter int unsigned N_INT_VEC = 16,
     // Number of interrupt sources
-    parameter int unsigned N_SOURCES = 3,
+    parameter int unsigned N_INT_SRCS = 3,
 
     // DO NOT MODIFY
     parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
@@ -41,10 +41,10 @@ module iommu_msi_ig #(
     input  logic msi_ig_enabled_i,
 
     // Interrupt pending bits
-    input  logic [(N_SOURCES-1):0] intp_i,
+    input  logic [(N_INT_SRCS-1):0]     intp_i,
 
     // Interrupt vectors
-    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_SOURCES],
+    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_INT_SRCS],
 
     // MSI config table
     input  logic [53:0] msi_addr_x_i[16],
@@ -74,7 +74,7 @@ module iommu_msi_ig #(
     }   wr_state_q, wr_state_n;
 
     // To detect rising edge transition of IP bits
-    logic [(N_SOURCES-1):0]  edged_q, edged_n;
+    logic [(N_INT_SRCS-1):0]  edged_q, edged_n;
 
     // Interrupt source index
     enum logic [1:0] {
@@ -89,7 +89,7 @@ module iommu_msi_ig #(
     // Pending interrupts
     logic [(N_INT_VEC-1):0]     pending_q, pending_n;
 
-    always_comb begin : wsi_generation_fsm
+    always_comb begin : msi_generation_fsm
 
         // Default values
         // AXI parameters
@@ -158,7 +158,7 @@ module iommu_msi_ig #(
                     
                     /* verilator lint_off WIDTH */
 
-                    for (int unsigned i = 0; i < N_SOURCES; i++) begin
+                    for (int unsigned i = 0; i < N_INT_SRCS; i++) begin
 
                         //# Prioritize pending messages
                         if (pending_q[intv_i[i]] && !msi_vec_masked_x_i[intv_i[i]]) begin
@@ -190,7 +190,7 @@ module iommu_msi_ig #(
                         end 
                     end
 
-                    for (int unsigned j = 0; j < N_SOURCES; j++) begin
+                    for (int unsigned j = 0; j < N_INT_SRCS; j++) begin
                         
                         // Clear edged IP bits when input is clear
                         if (!intp_i[j] && edged_q[j]) begin

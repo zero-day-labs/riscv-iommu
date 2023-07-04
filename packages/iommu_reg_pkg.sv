@@ -226,7 +226,6 @@ package iommu_reg_pkg;
     } pip;
   } iommu_reg2hw_ipsr_reg_t;
 
-  // TODO: Check which structures are not used (read by HW) to delete
   typedef struct packed {
     struct packed {
       logic        q;

@@ -4639,8 +4639,12 @@ module iommu_regmap_wrapper #(
   assign msi_vec_ctl_15_wd = reg_wdata[0];
 
   // # Read data logic
-  // EXP: addr_hit contains one bit per register that is set when the corresponging register address matches the one in the input bus
-  //      This means that a read/write is being performed, so the current register data is placed in the reg interface read bus
+  
+  logic   iohpmctr_hit_vector;
+  logic   iohpmevt_hit_vector;
+  assign  iohpmctr_hit_vector = |addr_hit[(15+N_IOHPMCTR-1):15];
+  assign  iohpmevt_hit_vector = |addr_hit[(46+N_IOHPMCTR-1):46];
+
   always_comb begin
     reg_rdata_next = '0;
     unique case (1'b1)
@@ -4764,7 +4768,7 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[35] = ipsr_pip_qs;
         reg_rdata_next[63:36] = '0;
       end
-
+      // iocountovf
       addr_hit[12]: begin
         reg_rdata_next[0] = iohpmcycles_of_qs;
         for (int unsigned i = 1; i < (N_IOHPMCTR + 1); i++) begin
@@ -4772,7 +4776,7 @@ module iommu_regmap_wrapper #(
         end
         reg_rdata_next[63:N_IOHPMCTR+1] = '0;
       end
-
+      // iocountinh
       addr_hit[13]: begin
         reg_rdata_next[31:0] = '0;
         reg_rdata_next[32] = iocountinh_cy_qs;
@@ -4782,32 +4786,32 @@ module iommu_regmap_wrapper #(
         if (N_IOHPMCTR != 31) 
           reg_rdata_next[63:N_IOHPMCTR+33] = '0;
       end
-
+      // iohpmcycles
       addr_hit[14]: begin
         reg_rdata_next[62:0] = iohpmcycles_counter_qs;
         reg_rdata_next[63] = iohpmcycles_of_qs;
       end
-
-      (|addr_hit[(15+N_IOHPMCTR-1):15]): begin
+      // iohpmctr_n
+      (iohpmctr_hit_vector): begin
 
         for (int unsigned i = 15; i < (15+N_IOHPMCTR); i++) begin
           if (addr_hit[i])
             reg_rdata_next[63:0] = iohpmctr_counter_qs[i-15];
         end
       end
+      // iohpmevt_n
+      (iohpmevt_hit_vector): begin
 
-      (|addr_hit[(15+(2*N_IOHPMCTR)-1):(15+N_IOHPMCTR)]): begin
-
-        for (int unsigned i = 15+N_IOHPMCTR; i < (15+2*N_IOHPMCTR); i++) begin
+        for (int unsigned i = 46; i < (46+N_IOHPMCTR); i++) begin
           if (addr_hit[i]) begin
-            reg_rdata_next[14:0]  = iohpmevt_eventid_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[15]    = iohpmevt_dmask_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[35:16] = iohpmevt_pid_pscid_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[59:36] = iohpmevt_did_gscid_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[60]    = iohpmevt_pv_pscv_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[61]    = iohpmevt_dv_gscv_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[62]    = iohpmevt_idt_qs[i-(15+N_IOHPMCTR)];
-            reg_rdata_next[63]    = iohpmevt_of_qs[i-(15+N_IOHPMCTR)];
+            reg_rdata_next[14:0]  = iohpmevt_eventid_qs[i-46];
+            reg_rdata_next[15]    = iohpmevt_dmask_qs[i-46];
+            reg_rdata_next[35:16] = iohpmevt_pid_pscid_qs[i-46];
+            reg_rdata_next[59:36] = iohpmevt_did_gscid_qs[i-46];
+            reg_rdata_next[60]    = iohpmevt_pv_pscv_qs[i-46];
+            reg_rdata_next[61]    = iohpmevt_dv_gscv_qs[i-46];
+            reg_rdata_next[62]    = iohpmevt_idt_qs[i-46];
+            reg_rdata_next[63]    = iohpmevt_of_qs[i-46];
           end 
         end
       end

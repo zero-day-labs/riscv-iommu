@@ -318,7 +318,8 @@ module iommu_translation_wrapper #(
 
     // Interrupt vectors
     // Priority is defined by the order of the vector: The lower the index, the higher the priority
-    logic [(LOG2_INTVEC-1):0]   intv[3] = '{
+    logic [(LOG2_INTVEC-1):0]   intv[3];
+    assign intv = '{
         civ_i,  // CQ
         fiv_i,  // FQ
         pmiv_i  // HPM
@@ -716,7 +717,7 @@ module iommu_translation_wrapper #(
 
         iommu_msi_ig #(
             .N_INT_VEC          (N_INT_VEC  ),
-            .N_SOURCES          (3          )
+            .N_INT_SRCS         (3          )
         ) i_iommu_msi_ig (
             .clk_i              (clk_i),
             .rst_ni             (rst_ni),

@@ -75,7 +75,7 @@ The following table lists all features supported by this implementation, and tho
 | WSI and MSI IOMMU interrupt generation support | Implemented. Basic Version |
 | Memory-mapped register interface | Implemented. Basic Version |
 | Memory-Resident Interrupt Files (MRIF) support | NOT Implemented. Advanced Version |
-| Hardware Performance Monitor | NOT Implemented. Advanced Version |
+| Hardware Performance Monitor | Implemented. Advanced Version |
 | Debug Register Interface | NOT Implemented. Advanced Version |
 
 > Notes: PC support is parameterizable to save resources when the IOMMU is integrated into systems without this requirement. Interrupt generation support is also parameterizable. It's possible to select between WSI and MSI support, or both (at least one MUST be included). When both methods are selected, WSI generation is selected by default in the ***fctl*** register.
