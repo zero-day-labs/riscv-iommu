@@ -72,7 +72,7 @@ module iommu_regmap_wrapper #(
   logic           			  reg_ready;
 
   logic addrmiss;
-  logic [(60+65):0] wr_err;
+  logic [125:0] wr_err;
   logic [DATA_WIDTH-1:0] reg_rdata_next;
 
   reg_req_t  reg_intf_req;
@@ -294,633 +294,105 @@ module iommu_regmap_wrapper #(
   logic 		icvec_piv_we;
 
   // MSI configuration table
-  logic [53:0] msi_addr_0_addr_qs;
-  logic [53:0] msi_addr_0_addr_wd;
-  logic msi_addr_0_addr_we;
-  logic [31:0] msi_data_0_qs;
-  logic [31:0] msi_data_0_wd;
-  logic msi_data_0_we;
-  logic msi_vec_ctl_0_qs;
-  logic msi_vec_ctl_0_wd;
-  logic msi_vec_ctl_0_we;
+  logic [53:0]  msi_addr_qs [N_INT_VEC];
+  logic [53:0]  msi_addr_wd [N_INT_VEC];
+  logic         msi_addr_we [N_INT_VEC];
+  logic [31:0]  msi_data_qs [N_INT_VEC];
+  logic [31:0]  msi_data_wd [N_INT_VEC];
+  logic         msi_data_we [N_INT_VEC];
+  logic         msi_vec_ctl_qs [N_INT_VEC];
+  logic         msi_vec_ctl_wd [N_INT_VEC];
+  logic         msi_vec_ctl_we [N_INT_VEC];
 
-  logic [53:0] msi_addr_1_addr_qs;
-  logic [53:0] msi_addr_1_addr_wd;
-  logic msi_addr_1_addr_we;
-  logic [31:0] msi_data_1_qs;
-  logic [31:0] msi_data_1_wd;
-  logic msi_data_1_we;
-  logic msi_vec_ctl_1_qs;
-  logic msi_vec_ctl_1_wd;
-  logic msi_vec_ctl_1_we;
-
-  logic [53:0] msi_addr_2_addr_qs;
-  logic [53:0] msi_addr_2_addr_wd;
-  logic msi_addr_2_addr_we;
-  logic [31:0] msi_data_2_qs;
-  logic [31:0] msi_data_2_wd;
-  logic msi_data_2_we;
-  logic msi_vec_ctl_2_qs;
-  logic msi_vec_ctl_2_wd;
-  logic msi_vec_ctl_2_we;
-
-  logic [53:0] msi_addr_3_addr_qs;
-  logic [53:0] msi_addr_3_addr_wd;
-  logic msi_addr_3_addr_we;
-  logic [31:0] msi_data_3_qs;
-  logic [31:0] msi_data_3_wd;
-  logic msi_data_3_we;
-  logic msi_vec_ctl_3_qs;
-  logic msi_vec_ctl_3_wd;
-  logic msi_vec_ctl_3_we;
-
-  logic [53:0] msi_addr_4_addr_qs;
-  logic [53:0] msi_addr_4_addr_wd;
-  logic msi_addr_4_addr_we;
-  logic [31:0] msi_data_4_qs;
-  logic [31:0] msi_data_4_wd;
-  logic msi_data_4_we;
-  logic msi_vec_ctl_4_qs;
-  logic msi_vec_ctl_4_wd;
-  logic msi_vec_ctl_4_we;
-
-  logic [53:0] msi_addr_5_addr_qs;
-  logic [53:0] msi_addr_5_addr_wd;
-  logic msi_addr_5_addr_we;
-  logic [31:0] msi_data_5_qs;
-  logic [31:0] msi_data_5_wd;
-  logic msi_data_5_we;
-  logic msi_vec_ctl_5_qs;
-  logic msi_vec_ctl_5_wd;
-  logic msi_vec_ctl_5_we;
-
-  logic [53:0] msi_addr_6_addr_qs;
-  logic [53:0] msi_addr_6_addr_wd;
-  logic msi_addr_6_addr_we;
-  logic [31:0] msi_data_6_qs;
-  logic [31:0] msi_data_6_wd;
-  logic msi_data_6_we;
-  logic msi_vec_ctl_6_qs;
-  logic msi_vec_ctl_6_wd;
-  logic msi_vec_ctl_6_we;
-
-  logic [53:0] msi_addr_7_addr_qs;
-  logic [53:0] msi_addr_7_addr_wd;
-  logic msi_addr_7_addr_we;
-  logic [31:0] msi_data_7_qs;
-  logic [31:0] msi_data_7_wd;
-  logic msi_data_7_we;
-  logic msi_vec_ctl_7_qs;
-  logic msi_vec_ctl_7_wd;
-  logic msi_vec_ctl_7_we;
-
-  logic [53:0] msi_addr_8_addr_qs;
-  logic [53:0] msi_addr_8_addr_wd;
-  logic msi_addr_8_addr_we;
-  logic [31:0] msi_data_8_qs;
-  logic [31:0] msi_data_8_wd;
-  logic msi_data_8_we;
-  logic msi_vec_ctl_8_qs;
-  logic msi_vec_ctl_8_wd;
-  logic msi_vec_ctl_8_we;
-
-  logic [53:0] msi_addr_9_addr_qs;
-  logic [53:0] msi_addr_9_addr_wd;
-  logic msi_addr_9_addr_we;
-  logic [31:0] msi_data_9_qs;
-  logic [31:0] msi_data_9_wd;
-  logic msi_data_9_we;
-  logic msi_vec_ctl_9_qs;
-  logic msi_vec_ctl_9_wd;
-  logic msi_vec_ctl_9_we;
-
-  logic [53:0] msi_addr_10_addr_qs;
-  logic [53:0] msi_addr_10_addr_wd;
-  logic msi_addr_10_addr_we;
-  logic [31:0] msi_data_10_qs;
-  logic [31:0] msi_data_10_wd;
-  logic msi_data_10_we;
-  logic msi_vec_ctl_10_qs;
-  logic msi_vec_ctl_10_wd;
-  logic msi_vec_ctl_10_we;
-
-  logic [53:0] msi_addr_11_addr_qs;
-  logic [53:0] msi_addr_11_addr_wd;
-  logic msi_addr_11_addr_we;
-  logic [31:0] msi_data_11_qs;
-  logic [31:0] msi_data_11_wd;
-  logic msi_data_11_we;
-  logic msi_vec_ctl_11_qs;
-  logic msi_vec_ctl_11_wd;
-  logic msi_vec_ctl_11_we;
-
-  logic [53:0] msi_addr_12_addr_qs;
-  logic [53:0] msi_addr_12_addr_wd;
-  logic msi_addr_12_addr_we;
-  logic [31:0] msi_data_12_qs;
-  logic [31:0] msi_data_12_wd;
-  logic msi_data_12_we;
-  logic msi_vec_ctl_12_qs;
-  logic msi_vec_ctl_12_wd;
-  logic msi_vec_ctl_12_we;
-
-  logic [53:0] msi_addr_13_addr_qs;
-  logic [53:0] msi_addr_13_addr_wd;
-  logic msi_addr_13_addr_we;
-  logic [31:0] msi_data_13_qs;
-  logic [31:0] msi_data_13_wd;
-  logic msi_data_13_we;
-  logic msi_vec_ctl_13_qs;
-  logic msi_vec_ctl_13_wd;
-  logic msi_vec_ctl_13_we;
-
-  logic [53:0] msi_addr_14_addr_qs;
-  logic [53:0] msi_addr_14_addr_wd;
-  logic msi_addr_14_addr_we;
-  logic [31:0] msi_data_14_qs;
-  logic [31:0] msi_data_14_wd;
-  logic msi_data_14_we;
-  logic msi_vec_ctl_14_qs;
-  logic msi_vec_ctl_14_wd;
-  logic msi_vec_ctl_14_we;
-
-  logic [53:0] msi_addr_15_addr_qs;
-  logic [53:0] msi_addr_15_addr_wd;
-  logic msi_addr_15_addr_we;
-  logic [31:0] msi_data_15_qs;
-  logic [31:0] msi_data_15_wd;
-  logic msi_data_15_we;
-  logic msi_vec_ctl_15_qs;
-  logic msi_vec_ctl_15_wd;
-  logic msi_vec_ctl_15_we;
-
+  //--------------------
   //# Register instances
+  //--------------------
+
   // R[capabilities]: V(False)
 
   //   F[version]: 7:0
-  // Hardwired register containing the version of the specification implemented by the IOMMU
-
-  // iommu_field #(
-  //   .DATA_WIDTH      (8),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (8'h10)
-  // ) u_capabilities_version (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      (8'h10  ),  // harDATA_WIDTHire to 0x10
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.version.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_version_qs)
-  // );
   assign reg2hw.capabilities.version.q = 8'h10; // for internal HW reads
   assign capabilities_version_qs = 8'h10;       // for SW reads
 
 
   //   F[sv32]: 8:8
-  // Sv32 should be supported by this implementation
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_sv32 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv32.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv32_qs)
-  // );
   assign reg2hw.capabilities.sv32.q = 1'h0;
   assign capabilities_sv32_qs = 1'h0;
 
 
   //   F[sv39]: 9:9
-  // Sv39 should be supported by this implementation
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_sv39 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv39.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv39_qs)
-  // );
   assign reg2hw.capabilities.sv39.q = 1'h1;
   assign capabilities_sv39_qs = 1'h1;
 
   //   F[sv48]: 10:10
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_sv48 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv48.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv48_qs)
-  // );
   assign reg2hw.capabilities.sv48.q = 1'h0;
   assign capabilities_sv48_qs = 1'h0;
 
 
   //   F[sv57]: 11:11
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_sv57 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv57.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv57_qs)
-  // );
   assign reg2hw.capabilities.sv57.q = 1'h0;
   assign capabilities_sv57_qs = 1'h0;
 
 
   //   F[svpbmt]: 15:15
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_svpbmt (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.svpbmt.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_svpbmt_qs)
-  // );
   assign reg2hw.capabilities.svpbmt.q = 1'h0;
   assign capabilities_svpbmt_qs = 1'h0;
 
 
   //   F[sv32x4]: 16:16
-  // For G-stage translation
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_sv32x4 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv32x4.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv32x4_qs)
-  // );
   assign reg2hw.capabilities.sv32x4.q = 1'h0;
   assign capabilities_sv32x4_qs = 1'h0;
 
 
   //   F[sv39x4]: 17:17
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_sv39x4 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv39x4.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv39x4_qs)
-  // );
   assign reg2hw.capabilities.sv39x4.q = 1'h1;
   assign capabilities_sv39x4_qs = 1'h1;
 
 
   //   F[sv48x4]: 18:18
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_sv48x4 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv48x4.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv48x4_qs)
-  // );
   assign reg2hw.capabilities.sv48x4.q = 1'h0;
   assign capabilities_sv48x4_qs = 1'h0;
 
 
   //   F[sv57x4]: 19:19
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_sv57x4 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.sv57x4.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_sv57x4_qs)
-  // );
   assign reg2hw.capabilities.sv57x4.q = 1'h0;
   assign capabilities_sv57x4_qs = 1'h0;
 
-  // AMO_MRIF
+  //   F[amo_mrif]: 21:21
   assign reg2hw.capabilities.amo_mrif.q = 1'h0;
   assign capabilities_amo_mrif_qs = 1'h0;
 
   //   F[msi_flat]: 22:22
-  // MSI redirection to Guest interrupt files must be implemented to give support to AIA
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_msi_flat (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.msi_flat.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_msi_flat_qs)
-  // );
   assign reg2hw.capabilities.msi_flat.q = 1'h1;
   assign capabilities_msi_flat_qs = 1'h1;
 
 
   //   F[msi_mrif]: 23:23
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_msi_mrif (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.msi_mrif.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_msi_mrif_qs)
-  // );
   assign reg2hw.capabilities.msi_mrif.q = 1'h0;
   assign capabilities_msi_mrif_qs = 1'h0;
 
 
-  //   F[amo]: 24:24
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_amo (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.amo.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_amo_qs)
-  // );
+  //   F[amo_hwad]: 24:24
   assign reg2hw.capabilities.amo_hwad.q = 1'h0;
   assign capabilities_amo_hwad_qs = 1'h0;
 
 
   //   F[ats]: 25:25
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_ats (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.ats.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_ats_qs)
-  // );
   assign reg2hw.capabilities.ats.q = 1'h0;
   assign capabilities_ats_qs = 1'h0;
 
 
   //   F[t2gpa]: 26:26
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_t2gpa (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.t2gpa.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_t2gpa_qs)
-  // );
   assign reg2hw.capabilities.t2gpa.q = 1'h0;
   assign capabilities_t2gpa_qs = 1'h0;
 
 
   //   F[endi]: 27:27
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_endi (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.endi.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_endi_qs)
-  // );
   assign reg2hw.capabilities.endi.q = 1'h0;
   assign capabilities_endi_qs = 1'h0;
 
 
   //   F[igs]: 29:28
-  // iommu_field #(
-  //   .DATA_WIDTH      (2),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (2'h0)
-  // ) u_capabilities_igs (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.igs.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_igs_qs)
-  // );
-
   // MSI support only
   if (IGS == rv_iommu::MSI_ONLY) begin
       assign reg2hw.capabilities.igs.q = 2'h0;
@@ -940,29 +412,6 @@ module iommu_regmap_wrapper #(
   end
 
   //   F[hpm]: 30:30
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_hpm (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.hpm.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_hpm_qs)
-  // );
-
   if (N_IOHPMCTR > 0) begin
     assign reg2hw.capabilities.hpm.q = 1'h1;
     assign capabilities_hpm_qs = 1'h1;
@@ -974,137 +423,26 @@ module iommu_regmap_wrapper #(
 
 
   //   F[dbg]: 31:31
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_dbg (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.dbg.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_dbg_qs)
-  // );
   assign reg2hw.capabilities.dbg.q = 1'h0;
   assign capabilities_dbg_qs = 1'h0;
 
 
   //   F[pas]: 37:32
-  // iommu_field #(
-  //   .DATA_WIDTH      (6),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (6'h22)          // Physical Address Size reset value of 34 for Sv32
-  // ) u_capabilities_pas (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      (6'h22  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.pas.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_pas_qs)
-  // );
   assign reg2hw.capabilities.pas.q = 6'h38;
   assign capabilities_pas_qs = 6'h38;
 
 
   //   F[pd8]: 38:38
-  // One level PDT with 8-bit process_id by default
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h1)
-  // ) u_capabilities_pd8 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('1  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.pd8.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_pd8_qs)
-  // );
   assign reg2hw.capabilities.pd8.q = 1'h1;
   assign capabilities_pd8_qs = 1'h1;
 
 
   //   F[pd17]: 39:39
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_pd17 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.pd17.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_pd17_qs)
-  // );
   assign reg2hw.capabilities.pd17.q = 1'h1;
   assign capabilities_pd17_qs = 1'h1;
 
 
   //   F[pd20]: 40:40
-  // iommu_field #(
-  //   .DATA_WIDTH      (1),
-  //   .SwAccess(SwAccessRO),
-  //   .RESVAL  (1'h0)
-  // ) u_capabilities_pd20 (
-  //   .clk_i   (clk_i    ),
-  //   .rst_ni  (rst_ni  ),
-
-  //   .we     (1'b0),
-  //   .wd     ('0  ),
-
-  //   // from internal hardware
-  //   .de     (1'b1),
-  //   .d      ('0  ),
-
-  //   // to internal hardware
-  //   .qe     (),
-  //   .q      (reg2hw.capabilities.pd20.q ),
-
-  //   // to register interface (read)
-  //   .qs     (capabilities_pd20_qs)
-  // );
   assign reg2hw.capabilities.pd20.q = 1'h1;
   assign capabilities_pd20_qs = 1'h1;
 
@@ -1112,30 +450,6 @@ module iommu_regmap_wrapper #(
   // R[fctl]: V(False)
 
   //   F[be]: 0:0
-//   iommu_field #(
-//     .DATA_WIDTH      (1),
-//     .SwAccess(SwAccessRW),
-//     .RESVAL  (1'h0)
-//   ) u_fctl_be (
-//     .clk_i   (clk_i    ),
-//     .rst_ni  (rst_ni  ),
-
-//     // from register interface
-//     .we     (fctl_be_we),
-//     .wd     (fctl_be_wd),
-
-//     // from internal hardware
-//     .de     (hw2reg.fctl.be.de),
-//     .ds     (),
-//     .d      (hw2reg.fctl.be.d ),
-
-//     // to internal hardware
-//     .qe     (),
-//     .q      (reg2hw.fctl.be.q ),
-
-//     // to register interface (read)
-//     .qs     (fctl_be_qs)
-//   );
 	assign fctl_be_qs	= 1'b0;
 
 
@@ -2517,110 +1831,25 @@ module iommu_regmap_wrapper #(
     assign reg2hw.icvec.piv.q = '0;
   end
   
-  // TODO: Reduce code size
   // Generate MSI Configuration Table if IOMMU includes MSI gen support
   if ((IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_msi_cfg_tbl
-    // R[msi_addr_0]: V(False)
 
-    //   F[addr]: 55:2
-    iommu_field #(
-      .DATA_WIDTH      (54),
-      .SwAccess(SwAccessRW),
-      .RESVAL  (54'h0)
-    ) u_msi_addr_0_addr (
-      .clk_i   (clk_i    ),
-      .rst_ni  (rst_ni  ),
-
-      // from register interface
-      .we     (msi_addr_0_addr_we),
-      .wd     (msi_addr_0_addr_wd),
-
-      // from internal hardware
-      .de     ('0),
-      .d      ('0),
-      .ds     (),
-
-      // to internal hardware
-      .qe     (),
-      .q      (reg2hw.msi_addr_0.addr.q ),
-
-      // to register interface (read)
-      .qs     (msi_addr_0_addr_qs)
-    );
-
-
-    // R[msi_data_0]: V(False)
-
-    iommu_field #(
-      .DATA_WIDTH      (32),
-      .SwAccess(SwAccessRW),
-      .RESVAL  (32'h0)
-    ) u_msi_data_0 (
-      .clk_i   (clk_i    ),
-      .rst_ni  (rst_ni  ),
-
-      // from register interface
-      .we     (msi_data_0_we),
-      .wd     (msi_data_0_wd),
-
-      // from internal hardware
-      .de     ('0),
-      .d      ('0),
-      .ds     (),
-
-      // to internal hardware
-      .qe     (),
-      .q      (reg2hw.msi_data_0.q ),
-
-      // to register interface (read)
-      .qs     (msi_data_0_qs)
-    );
-
-
-    // R[msi_vec_ctl_0]: V(False)
-
-    iommu_field #(
-      .DATA_WIDTH      (1),
-      .SwAccess(SwAccessRW),
-      .RESVAL  (1'h0)
-    ) u_msi_vec_ctl_0 (
-      .clk_i   (clk_i    ),
-      .rst_ni  (rst_ni  ),
-
-      // from register interface
-      .we     (msi_vec_ctl_0_we),
-      .wd     (msi_vec_ctl_0_wd),
-
-      // from internal hardware
-      .de     ('0),
-      .d      ('0),
-      .ds     (),
-
-      // to internal hardware
-      .qe     (),
-      .q      (reg2hw.msi_vec_ctl_0.q ),
-
-      // to register interface (read)
-      .qs     (msi_vec_ctl_0_qs)
-    );
-
-
-    if (LOG2_INTVEC >= 1) begin : gen_msi_cfg_tbl_1
+    for (genvar i = 0; i < N_INT_VEC; i++) begin
       
-      // R[msi_addr_1]: V(False)
+      // R[msi_addr_x]: V(False)
 
       //   F[addr]: 55:2
       iommu_field #(
         .DATA_WIDTH      (54),
         .SwAccess(SwAccessRW),
         .RESVAL  (54'h0)
-      ) u_msi_addr_1_addr (
+      ) u_msi_addr_x (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (msi_addr_1_addr_we),
-        .wd     (msi_addr_1_addr_wd),
+        .we     (msi_addr_we[i]),
+        .wd     (msi_addr_wd[i]),
 
         // from internal hardware
         .de     ('0),
@@ -2629,26 +1858,26 @@ module iommu_regmap_wrapper #(
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.msi_addr_1.addr.q ),
+        .q      (reg2hw.msi_addr[i].addr.q ),
 
         // to register interface (read)
-        .qs     (msi_addr_1_addr_qs)
+        .qs     (msi_addr_qs[i])
       );
 
 
-      // R[msi_data_1]: V(False)
+      // R[msi_data_x]: V(False)
 
       iommu_field #(
         .DATA_WIDTH      (32),
         .SwAccess(SwAccessRW),
         .RESVAL  (32'h0)
-      ) u_msi_data_1 (
+      ) u_msi_data_x (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (msi_data_1_we),
-        .wd     (msi_data_1_wd),
+        .we     (msi_data_we[i]),
+        .wd     (msi_data_wd[i]),
 
         // from internal hardware
         .de     ('0),
@@ -2657,26 +1886,26 @@ module iommu_regmap_wrapper #(
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.msi_data_1.q ),
+        .q      (reg2hw.msi_data[i].data.q ),
 
         // to register interface (read)
-        .qs     (msi_data_1_qs)
+        .qs     (msi_data_qs[i])
       );
 
 
-      // R[msi_vec_ctl_1]: V(False)
+      // R[msi_vec_ctl_x]: V(False)
 
       iommu_field #(
         .DATA_WIDTH      (1),
         .SwAccess(SwAccessRW),
         .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_1 (
+      ) u_msi_vec_ctl_x (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (msi_vec_ctl_1_we),
-        .wd     (msi_vec_ctl_1_wd),
+        .we     (msi_vec_ctl_we[i]),
+        .wd     (msi_vec_ctl_wd[i]),
 
         // from internal hardware
         .de     ('0),
@@ -2685,1447 +1914,38 @@ module iommu_regmap_wrapper #(
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.msi_vec_ctl_1.q ),
+        .q      (reg2hw.msi_vec_ctl[i].m.q ),
 
         // to register interface (read)
-        .qs     (msi_vec_ctl_1_qs)
+        .qs     (msi_vec_ctl_qs[i])
       );
     end
 
-    else begin : gen_msi_cfg_tbl_1_disabled
-    
-      assign reg2hw.msi_addr_1.addr.q  = '0;
-      assign msi_addr_1_addr_qs        = '0;
-      assign reg2hw.msi_data_1.q       = '0;
-      assign msi_data_1_qs             = '0;
-      assign reg2hw.msi_vec_ctl_1.q    = 1'b0;
-      assign msi_vec_ctl_1_qs          = 1'b0;
-    end
-
-    if (LOG2_INTVEC >= 2) begin : gen_msi_cfg_tbl_2_3
+    // Hardwire unimplemented vectors to zero 
+    for (genvar i = N_INT_VEC; i < 16; i++) begin
       
-      // R[msi_addr_2]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_2_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_2_addr_we),
-        .wd     (msi_addr_2_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_2.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_2_addr_qs)
-      );
-
-
-      // R[msi_data_2]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_2 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_2_we),
-        .wd     (msi_data_2_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_2.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_2_qs)
-      );
-
-
-      // R[msi_vec_ctl_2]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_2 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_2_we),
-        .wd     (msi_vec_ctl_2_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_2.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_2_qs)
-      );
-
-
-      // R[msi_addr_3]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_3_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_3_addr_we),
-        .wd     (msi_addr_3_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_3.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_3_addr_qs)
-      );
-
-
-      // R[msi_data_3]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_3 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_3_we),
-        .wd     (msi_data_3_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_3.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_3_qs)
-      );
-
-
-      // R[msi_vec_ctl_3]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_3 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_3_we),
-        .wd     (msi_vec_ctl_3_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_3.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_3_qs)
-      );
-    end
-
-    else begin : gen_msi_cfg_tbl_2_3_disabled
-
-    assign reg2hw.msi_addr_2.addr.q  = '0;
-    assign msi_addr_2_addr_qs        = '0;
-    assign reg2hw.msi_data_2.q       = '0;
-    assign msi_data_2_qs             = '0;
-    assign reg2hw.msi_vec_ctl_2.q    = 1'b0;
-    assign msi_vec_ctl_2_qs          = 1'b0;
-
-    assign reg2hw.msi_addr_3.addr.q  = '0;
-    assign msi_addr_3_addr_qs        = '0;
-    assign reg2hw.msi_data_3.q       = '0;
-    assign msi_data_3_qs             = '0;
-    assign reg2hw.msi_vec_ctl_3.q    = 1'b0;
-    assign msi_vec_ctl_3_qs          = 1'b0;
-    end
-
-    if (LOG2_INTVEC >= 3) begin : gen_msi_cfg_tbl_4_7
-      
-      // R[msi_addr_4]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_4_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_4_addr_we),
-        .wd     (msi_addr_4_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_4.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_4_addr_qs)
-      );
-
-
-      // R[msi_data_4]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_4 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_4_we),
-        .wd     (msi_data_4_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-
-        .q      (reg2hw.msi_data_4.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_4_qs)
-      );
-
-
-      // R[msi_vec_ctl_4]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_4 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_4_we),
-        .wd     (msi_vec_ctl_4_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_4.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_4_qs)
-      );
-
-
-      // R[msi_addr_5]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_5_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_5_addr_we),
-        .wd     (msi_addr_5_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_5.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_5_addr_qs)
-      );
-
-
-      // R[msi_data_5]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_5 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_5_we),
-        .wd     (msi_data_5_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_5.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_5_qs)
-      );
-
-
-      // R[msi_vec_ctl_5]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_5 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_5_we),
-        .wd     (msi_vec_ctl_5_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_5.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_5_qs)
-      );
-
-
-      // R[msi_addr_6]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_6_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_6_addr_we),
-        .wd     (msi_addr_6_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_6.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_6_addr_qs)
-      );
-
-
-      // R[msi_data_6]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_6 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_6_we),
-        .wd     (msi_data_6_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_6.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_6_qs)
-      );
-
-
-      // R[msi_vec_ctl_6]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_6 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_6_we),
-        .wd     (msi_vec_ctl_6_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_6.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_6_qs)
-      );
-
-
-      // R[msi_addr_7]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_7_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_7_addr_we),
-        .wd     (msi_addr_7_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_7.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_7_addr_qs)
-      );
-
-
-      // R[msi_data_7]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_7 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_7_we),
-        .wd     (msi_data_7_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_7.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_7_qs)
-      );
-
-
-      // R[msi_vec_ctl_7]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_7 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_7_we),
-        .wd     (msi_vec_ctl_7_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_7.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_7_qs)
-      );
-    end
-
-    else begin : gen_msi_cfg_tbl_4_7_disabled
-      
-      assign reg2hw.msi_addr_4.addr.q  = '0;
-      assign msi_addr_4_addr_qs        = '0;
-      assign reg2hw.msi_data_4.q       = '0;
-      assign msi_data_4_qs             = '0;
-      assign reg2hw.msi_vec_ctl_4.q    = 1'b0;
-      assign msi_vec_ctl_4_qs          = 1'b0;
-
-      assign reg2hw.msi_addr_5.addr.q  = '0;
-      assign msi_addr_5_addr_qs        = '0;
-      assign reg2hw.msi_data_5.q       = '0;
-      assign msi_data_5_qs             = '0;
-      assign reg2hw.msi_vec_ctl_5.q    = 1'b0;
-      assign msi_vec_ctl_5_qs          = 1'b0;
-
-      assign reg2hw.msi_addr_6.addr.q  = '0;
-      assign msi_addr_6_addr_qs        = '0;
-      assign reg2hw.msi_data_6.q       = '0;
-      assign msi_data_6_qs             = '0;
-      assign reg2hw.msi_vec_ctl_6.q    = 1'b0;
-      assign msi_vec_ctl_6_qs          = 1'b0;
-
-      assign reg2hw.msi_addr_7.addr.q  = '0;
-      assign msi_addr_7_addr_qs        = '0;
-      assign reg2hw.msi_data_7.q       = '0;
-      assign msi_data_7_qs             = '0;
-      assign reg2hw.msi_vec_ctl_7.q    = 1'b0;
-      assign msi_vec_ctl_7_qs          = 1'b0;
-    end
-
-    if (LOG2_INTVEC == 4) begin : gen_msi_cfg_tbl_8_15
-      
-      // R[msi_addr_8]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_8_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_8_addr_we),
-        .wd     (msi_addr_8_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_8.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_8_addr_qs)
-      );
-
-
-      // R[msi_data_8]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_8 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_8_we),
-        .wd     (msi_data_8_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_8.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_8_qs)
-      );
-
-
-      // R[msi_vec_ctl_8]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_8 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_8_we),
-        .wd     (msi_vec_ctl_8_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_8.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_8_qs)
-      );
-
-
-      // R[msi_addr_9]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_9_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_9_addr_we),
-        .wd     (msi_addr_9_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_9.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_9_addr_qs)
-      );
-
-
-      // R[msi_data_9]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_9 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_9_we),
-        .wd     (msi_data_9_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_9.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_9_qs)
-      );
-
-
-      // R[msi_vec_ctl_9]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_9 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_9_we),
-        .wd     (msi_vec_ctl_9_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_9.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_9_qs)
-      );
-
-
-      // R[msi_addr_10]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_10_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_10_addr_we),
-        .wd     (msi_addr_10_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_10.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_10_addr_qs)
-      );
-
-
-      // R[msi_data_10]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_10 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_10_we),
-        .wd     (msi_data_10_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_10.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_10_qs)
-      );
-
-
-      // R[msi_vec_ctl_10]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_10 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_10_we),
-        .wd     (msi_vec_ctl_10_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_10.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_10_qs)
-      );
-
-
-      // R[msi_addr_11]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_11_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_11_addr_we),
-        .wd     (msi_addr_11_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_11.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_11_addr_qs)
-      );
-
-
-      // R[msi_data_11]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_11 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_11_we),
-        .wd     (msi_data_11_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_11.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_11_qs)
-      );
-
-
-      // R[msi_vec_ctl_11]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_11 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_11_we),
-        .wd     (msi_vec_ctl_11_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_11.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_11_qs)
-      );
-
-
-      // R[msi_addr_12]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_12_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_12_addr_we),
-        .wd     (msi_addr_12_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_12.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_12_addr_qs)
-      );
-
-
-      // R[msi_data_12]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_12 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_12_we),
-        .wd     (msi_data_12_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_12.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_12_qs)
-      );
-
-
-      // R[msi_vec_ctl_12]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_12 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_12_we),
-        .wd     (msi_vec_ctl_12_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_12.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_12_qs)
-      );
-
-
-      // R[msi_addr_13]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_13_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_13_addr_we),
-        .wd     (msi_addr_13_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_13.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_13_addr_qs)
-      );
-
-
-      // R[msi_data_13]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_13 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_13_we),
-        .wd     (msi_data_13_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_13.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_13_qs)
-      );
-
-
-      // R[msi_vec_ctl_13]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_13 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_13_we),
-        .wd     (msi_vec_ctl_13_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_13.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_13_qs)
-      );
-
-
-      // R[msi_addr_14]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_14_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_14_addr_we),
-        .wd     (msi_addr_14_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_14.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_14_addr_qs)
-      );
-
-
-      // R[msi_data_14]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_14 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_14_we),
-        .wd     (msi_data_14_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_14.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_14_qs)
-      );
-
-
-      // R[msi_vec_ctl_14]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_14 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_14_we),
-        .wd     (msi_vec_ctl_14_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_14.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_14_qs)
-      );
-
-
-      // R[msi_addr_15]: V(False)
-
-      //   F[addr]: 55:2
-      iommu_field #(
-        .DATA_WIDTH      (54),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_15_addr (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_addr_15_addr_we),
-        .wd     (msi_addr_15_addr_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_addr_15.addr.q ),
-
-        // to register interface (read)
-        .qs     (msi_addr_15_addr_qs)
-      );
-
-
-      // R[msi_data_15]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (32),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (32'h0)
-      ) u_msi_data_15 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_data_15_we),
-        .wd     (msi_data_15_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_data_15.q ),
-
-        // to register interface (read)
-        .qs     (msi_data_15_qs)
-      );
-
-
-      // R[msi_vec_ctl_15]: V(False)
-
-      iommu_field #(
-        .DATA_WIDTH      (1),
-        .SwAccess(SwAccessRW),
-        .RESVAL  (1'h0)
-      ) u_msi_vec_ctl_15 (
-        .clk_i   (clk_i    ),
-        .rst_ni  (rst_ni  ),
-
-        // from register interface
-        .we     (msi_vec_ctl_15_we),
-        .wd     (msi_vec_ctl_15_wd),
-
-        // from internal hardware
-        .de     ('0),
-        .d      ('0),
-        .ds     (),
-
-        // to internal hardware
-        .qe     (),
-        .q      (reg2hw.msi_vec_ctl_15.q ),
-
-        // to register interface (read)
-        .qs     (msi_vec_ctl_15_qs)
-      );
-    end
-
-    else begin : gen_msi_cfg_tbl_8_15_disabled
-      // 8
-      assign reg2hw.msi_addr_8.addr.q  = '0;
-      assign msi_addr_8_addr_qs        = '0;
-      assign reg2hw.msi_data_8.q       = '0;
-      assign msi_data_8_qs             = '0;
-      assign reg2hw.msi_vec_ctl_8.q    = 1'b0;
-      assign msi_vec_ctl_8_qs          = 1'b0;
-      // 9
-      assign reg2hw.msi_addr_9.addr.q  = '0;
-      assign msi_addr_9_addr_qs        = '0;
-      assign reg2hw.msi_data_9.q       = '0;
-      assign msi_data_9_qs             = '0;
-      assign reg2hw.msi_vec_ctl_9.q    = 1'b0;
-      assign msi_vec_ctl_9_qs          = 1'b0;
-      // 10
-      assign reg2hw.msi_addr_10.addr.q  = '0;
-      assign msi_addr_10_addr_qs        = '0;
-      assign reg2hw.msi_data_10.q       = '0;
-      assign msi_data_10_qs             = '0;
-      assign reg2hw.msi_vec_ctl_10.q    = 1'b0;
-      assign msi_vec_ctl_10_qs          = 1'b0;
-      // 11
-      assign reg2hw.msi_addr_11.addr.q  = '0;
-      assign msi_addr_11_addr_qs        = '0;
-      assign reg2hw.msi_data_11.q       = '0;
-      assign msi_data_11_qs             = '0;
-      assign reg2hw.msi_vec_ctl_11.q    = 1'b0;
-      assign msi_vec_ctl_11_qs          = 1'b0;
-      // 12
-      assign reg2hw.msi_addr_12.addr.q  = '0;
-      assign msi_addr_12_addr_qs        = '0;
-      assign reg2hw.msi_data_12.q       = '0;
-      assign msi_data_12_qs             = '0;
-      assign reg2hw.msi_vec_ctl_12.q    = 1'b0;
-      assign msi_vec_ctl_12_qs          = 1'b0;
-      // 13
-      assign reg2hw.msi_addr_13.addr.q  = '0;
-      assign msi_addr_13_addr_qs        = '0;
-      assign reg2hw.msi_data_13.q       = '0;
-      assign msi_data_13_qs             = '0;
-      assign reg2hw.msi_vec_ctl_13.q    = 1'b0;
-      assign msi_vec_ctl_13_qs          = 1'b0;
-      // 14
-      assign reg2hw.msi_addr_14.addr.q  = '0;
-      assign msi_addr_14_addr_qs        = '0;
-      assign reg2hw.msi_data_14.q       = '0;
-      assign msi_data_14_qs             = '0;
-      assign reg2hw.msi_vec_ctl_14.q    = 1'b0;
-      assign msi_vec_ctl_14_qs          = 1'b0;
-      // 15
-      assign reg2hw.msi_addr_15.addr.q  = '0;
-      assign msi_addr_15_addr_qs        = '0;
-      assign reg2hw.msi_data_15.q       = '0;
-      assign msi_data_15_qs             = '0;
-      assign reg2hw.msi_vec_ctl_15.q    = 1'b0;
-      assign msi_vec_ctl_15_qs          = 1'b0;
+      assign reg2hw.msi_addr[i].addr.q  = '0;
+      assign reg2hw.msi_data[i].data.q  = '0;
+      assign reg2hw.msi_vec_ctl[i].m.q  = 1'b0;
     end
   end
 
   // Do not generate MSI Configuration Table
   else begin : gen_msi_cfg_tbl_disabled
-    // 0
-    assign reg2hw.msi_addr_0.addr.q  = '0;
-    assign msi_addr_0_addr_qs        = '0;
-    assign reg2hw.msi_data_0.q       = '0;
-    assign msi_data_0_qs             = '0;
-    assign reg2hw.msi_vec_ctl_0.q    = 1'b0;
-    assign msi_vec_ctl_0_qs          = 1'b0;
-    // 1
-    assign reg2hw.msi_addr_1.addr.q  = '0;
-    assign msi_addr_1_addr_qs        = '0;
-    assign reg2hw.msi_data_1.q       = '0;
-    assign msi_data_1_qs             = '0;
-    assign reg2hw.msi_vec_ctl_1.q    = 1'b0;
-    assign msi_vec_ctl_1_qs          = 1'b0;
-    // 2
-    assign reg2hw.msi_addr_2.addr.q  = '0;
-    assign msi_addr_2_addr_qs        = '0;
-    assign reg2hw.msi_data_2.q       = '0;
-    assign msi_data_2_qs             = '0;
-    assign reg2hw.msi_vec_ctl_2.q    = 1'b0;
-    assign msi_vec_ctl_2_qs          = 1'b0;
-    // 3
-    assign reg2hw.msi_addr_3.addr.q  = '0;
-    assign msi_addr_3_addr_qs        = '0;
-    assign reg2hw.msi_data_3.q       = '0;
-    assign msi_data_3_qs             = '0;
-    assign reg2hw.msi_vec_ctl_3.q    = 1'b0;
-    assign msi_vec_ctl_3_qs          = 1'b0;
-    // 4
-    assign reg2hw.msi_addr_4.addr.q  = '0;
-    assign msi_addr_4_addr_qs        = '0;
-    assign reg2hw.msi_data_4.q       = '0;
-    assign msi_data_4_qs             = '0;
-    assign reg2hw.msi_vec_ctl_4.q    = 1'b0;
-    assign msi_vec_ctl_4_qs          = 1'b0;
-    // 5
-    assign reg2hw.msi_addr_5.addr.q  = '0;
-    assign msi_addr_5_addr_qs        = '0;
-    assign reg2hw.msi_data_5.q       = '0;
-    assign msi_data_5_qs             = '0;
-    assign reg2hw.msi_vec_ctl_5.q    = 1'b0;
-    assign msi_vec_ctl_5_qs          = 1'b0;
-    // 6
-    assign reg2hw.msi_addr_6.addr.q  = '0;
-    assign msi_addr_6_addr_qs        = '0;
-    assign reg2hw.msi_data_6.q       = '0;
-    assign msi_data_6_qs             = '0;
-    assign reg2hw.msi_vec_ctl_6.q    = 1'b0;
-    assign msi_vec_ctl_6_qs          = 1'b0;
-    // 7
-    assign reg2hw.msi_addr_7.addr.q  = '0;
-    assign msi_addr_7_addr_qs        = '0;
-    assign reg2hw.msi_data_7.q       = '0;
-    assign msi_data_7_qs             = '0;
-    assign reg2hw.msi_vec_ctl_7.q    = 1'b0;
-    assign msi_vec_ctl_7_qs          = 1'b0;
-    // 8
-    assign reg2hw.msi_addr_8.addr.q  = '0;
-    assign msi_addr_8_addr_qs        = '0;
-    assign reg2hw.msi_data_8.q       = '0;
-    assign msi_data_8_qs             = '0;
-    assign reg2hw.msi_vec_ctl_8.q    = 1'b0;
-    assign msi_vec_ctl_8_qs          = 1'b0;
-    // 9
-    assign reg2hw.msi_addr_9.addr.q  = '0;
-    assign msi_addr_9_addr_qs        = '0;
-    assign reg2hw.msi_data_9.q       = '0;
-    assign msi_data_9_qs             = '0;
-    assign reg2hw.msi_vec_ctl_9.q    = 1'b0;
-    assign msi_vec_ctl_9_qs          = 1'b0;
-    // 10
-    assign reg2hw.msi_addr_10.addr.q  = '0;
-    assign msi_addr_10_addr_qs        = '0;
-    assign reg2hw.msi_data_10.q       = '0;
-    assign msi_data_10_qs             = '0;
-    assign reg2hw.msi_vec_ctl_10.q    = 1'b0;
-    assign msi_vec_ctl_10_qs          = 1'b0;
-    // 11
-    assign reg2hw.msi_addr_11.addr.q  = '0;
-    assign msi_addr_11_addr_qs        = '0;
-    assign reg2hw.msi_data_11.q       = '0;
-    assign msi_data_11_qs             = '0;
-    assign reg2hw.msi_vec_ctl_11.q    = 1'b0;
-    assign msi_vec_ctl_11_qs          = 1'b0;
-    // 12
-    assign reg2hw.msi_addr_12.addr.q  = '0;
-    assign msi_addr_12_addr_qs        = '0;
-    assign reg2hw.msi_data_12.q       = '0;
-    assign msi_data_12_qs             = '0;
-    assign reg2hw.msi_vec_ctl_12.q    = 1'b0;
-    assign msi_vec_ctl_12_qs          = 1'b0;
-    // 13
-    assign reg2hw.msi_addr_13.addr.q  = '0;
-    assign msi_addr_13_addr_qs        = '0;
-    assign reg2hw.msi_data_13.q       = '0;
-    assign msi_data_13_qs             = '0;
-    assign reg2hw.msi_vec_ctl_13.q    = 1'b0;
-    assign msi_vec_ctl_13_qs          = 1'b0;
-    // 14
-    assign reg2hw.msi_addr_14.addr.q  = '0;
-    assign msi_addr_14_addr_qs        = '0;
-    assign reg2hw.msi_data_14.q       = '0;
-    assign msi_data_14_qs             = '0;
-    assign reg2hw.msi_vec_ctl_14.q    = 1'b0;
-    assign msi_vec_ctl_14_qs          = 1'b0;
-    // 15
-    assign reg2hw.msi_addr_15.addr.q  = '0;
-    assign msi_addr_15_addr_qs        = '0;
-    assign reg2hw.msi_data_15.q       = '0;
-    assign msi_data_15_qs             = '0;
-    assign reg2hw.msi_vec_ctl_15.q    = 1'b0;
-    assign msi_vec_ctl_15_qs          = 1'b0;
+    
+    for (genvar i = 0; i < 16; i++) begin
+        
+      assign reg2hw.msi_addr[i].addr.q  = '0;
+      assign reg2hw.msi_data[i].data.q  = '0;
+      assign reg2hw.msi_vec_ctl[i].m.q  = 1'b0;
+    end
   end
   
 
-  // # Address hit logic
-  logic [(60+65):0] addr_hit;
+  //-------------------
+  //# Address hit logic
+  //-------------------
+  logic [125:0] addr_hit;
 
   // Mandatory registers
   assign addr_hit[ 0] = (reg_addr == IOMMU_CAPABILITIES_OFFSET);
@@ -4171,60 +1991,25 @@ module iommu_regmap_wrapper #(
     end
   end
 
-  assign addr_hit[12+65] = (reg_addr == IOMMU_ICVEC_OFFSET);
-  assign addr_hit[13+65] = (reg_addr == IOMMU_MSI_ADDR_0_OFFSET);
-  assign addr_hit[14+65] = (reg_addr == IOMMU_MSI_DATA_0_OFFSET);
-  assign addr_hit[15+65] = (reg_addr == IOMMU_MSI_VEC_CTL_0_OFFSET);
-  assign addr_hit[16+65] = (reg_addr == IOMMU_MSI_ADDR_1_OFFSET);
-  assign addr_hit[17+65] = (reg_addr == IOMMU_MSI_DATA_1_OFFSET);
-  assign addr_hit[18+65] = (reg_addr == IOMMU_MSI_VEC_CTL_1_OFFSET);
-  assign addr_hit[19+65] = (reg_addr == IOMMU_MSI_ADDR_2_OFFSET);
-  assign addr_hit[20+65] = (reg_addr == IOMMU_MSI_DATA_2_OFFSET);
-  assign addr_hit[21+65] = (reg_addr == IOMMU_MSI_VEC_CTL_2_OFFSET);
-  assign addr_hit[22+65] = (reg_addr == IOMMU_MSI_ADDR_3_OFFSET);
-  assign addr_hit[23+65] = (reg_addr == IOMMU_MSI_DATA_3_OFFSET);
-  assign addr_hit[24+65] = (reg_addr == IOMMU_MSI_VEC_CTL_3_OFFSET);
-  assign addr_hit[25+65] = (reg_addr == IOMMU_MSI_ADDR_4_OFFSET);
-  assign addr_hit[26+65] = (reg_addr == IOMMU_MSI_DATA_4_OFFSET);
-  assign addr_hit[27+65] = (reg_addr == IOMMU_MSI_VEC_CTL_4_OFFSET);
-  assign addr_hit[28+65] = (reg_addr == IOMMU_MSI_ADDR_5_OFFSET);
-  assign addr_hit[29+65] = (reg_addr == IOMMU_MSI_DATA_5_OFFSET);
-  assign addr_hit[30+65] = (reg_addr == IOMMU_MSI_VEC_CTL_5_OFFSET);
-  assign addr_hit[31+65] = (reg_addr == IOMMU_MSI_ADDR_6_OFFSET);
-  assign addr_hit[32+65] = (reg_addr == IOMMU_MSI_DATA_6_OFFSET);
-  assign addr_hit[33+65] = (reg_addr == IOMMU_MSI_VEC_CTL_6_OFFSET);
-  assign addr_hit[34+65] = (reg_addr == IOMMU_MSI_ADDR_7_OFFSET);
-  assign addr_hit[35+65] = (reg_addr == IOMMU_MSI_DATA_7_OFFSET);
-  assign addr_hit[36+65] = (reg_addr == IOMMU_MSI_VEC_CTL_7_OFFSET);
-  assign addr_hit[37+65] = (reg_addr == IOMMU_MSI_ADDR_8_OFFSET);
-  assign addr_hit[38+65] = (reg_addr == IOMMU_MSI_DATA_8_OFFSET);
-  assign addr_hit[39+65] = (reg_addr == IOMMU_MSI_VEC_CTL_8_OFFSET);
-  assign addr_hit[40+65] = (reg_addr == IOMMU_MSI_ADDR_9_OFFSET);
-  assign addr_hit[41+65] = (reg_addr == IOMMU_MSI_DATA_9_OFFSET);
-  assign addr_hit[42+65] = (reg_addr == IOMMU_MSI_VEC_CTL_9_OFFSET);
-  assign addr_hit[43+65] = (reg_addr == IOMMU_MSI_ADDR_10_OFFSET);
-  assign addr_hit[44+65] = (reg_addr == IOMMU_MSI_DATA_10_OFFSET);
-  assign addr_hit[45+65] = (reg_addr == IOMMU_MSI_VEC_CTL_10_OFFSET);
-  assign addr_hit[46+65] = (reg_addr == IOMMU_MSI_ADDR_11_OFFSET);
-  assign addr_hit[47+65] = (reg_addr == IOMMU_MSI_DATA_11_OFFSET);
-  assign addr_hit[48+65] = (reg_addr == IOMMU_MSI_VEC_CTL_11_OFFSET);
-  assign addr_hit[49+65] = (reg_addr == IOMMU_MSI_ADDR_12_OFFSET);
-  assign addr_hit[50+65] = (reg_addr == IOMMU_MSI_DATA_12_OFFSET);
-  assign addr_hit[51+65] = (reg_addr == IOMMU_MSI_VEC_CTL_12_OFFSET);
-  assign addr_hit[52+65] = (reg_addr == IOMMU_MSI_ADDR_13_OFFSET);
-  assign addr_hit[53+65] = (reg_addr == IOMMU_MSI_DATA_13_OFFSET);
-  assign addr_hit[54+65] = (reg_addr == IOMMU_MSI_VEC_CTL_13_OFFSET);
-  assign addr_hit[55+65] = (reg_addr == IOMMU_MSI_ADDR_14_OFFSET);
-  assign addr_hit[56+65] = (reg_addr == IOMMU_MSI_DATA_14_OFFSET);
-  assign addr_hit[57+65] = (reg_addr == IOMMU_MSI_VEC_CTL_14_OFFSET);
-  assign addr_hit[58+65] = (reg_addr == IOMMU_MSI_ADDR_15_OFFSET);
-  assign addr_hit[59+65] = (reg_addr == IOMMU_MSI_DATA_15_OFFSET);
-  assign addr_hit[60+65] = (reg_addr == IOMMU_MSI_VEC_CTL_15_OFFSET);
+  assign addr_hit[77] = (reg_addr == IOMMU_ICVEC_OFFSET);
+
+  // MSI Config Table
+  for (genvar i = 0; i < N_INT_VEC; i++) begin
+    assign addr_hit[78+(i*3)] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET     + i*16));
+    assign addr_hit[79+(i*3)] = (reg_addr == (IOMMU_MSI_DATA_OFFSET     + i*16));
+    assign addr_hit[80+(i*3)] = (reg_addr == (IOMMU_MSI_VEC_CTL_OFFSET  + i*16));
+  end
+
+  // Hardwire unimplemented vectors to zero
+  for (genvar i = N_INT_VEC; i < 16; i++) begin
+    assign addr_hit[78+(i*3)] = 1'b0;
+    assign addr_hit[79+(i*3)] = 1'b0;
+    assign addr_hit[80+(i*3)] = 1'b0;
+  end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;  // a miss occurs when reading or writing and no addr_hit flag is set
 
   //# Check whether sub-word write is permitted
-  // Mandatory registers
   assign wr_err[ 0] = (addr_hit[ 0] & (|(IOMMU_PERMIT[ 0] & ~reg_be)));
   assign wr_err[ 1] = (addr_hit[ 1] & (|(IOMMU_PERMIT[ 1] & ~reg_be)));
   assign wr_err[ 2] = (addr_hit[ 2] & (|(IOMMU_PERMIT[ 2] & ~reg_be)));
@@ -4238,7 +2023,7 @@ module iommu_regmap_wrapper #(
   assign wr_err[10] = (addr_hit[10] & (|(IOMMU_PERMIT[10] & ~reg_be)));
   assign wr_err[11] = (addr_hit[11] & (|(IOMMU_PERMIT[11] & ~reg_be)));
 
-  // HPM (optional)
+  // HPM
   if (N_IOHPMCTR > 0 ) begin
 
     assign wr_err[12] = (addr_hit[12] & (|(IOMMU_PERMIT[12] & ~reg_be)));
@@ -4270,58 +2055,28 @@ module iommu_regmap_wrapper #(
     end
   end
 
-  // Mandatory registers
-  assign wr_err[12+65] = (addr_hit[12+65] & (|(IOMMU_PERMIT[17] & ~reg_be)));
-  assign wr_err[13+65] = (addr_hit[13+65] & (|(IOMMU_PERMIT[18] & ~reg_be)));
-  assign wr_err[14+65] = (addr_hit[14+65] & (|(IOMMU_PERMIT[19] & ~reg_be)));
-  assign wr_err[15+65] = (addr_hit[15+65] & (|(IOMMU_PERMIT[20] & ~reg_be)));
-  assign wr_err[16+65] = (addr_hit[16+65] & (|(IOMMU_PERMIT[21] & ~reg_be)));
-  assign wr_err[17+65] = (addr_hit[17+65] & (|(IOMMU_PERMIT[22] & ~reg_be)));
-  assign wr_err[18+65] = (addr_hit[18+65] & (|(IOMMU_PERMIT[23] & ~reg_be)));
-  assign wr_err[19+65] = (addr_hit[19+65] & (|(IOMMU_PERMIT[24] & ~reg_be)));
-  assign wr_err[20+65] = (addr_hit[20+65] & (|(IOMMU_PERMIT[25] & ~reg_be)));
-  assign wr_err[21+65] = (addr_hit[21+65] & (|(IOMMU_PERMIT[26] & ~reg_be)));
-  assign wr_err[22+65] = (addr_hit[22+65] & (|(IOMMU_PERMIT[27] & ~reg_be)));
-  assign wr_err[23+65] = (addr_hit[23+65] & (|(IOMMU_PERMIT[28] & ~reg_be)));
-  assign wr_err[24+65] = (addr_hit[24+65] & (|(IOMMU_PERMIT[29] & ~reg_be)));
-  assign wr_err[25+65] = (addr_hit[25+65] & (|(IOMMU_PERMIT[30] & ~reg_be)));
-  assign wr_err[26+65] = (addr_hit[26+65] & (|(IOMMU_PERMIT[31] & ~reg_be)));
-  assign wr_err[27+65] = (addr_hit[27+65] & (|(IOMMU_PERMIT[32] & ~reg_be)));
-  assign wr_err[28+65] = (addr_hit[28+65] & (|(IOMMU_PERMIT[33] & ~reg_be)));
-  assign wr_err[29+65] = (addr_hit[29+65] & (|(IOMMU_PERMIT[34] & ~reg_be)));
-  assign wr_err[30+65] = (addr_hit[30+65] & (|(IOMMU_PERMIT[35] & ~reg_be)));
-  assign wr_err[31+65] = (addr_hit[31+65] & (|(IOMMU_PERMIT[36] & ~reg_be)));
-  assign wr_err[32+65] = (addr_hit[32+65] & (|(IOMMU_PERMIT[37] & ~reg_be)));
-  assign wr_err[33+65] = (addr_hit[33+65] & (|(IOMMU_PERMIT[38] & ~reg_be)));
-  assign wr_err[34+65] = (addr_hit[34+65] & (|(IOMMU_PERMIT[39] & ~reg_be)));
-  assign wr_err[35+65] = (addr_hit[35+65] & (|(IOMMU_PERMIT[40] & ~reg_be)));
-  assign wr_err[36+65] = (addr_hit[36+65] & (|(IOMMU_PERMIT[41] & ~reg_be)));
-  assign wr_err[37+65] = (addr_hit[37+65] & (|(IOMMU_PERMIT[42] & ~reg_be)));
-  assign wr_err[38+65] = (addr_hit[38+65] & (|(IOMMU_PERMIT[43] & ~reg_be)));
-  assign wr_err[39+65] = (addr_hit[39+65] & (|(IOMMU_PERMIT[44] & ~reg_be)));
-  assign wr_err[40+65] = (addr_hit[40+65] & (|(IOMMU_PERMIT[45] & ~reg_be)));
-  assign wr_err[41+65] = (addr_hit[41+65] & (|(IOMMU_PERMIT[46] & ~reg_be)));
-  assign wr_err[42+65] = (addr_hit[42+65] & (|(IOMMU_PERMIT[47] & ~reg_be)));
-  assign wr_err[43+65] = (addr_hit[43+65] & (|(IOMMU_PERMIT[48] & ~reg_be)));
-  assign wr_err[44+65] = (addr_hit[44+65] & (|(IOMMU_PERMIT[49] & ~reg_be)));
-  assign wr_err[45+65] = (addr_hit[45+65] & (|(IOMMU_PERMIT[50] & ~reg_be)));
-  assign wr_err[46+65] = (addr_hit[46+65] & (|(IOMMU_PERMIT[51] & ~reg_be)));
-  assign wr_err[47+65] = (addr_hit[47+65] & (|(IOMMU_PERMIT[52] & ~reg_be)));
-  assign wr_err[48+65] = (addr_hit[48+65] & (|(IOMMU_PERMIT[53] & ~reg_be)));
-  assign wr_err[49+65] = (addr_hit[49+65] & (|(IOMMU_PERMIT[54] & ~reg_be)));
-  assign wr_err[50+65] = (addr_hit[50+65] & (|(IOMMU_PERMIT[55] & ~reg_be)));
-  assign wr_err[51+65] = (addr_hit[51+65] & (|(IOMMU_PERMIT[56] & ~reg_be)));
-  assign wr_err[52+65] = (addr_hit[52+65] & (|(IOMMU_PERMIT[57] & ~reg_be)));
-  assign wr_err[53+65] = (addr_hit[53+65] & (|(IOMMU_PERMIT[58] & ~reg_be)));
-  assign wr_err[54+65] = (addr_hit[54+65] & (|(IOMMU_PERMIT[59] & ~reg_be)));
-  assign wr_err[55+65] = (addr_hit[55+65] & (|(IOMMU_PERMIT[60] & ~reg_be)));
-  assign wr_err[56+65] = (addr_hit[56+65] & (|(IOMMU_PERMIT[61] & ~reg_be)));
-  assign wr_err[57+65] = (addr_hit[57+65] & (|(IOMMU_PERMIT[62] & ~reg_be)));
-  assign wr_err[58+65] = (addr_hit[58+65] & (|(IOMMU_PERMIT[63] & ~reg_be)));
-  assign wr_err[59+65] = (addr_hit[59+65] & (|(IOMMU_PERMIT[64] & ~reg_be)));
-  assign wr_err[60+65] = (addr_hit[60+65] & (|(IOMMU_PERMIT[65] & ~reg_be)));
+  assign wr_err[77] = (addr_hit[77] & (|(IOMMU_PERMIT[17] & ~reg_be)));
 
+  // MSI Config Table
+  for (genvar i = 0; i < N_INT_VEC; i++) begin
+    
+    assign wr_err[78+(i*3)] = (addr_hit[78+(i*3)] & (|(IOMMU_PERMIT[18] & ~reg_be)));
+    assign wr_err[79+(i*3)] = (addr_hit[79+(i*3)] & (|(IOMMU_PERMIT[19] & ~reg_be)));
+    assign wr_err[80+(i*3)] = (addr_hit[80+(i*3)] & (|(IOMMU_PERMIT[20] & ~reg_be)));
+  end
+
+  // Hardwire unused bits to zero
+  for (genvar i = N_INT_VEC; i < 16; i++) begin
+    
+    assign wr_err[78+(i*3)] = 1'b0;
+    assign wr_err[79+(i*3)] = 1'b0;
+    assign wr_err[80+(i*3)] = 1'b0;
+  end
+
+  //------------------
   //# Write data logic
+  //------------------
+
 	// Hardwire fctl.BE since we are only using little-endian processing
 	// assign fctl_be_we = addr_hit[1] & reg_we & !reg_error;
 	// assign fctl_be_wd = reg_wdata[0];
@@ -4494,156 +2249,57 @@ module iommu_regmap_wrapper #(
   assign icvec_piv_we = addr_hit[12+65] & reg_we & !reg_error;
   assign icvec_piv_wd = reg_wdata[(LOG2_INTVEC-1)+12:12];
 
-  assign msi_addr_0_addr_we = addr_hit[13+65] & reg_we & !reg_error;
-  assign msi_addr_0_addr_wd = reg_wdata[55:2];
+  // MSI Config Table
+  for (genvar i = 0; i < N_INT_VEC; i++) begin
+    
+    assign msi_addr_we[i] = addr_hit[78+(i*3)] & reg_we & !reg_error;
+    assign msi_addr_wd[i] = reg_wdata[55:2];
 
-  assign msi_data_0_we = addr_hit[14+65] & reg_we & !reg_error;
-  assign msi_data_0_wd = reg_wdata[31:0];
+    assign msi_data_we[i] = addr_hit[79+(i*3)] & reg_we & !reg_error;
+    assign msi_data_wd[i] = reg_wdata[31:0];
 
-  assign msi_vec_ctl_0_we = addr_hit[15+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_0_wd = reg_wdata[0];
+    assign msi_vec_ctl_we[i] = addr_hit[80+(i*3)] & reg_we & !reg_error;
+    assign msi_vec_ctl_wd[i] = reg_wdata[0];
+  end
 
-  assign msi_addr_1_addr_we = addr_hit[16+65] & reg_we & !reg_error;
-  assign msi_addr_1_addr_wd = reg_wdata[55:2];
+  // Hardwire unused bits to zero
+  for (genvar i = N_INT_VEC; i < 0; i++) begin
+    
+    assign msi_addr_we[i] = 1'b0;
+    assign msi_addr_wd[i] = '0;
 
-  assign msi_data_1_we = addr_hit[17+65] & reg_we & !reg_error;
-  assign msi_data_1_wd = reg_wdata[31:0];
+    assign msi_data_we[i] = 1'b0;
+    assign msi_data_wd[i] = '0;
 
-  assign msi_vec_ctl_1_we = addr_hit[18+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_1_wd = reg_wdata[0];
+    assign msi_vec_ctl_we[i] = 1'b0;
+    assign msi_vec_ctl_wd[i] = '0;
+  end
 
-  assign msi_addr_2_addr_we = addr_hit[19+65] & reg_we & !reg_error;
-  assign msi_addr_2_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_2_we = addr_hit[20+65] & reg_we & !reg_error;
-  assign msi_data_2_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_2_we = addr_hit[21+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_2_wd = reg_wdata[0];
-
-  assign msi_addr_3_addr_we = addr_hit[22+65] & reg_we & !reg_error;
-  assign msi_addr_3_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_3_we = addr_hit[23+65] & reg_we & !reg_error;
-  assign msi_data_3_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_3_we = addr_hit[24+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_3_wd = reg_wdata[0];
-
-  assign msi_addr_4_addr_we = addr_hit[25+65] & reg_we & !reg_error;
-  assign msi_addr_4_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_4_we = addr_hit[26+65] & reg_we & !reg_error;
-  assign msi_data_4_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_4_we = addr_hit[27+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_4_wd = reg_wdata[0];
-
-  assign msi_addr_5_addr_we = addr_hit[28+65] & reg_we & !reg_error;
-  assign msi_addr_5_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_5_we = addr_hit[29+65] & reg_we & !reg_error;
-  assign msi_data_5_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_5_we = addr_hit[30+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_5_wd = reg_wdata[0];
-
-  assign msi_addr_6_addr_we = addr_hit[31+65] & reg_we & !reg_error;
-  assign msi_addr_6_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_6_we = addr_hit[32+65] & reg_we & !reg_error;
-  assign msi_data_6_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_6_we = addr_hit[33+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_6_wd = reg_wdata[0];
-
-  assign msi_addr_7_addr_we = addr_hit[34+65] & reg_we & !reg_error;
-  assign msi_addr_7_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_7_we = addr_hit[35+65] & reg_we & !reg_error;
-  assign msi_data_7_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_7_we = addr_hit[36+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_7_wd = reg_wdata[0];
-
-  assign msi_addr_8_addr_we = addr_hit[37+65] & reg_we & !reg_error;
-  assign msi_addr_8_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_8_we = addr_hit[38+65] & reg_we & !reg_error;
-  assign msi_data_8_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_8_we = addr_hit[39+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_8_wd = reg_wdata[0];
-
-  assign msi_addr_9_addr_we = addr_hit[40+65] & reg_we & !reg_error;
-  assign msi_addr_9_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_9_we = addr_hit[41+65] & reg_we & !reg_error;
-  assign msi_data_9_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_9_we = addr_hit[42+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_9_wd = reg_wdata[0];
-
-  assign msi_addr_10_addr_we = addr_hit[43+65] & reg_we & !reg_error;
-  assign msi_addr_10_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_10_we = addr_hit[44+65] & reg_we & !reg_error;
-  assign msi_data_10_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_10_we = addr_hit[45+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_10_wd = reg_wdata[0];
-
-  assign msi_addr_11_addr_we = addr_hit[46+65] & reg_we & !reg_error;
-  assign msi_addr_11_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_11_we = addr_hit[47+65] & reg_we & !reg_error;
-  assign msi_data_11_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_11_we = addr_hit[48+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_11_wd = reg_wdata[0];
-
-  assign msi_addr_12_addr_we = addr_hit[49+65] & reg_we & !reg_error;
-  assign msi_addr_12_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_12_we = addr_hit[50+65] & reg_we & !reg_error;
-  assign msi_data_12_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_12_we = addr_hit[51+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_12_wd = reg_wdata[0];
-
-  assign msi_addr_13_addr_we = addr_hit[52+65] & reg_we & !reg_error;
-  assign msi_addr_13_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_13_we = addr_hit[53+65] & reg_we & !reg_error;
-  assign msi_data_13_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_13_we = addr_hit[54+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_13_wd = reg_wdata[0];
-
-  assign msi_addr_14_addr_we = addr_hit[55+65] & reg_we & !reg_error;
-  assign msi_addr_14_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_14_we = addr_hit[56+65] & reg_we & !reg_error;
-  assign msi_data_14_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_14_we = addr_hit[57+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_14_wd = reg_wdata[0];
-
-  assign msi_addr_15_addr_we = addr_hit[58+65] & reg_we & !reg_error;
-  assign msi_addr_15_addr_wd = reg_wdata[55:2];
-
-  assign msi_data_15_we = addr_hit[59+65] & reg_we & !reg_error;
-  assign msi_data_15_wd = reg_wdata[31:0];
-
-  assign msi_vec_ctl_15_we = addr_hit[60+65] & reg_we & !reg_error;
-  assign msi_vec_ctl_15_wd = reg_wdata[0];
-
+  //------------------
   // # Read data logic
+  //------------------
   
   logic   iohpmctr_hit_vector;
   logic   iohpmevt_hit_vector;
   assign  iohpmctr_hit_vector = |addr_hit[(15+N_IOHPMCTR-1):15];
   assign  iohpmevt_hit_vector = |addr_hit[(46+N_IOHPMCTR-1):46];
+
+  logic [N_INT_VEC-1:0] msi_addr_hit_vector;
+  logic [N_INT_VEC-1:0] msi_data_hit_vector;
+  logic [N_INT_VEC-1:0] msi_vect_hit_vector;
+
+  for (genvar i = 0; i < N_INT_VEC; i++) begin
+    assign msi_addr_hit_vector[i] = addr_hit[78+(i*3)];
+    assign msi_data_hit_vector[i] = addr_hit[79+(i*3)];
+    assign msi_vect_hit_vector[i] = addr_hit[80+(i*3)];
+  end
+
+  logic   msi_addr_hit;
+  logic   msi_data_hit;
+  logic   msi_vect_hit;
+  assign msi_addr_hit = |msi_addr_hit_vector;
+  assign msi_data_hit = |msi_data_hit_vector;
+  assign msi_vect_hit = |msi_vect_hit_vector;
 
   always_comb begin
     reg_rdata_next = '0;
@@ -4816,7 +2472,7 @@ module iommu_regmap_wrapper #(
         end
       end
 
-      addr_hit[12+65]: begin
+      addr_hit[77]: begin
         reg_rdata_next[(LOG2_INTVEC-1)+0:0] = icvec_civ_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+4:4] = icvec_fiv_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+8:8] = icvec_pmiv_qs;
@@ -4824,276 +2480,36 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[63:16] = '0;
       end
 
-      addr_hit[13+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_0_addr_qs;
-        reg_rdata_next[63:56] = '0;
+      (msi_addr_hit): begin
+
+        for (int unsigned i = 0; i < N_INT_VEC; i++) begin
+          if (addr_hit[78+(i*3)]) begin
+            reg_rdata_next[1:0] = '0;
+            reg_rdata_next[55:2] = msi_addr_qs[i];
+            reg_rdata_next[63:56] = '0;
+          end
+        end
       end
 
-      addr_hit[14+65]: begin
-        reg_rdata_next[31:0] = msi_data_0_qs;
-        reg_rdata_next[63:32] = '0;
+      (msi_data_hit): begin
+
+        for (int unsigned i = 0; i < N_INT_VEC; i++) begin
+          if (addr_hit[79+(i*3)]) begin
+            reg_rdata_next[31:0] = msi_data_qs[i];
+            reg_rdata_next[63:32] = '0;
+          end
+        end
       end
 
-      addr_hit[15+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_0_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
+      (msi_vect_hit): begin
 
-      addr_hit[16+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_1_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[17+65]: begin
-        reg_rdata_next[31:0] = msi_data_1_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[18+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_1_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[19+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_2_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[20+65]: begin
-        reg_rdata_next[31:0] = msi_data_2_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[21+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_2_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[22+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_3_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[23+65]: begin
-        reg_rdata_next[31:0] = msi_data_3_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[24+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_3_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[25+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_4_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[26+65]: begin
-        reg_rdata_next[31:0] = msi_data_4_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[27+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_4_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[28+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_5_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[29+65]: begin
-        reg_rdata_next[31:0] = msi_data_5_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[30+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_5_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[31+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_6_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[32+65]: begin
-        reg_rdata_next[31:0] = msi_data_6_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[33+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_6_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[34+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_7_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[35+65]: begin
-        reg_rdata_next[31:0] = msi_data_7_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[36+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_7_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[37+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_8_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[38+65]: begin
-        reg_rdata_next[31:0] = msi_data_8_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[39+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_8_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[40+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_9_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[41+65]: begin
-        reg_rdata_next[31:0] = msi_data_9_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[42+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_9_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[43+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_10_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[44+65]: begin
-        reg_rdata_next[31:0] = msi_data_10_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[45+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_10_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[46+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_11_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[47+65]: begin
-        reg_rdata_next[31:0] = msi_data_11_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[48+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_11_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[49+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_12_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[50+65]: begin
-        reg_rdata_next[31:0] = msi_data_12_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[51+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_12_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[52+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_13_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[53+65]: begin
-        reg_rdata_next[31:0] = msi_data_13_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[54+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_13_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[55+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_14_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[56+65]: begin
-        reg_rdata_next[31:0] = msi_data_14_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[57+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_14_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
-      end
-
-      addr_hit[58+65]: begin
-        reg_rdata_next[1:0] = '0;
-        reg_rdata_next[55:2] = msi_addr_15_addr_qs;
-        reg_rdata_next[63:56] = '0;
-      end
-
-      addr_hit[59+65]: begin
-        reg_rdata_next[31:0] = msi_data_15_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[60+65]: begin
-        reg_rdata_next[32] = msi_vec_ctl_15_qs;
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:33] = '0;
+        for (int unsigned i = 0; i < N_INT_VEC; i++) begin
+          if (addr_hit[80+(i*3)]) begin
+            reg_rdata_next[32] = msi_vec_ctl_qs[i];
+            reg_rdata_next[31:0] = '0;
+            reg_rdata_next[63:33] = '0;
+          end
+        end
       end
 
       default: begin

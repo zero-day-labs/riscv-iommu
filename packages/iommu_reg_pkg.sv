@@ -296,225 +296,21 @@ package iommu_reg_pkg;
     struct packed {
       logic [53:0] q;
     } addr;
-  } iommu_reg2hw_msi_addr_0_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_0_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_0_reg_t;
+  } iommu_reg2hw_msi_addr_reg_t;
 
   typedef struct packed {
     struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_1_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_1_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_1_reg_t;
+      logic [31:0] q;
+    } data;
+  } iommu_reg2hw_msi_data_reg_t;
 
   typedef struct packed {
     struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_2_reg_t;
+      logic        q;
+    } m;
+  } iommu_reg2hw_msi_vec_ctl_reg_t;
 
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_2_reg_t;
 
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_2_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_3_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_3_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_3_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_4_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_4_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_4_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_5_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_5_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_5_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_6_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_6_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_6_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_7_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_7_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_7_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_8_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_8_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_8_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_9_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_9_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_9_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_10_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_10_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_10_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_11_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_11_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_11_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_12_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_12_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_12_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_13_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_13_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_13_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_14_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_14_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_14_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [53:0] q;
-    } addr;
-  } iommu_reg2hw_msi_addr_15_reg_t;
-
-  typedef struct packed {
-    logic [31:0] q;
-  } iommu_reg2hw_msi_data_15_reg_t;
-
-  typedef struct packed {
-    logic        q;
-  } iommu_reg2hw_msi_vec_ctl_15_reg_t;
 
   typedef struct packed {
     struct packed {
@@ -713,54 +509,9 @@ package iommu_reg_pkg;
     iommu_reg2hw_iohpmctr_reg_t [30:0] iohpmctr;
     iommu_reg2hw_iohpmevt_reg_t [30:0] iohpmevt;
     iommu_reg2hw_icvec_reg_t icvec; // [1439:1424]
-    iommu_reg2hw_msi_addr_0_reg_t msi_addr_0; // [1423:1368]
-    iommu_reg2hw_msi_data_0_reg_t msi_data_0; // [1367:1336]
-    iommu_reg2hw_msi_vec_ctl_0_reg_t msi_vec_ctl_0; // [1335:1335]
-    iommu_reg2hw_msi_addr_1_reg_t msi_addr_1; // [1334:1279]
-    iommu_reg2hw_msi_data_1_reg_t msi_data_1; // [1278:1247]
-    iommu_reg2hw_msi_vec_ctl_1_reg_t msi_vec_ctl_1; // [1246:1246]
-    iommu_reg2hw_msi_addr_2_reg_t msi_addr_2; // [1245:1190]
-    iommu_reg2hw_msi_data_2_reg_t msi_data_2; // [1189:1158]
-    iommu_reg2hw_msi_vec_ctl_2_reg_t msi_vec_ctl_2; // [1157:1157]
-    iommu_reg2hw_msi_addr_3_reg_t msi_addr_3; // [1156:1101]
-    iommu_reg2hw_msi_data_3_reg_t msi_data_3; // [1100:1069]
-    iommu_reg2hw_msi_vec_ctl_3_reg_t msi_vec_ctl_3; // [1068:1068]
-    iommu_reg2hw_msi_addr_4_reg_t msi_addr_4; // [1067:1012]
-    iommu_reg2hw_msi_data_4_reg_t msi_data_4; // [1011:980]
-    iommu_reg2hw_msi_vec_ctl_4_reg_t msi_vec_ctl_4; // [979:979]
-    iommu_reg2hw_msi_addr_5_reg_t msi_addr_5; // [978:923]
-    iommu_reg2hw_msi_data_5_reg_t msi_data_5; // [922:891]
-    iommu_reg2hw_msi_vec_ctl_5_reg_t msi_vec_ctl_5; // [890:890]
-    iommu_reg2hw_msi_addr_6_reg_t msi_addr_6; // [889:834]
-    iommu_reg2hw_msi_data_6_reg_t msi_data_6; // [833:802]
-    iommu_reg2hw_msi_vec_ctl_6_reg_t msi_vec_ctl_6; // [801:801]
-    iommu_reg2hw_msi_addr_7_reg_t msi_addr_7; // [800:745]
-    iommu_reg2hw_msi_data_7_reg_t msi_data_7; // [744:713]
-    iommu_reg2hw_msi_vec_ctl_7_reg_t msi_vec_ctl_7; // [712:712]
-    iommu_reg2hw_msi_addr_8_reg_t msi_addr_8; // [711:656]
-    iommu_reg2hw_msi_data_8_reg_t msi_data_8; // [655:624]
-    iommu_reg2hw_msi_vec_ctl_8_reg_t msi_vec_ctl_8; // [623:623]
-    iommu_reg2hw_msi_addr_9_reg_t msi_addr_9; // [622:567]
-    iommu_reg2hw_msi_data_9_reg_t msi_data_9; // [566:535]
-    iommu_reg2hw_msi_vec_ctl_9_reg_t msi_vec_ctl_9; // [534:534]
-    iommu_reg2hw_msi_addr_10_reg_t msi_addr_10; // [533:478]
-    iommu_reg2hw_msi_data_10_reg_t msi_data_10; // [477:446]
-    iommu_reg2hw_msi_vec_ctl_10_reg_t msi_vec_ctl_10; // [445:445]
-    iommu_reg2hw_msi_addr_11_reg_t msi_addr_11; // [444:389]
-    iommu_reg2hw_msi_data_11_reg_t msi_data_11; // [388:357]
-    iommu_reg2hw_msi_vec_ctl_11_reg_t msi_vec_ctl_11; // [356:356]
-    iommu_reg2hw_msi_addr_12_reg_t msi_addr_12; // [355:300]
-    iommu_reg2hw_msi_data_12_reg_t msi_data_12; // [299:268]
-    iommu_reg2hw_msi_vec_ctl_12_reg_t msi_vec_ctl_12; // [267:267]
-    iommu_reg2hw_msi_addr_13_reg_t msi_addr_13; // [266:211]
-    iommu_reg2hw_msi_data_13_reg_t msi_data_13; // [210:179]
-    iommu_reg2hw_msi_vec_ctl_13_reg_t msi_vec_ctl_13; // [178:178]
-    iommu_reg2hw_msi_addr_14_reg_t msi_addr_14; // [177:122]
-    iommu_reg2hw_msi_data_14_reg_t msi_data_14; // [121:90]
-    iommu_reg2hw_msi_vec_ctl_14_reg_t msi_vec_ctl_14; // [89:89]
-    iommu_reg2hw_msi_addr_15_reg_t msi_addr_15; // [88:33]
-    iommu_reg2hw_msi_data_15_reg_t msi_data_15; // [32:1]
-    iommu_reg2hw_msi_vec_ctl_15_reg_t msi_vec_ctl_15; // [0:0]
+    iommu_reg2hw_msi_addr_reg_t [15:0] msi_addr; // [1423:1368]
+    iommu_reg2hw_msi_data_reg_t [15:0] msi_data; // [1367:1336]
+    iommu_reg2hw_msi_vec_ctl_reg_t [15:0] msi_vec_ctl; // [1335:1335]
   } iommu_reg2hw_t;
 
   // HW -> register type
@@ -783,74 +534,29 @@ package iommu_reg_pkg;
 
   // Register offsets
   parameter logic [BlockAw-1:0] IOMMU_CAPABILITIES_OFFSET = 12'h 0;
-  parameter logic [BlockAw-1:0] IOMMU_FCTL_OFFSET = 12'h 8;
-  parameter logic [BlockAw-1:0] IOMMU_DDTP_OFFSET = 12'h 10;
-  parameter logic [BlockAw-1:0] IOMMU_CQB_OFFSET = 12'h 18;
-  parameter logic [BlockAw-1:0] IOMMU_CQH_OFFSET = 12'h 20;
-  parameter logic [BlockAw-1:0] IOMMU_CQT_OFFSET = 12'h 24;
-  parameter logic [BlockAw-1:0] IOMMU_FQB_OFFSET = 12'h 28;
-  parameter logic [BlockAw-1:0] IOMMU_FQH_OFFSET = 12'h 30;
-  parameter logic [BlockAw-1:0] IOMMU_FQT_OFFSET = 12'h 34;
-  parameter logic [BlockAw-1:0] IOMMU_CQCSR_OFFSET = 12'h 48;
-  parameter logic [BlockAw-1:0] IOMMU_FQCSR_OFFSET = 12'h 4c;
-  parameter logic [BlockAw-1:0] IOMMU_IPSR_OFFSET = 12'h 54;
-  parameter logic [BlockAw-1:0] IOMMU_IOCNTOVF_OFFSET = 12'h 58;
-  parameter logic [BlockAw-1:0] IOMMU_IOCNTINH_OFFSET = 12'h 5c;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET = 12'h 60;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET = 12'h 68;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET = 12'h 160;
-  parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET = 12'h 2f8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_0_OFFSET = 12'h 300;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_0_OFFSET = 12'h 308;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_0_OFFSET = 12'h 30c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_1_OFFSET = 12'h 310;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_1_OFFSET = 12'h 318;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_1_OFFSET = 12'h 31c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_2_OFFSET = 12'h 320;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_2_OFFSET = 12'h 328;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_2_OFFSET = 12'h 32c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_3_OFFSET = 12'h 330;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_3_OFFSET = 12'h 338;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_3_OFFSET = 12'h 33c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_4_OFFSET = 12'h 340;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_4_OFFSET = 12'h 348;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_4_OFFSET = 12'h 34c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_5_OFFSET = 12'h 350;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_5_OFFSET = 12'h 358;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_5_OFFSET = 12'h 35c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_6_OFFSET = 12'h 360;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_6_OFFSET = 12'h 368;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_6_OFFSET = 12'h 36c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_7_OFFSET = 12'h 370;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_7_OFFSET = 12'h 378;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_7_OFFSET = 12'h 37c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_8_OFFSET = 12'h 380;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_8_OFFSET = 12'h 388;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_8_OFFSET = 12'h 38c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_9_OFFSET = 12'h 390;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_9_OFFSET = 12'h 398;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_9_OFFSET = 12'h 39c;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_10_OFFSET = 12'h 3a0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_10_OFFSET = 12'h 3a8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_10_OFFSET = 12'h 3ac;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_11_OFFSET = 12'h 3b0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_11_OFFSET = 12'h 3b8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_11_OFFSET = 12'h 3bc;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_12_OFFSET = 12'h 3c0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_12_OFFSET = 12'h 3c8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_12_OFFSET = 12'h 3cc;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_13_OFFSET = 12'h 3d0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_13_OFFSET = 12'h 3d8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_13_OFFSET = 12'h 3dc;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_14_OFFSET = 12'h 3e0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_14_OFFSET = 12'h 3e8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_14_OFFSET = 12'h 3ec;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_15_OFFSET = 12'h 3f0;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_15_OFFSET = 12'h 3f8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_15_OFFSET = 12'h 3fc;
+  parameter logic [BlockAw-1:0] IOMMU_FCTL_OFFSET         = 12'h 8;
+  parameter logic [BlockAw-1:0] IOMMU_DDTP_OFFSET         = 12'h 10;
+  parameter logic [BlockAw-1:0] IOMMU_CQB_OFFSET          = 12'h 18;
+  parameter logic [BlockAw-1:0] IOMMU_CQH_OFFSET          = 12'h 20;
+  parameter logic [BlockAw-1:0] IOMMU_CQT_OFFSET          = 12'h 24;
+  parameter logic [BlockAw-1:0] IOMMU_FQB_OFFSET          = 12'h 28;
+  parameter logic [BlockAw-1:0] IOMMU_FQH_OFFSET          = 12'h 30;
+  parameter logic [BlockAw-1:0] IOMMU_FQT_OFFSET          = 12'h 34;
+  parameter logic [BlockAw-1:0] IOMMU_CQCSR_OFFSET        = 12'h 48;
+  parameter logic [BlockAw-1:0] IOMMU_FQCSR_OFFSET        = 12'h 4c;
+  parameter logic [BlockAw-1:0] IOMMU_IPSR_OFFSET         = 12'h 54;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTOVF_OFFSET     = 12'h 58;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTINH_OFFSET     = 12'h 5c;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET  = 12'h 60;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET     = 12'h 68;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET     = 12'h 160;
+  parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET        = 12'h 2f8;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_OFFSET     = 12'h 300;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_OFFSET     = 12'h 308;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_OFFSET  = 12'h 30c;
 
   // Register width information to check illegal writes
-  parameter logic [7:0] IOMMU_PERMIT [66] = '{
+  parameter logic [7:0] IOMMU_PERMIT [21] = '{
     8'b 00111111, // IOMMU_CAPABILITIES
     8'b 00000001, // IOMMU_FCTL
     8'b 01111111, // IOMMU_DDTP
@@ -869,54 +575,9 @@ package iommu_reg_pkg;
     8'b 11111111, // IOMMU_IOHPMCTR
     8'b 11111111, // IOMMU_IOHPMEVT
     8'b 00000011, // IOMMU_ICVEC
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000, // IOMMU_MSI_VEC_CTL_0
-    8'b 01111111, // IOMMU_MSI_ADDR_0
-    8'b 00001111, // IOMMU_MSI_DATA_0
-    8'b 00010000  // IOMMU_MSI_VEC_CTL_0
+    8'b 01111111, // IOMMU_MSI_ADDR
+    8'b 00001111, // IOMMU_MSI_DATA
+    8'b 00010000  // IOMMU_MSI_VEC_CTL
   };
 
 endpackage
