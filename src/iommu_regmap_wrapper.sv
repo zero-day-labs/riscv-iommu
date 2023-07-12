@@ -222,8 +222,8 @@ module iommu_regmap_wrapper #(
   logic 		              iocountinh_cy_qs;
   logic 		              iocountinh_cy_wd;
   logic 		              iocountinh_cy_we;
-  logic [N_IOHPMCTR-1:0]	iocountinh_hpm_qs;
-  logic [N_IOHPMCTR-1:0]	iocountinh_hpm_wd;
+  logic [31-1:0]	        iocountinh_hpm_qs;
+  logic [31-1:0]	        iocountinh_hpm_wd;
   logic 		              iocountinh_hpm_we;
 
   // iohpmcycles
@@ -235,35 +235,35 @@ module iommu_regmap_wrapper #(
   logic 		    iohpmcycles_of_we;
 
   // iohpmctr
-  logic [63:0]	iohpmctr_counter_qs [N_IOHPMCTR];
-  logic [63:0]	iohpmctr_counter_wd [N_IOHPMCTR];
-  logic 		    iohpmctr_counter_we [N_IOHPMCTR];
+  logic [63:0]	iohpmctr_counter_qs   [31];
+  logic [63:0]	iohpmctr_counter_wd   [31];
+  logic 		    iohpmctr_counter_we   [31];
 
   // iohpmevt
-  logic [14:0]	iohpmevt_eventid_qs [N_IOHPMCTR];
-  logic [14:0]	iohpmevt_eventid_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_eventid_we [N_IOHPMCTR];
-  logic 	      iohpmevt_dmask_qs [N_IOHPMCTR];
-  logic 	      iohpmevt_dmask_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_dmask_we [N_IOHPMCTR];
-  logic [19:0]	iohpmevt_pid_pscid_qs [N_IOHPMCTR];
-  logic [19:0]	iohpmevt_pid_pscid_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_pid_pscid_we [N_IOHPMCTR];
-  logic [23:0]	iohpmevt_did_gscid_qs [N_IOHPMCTR];
-  logic [23:0]	iohpmevt_did_gscid_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_did_gscid_we [N_IOHPMCTR];
-  logic 	      iohpmevt_pv_pscv_qs [N_IOHPMCTR];
-  logic 	      iohpmevt_pv_pscv_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_pv_pscv_we [N_IOHPMCTR];
-  logic 	      iohpmevt_dv_gscv_qs [N_IOHPMCTR];
-  logic 	      iohpmevt_dv_gscv_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_dv_gscv_we [N_IOHPMCTR];
-  logic 	      iohpmevt_idt_qs [N_IOHPMCTR];
-  logic 	      iohpmevt_idt_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_idt_we [N_IOHPMCTR];
-  logic 	      iohpmevt_of_qs [N_IOHPMCTR];
-  logic 	      iohpmevt_of_wd [N_IOHPMCTR];
-  logic 		    iohpmevt_of_we [N_IOHPMCTR];
+  logic [14:0]	iohpmevt_eventid_qs   [31];
+  logic [14:0]	iohpmevt_eventid_wd   [31];
+  logic 		    iohpmevt_eventid_we   [31];
+  logic 	      iohpmevt_dmask_qs     [31];
+  logic 	      iohpmevt_dmask_wd     [31];
+  logic 		    iohpmevt_dmask_we     [31];
+  logic [19:0]	iohpmevt_pid_pscid_qs [31];
+  logic [19:0]	iohpmevt_pid_pscid_wd [31];
+  logic 		    iohpmevt_pid_pscid_we [31];
+  logic [23:0]	iohpmevt_did_gscid_qs [31];
+  logic [23:0]	iohpmevt_did_gscid_wd [31];
+  logic 		    iohpmevt_did_gscid_we [31];
+  logic 	      iohpmevt_pv_pscv_qs   [31];
+  logic 	      iohpmevt_pv_pscv_wd   [31];
+  logic 		    iohpmevt_pv_pscv_we   [31];
+  logic 	      iohpmevt_dv_gscv_qs   [31];
+  logic 	      iohpmevt_dv_gscv_wd   [31];
+  logic 		    iohpmevt_dv_gscv_we   [31];
+  logic 	      iohpmevt_idt_qs       [31];
+  logic 	      iohpmevt_idt_wd       [31];
+  logic 		    iohpmevt_idt_we       [31];
+  logic 	      iohpmevt_of_qs        [31];
+  logic 	      iohpmevt_of_wd        [31];
+  logic 		    iohpmevt_of_we        [31];
   
   // ipsr
   logic 		ipsr_cip_qs;
@@ -294,15 +294,15 @@ module iommu_regmap_wrapper #(
   logic 		icvec_piv_we;
 
   // MSI configuration table
-  logic [53:0]  msi_addr_qs [N_INT_VEC];
-  logic [53:0]  msi_addr_wd [N_INT_VEC];
-  logic         msi_addr_we [N_INT_VEC];
-  logic [31:0]  msi_data_qs [N_INT_VEC];
-  logic [31:0]  msi_data_wd [N_INT_VEC];
-  logic         msi_data_we [N_INT_VEC];
-  logic         msi_vec_ctl_qs [N_INT_VEC];
-  logic         msi_vec_ctl_wd [N_INT_VEC];
-  logic         msi_vec_ctl_we [N_INT_VEC];
+  logic [53:0]  msi_addr_qs     [16];
+  logic [53:0]  msi_addr_wd     [16];
+  logic         msi_addr_we     [16];
+  logic [31:0]  msi_data_qs     [16];
+  logic [31:0]  msi_data_wd     [16];
+  logic         msi_data_we     [16];
+  logic         msi_vec_ctl_qs  [16];
+  logic         msi_vec_ctl_wd  [16];
+  logic         msi_vec_ctl_we  [16];
 
   //--------------------
   //# Register instances
@@ -2213,7 +2213,7 @@ module iommu_regmap_wrapper #(
     assign iohpmcycles_of_we = 1'b0;
     assign iohpmcycles_of_wd = '0;
 
-    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
+    for (genvar i = 0; i < 31; i++) begin
 
       assign iohpmctr_counter_we[i] = 1'b0;
       assign iohpmctr_counter_wd[i] = '0;
@@ -2281,8 +2281,8 @@ module iommu_regmap_wrapper #(
   
   logic   iohpmctr_hit_vector;
   logic   iohpmevt_hit_vector;
-  assign  iohpmctr_hit_vector = |addr_hit[(15+N_IOHPMCTR-1):15];
-  assign  iohpmevt_hit_vector = |addr_hit[(46+N_IOHPMCTR-1):46];
+  assign  iohpmctr_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(15+N_IOHPMCTR-1):15]) : ('0);
+  assign  iohpmevt_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(46+N_IOHPMCTR-1):46]) : ('0);
 
   logic [N_INT_VEC-1:0] msi_addr_hit_vector;
   logic [N_INT_VEC-1:0] msi_data_hit_vector;
