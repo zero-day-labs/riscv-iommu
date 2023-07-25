@@ -41,7 +41,8 @@ module iommu_translation_wrapper #(
     input  logic    clk_i,
     input  logic    rst_ni,
 
-    input  logic    req_trans_i,            // Trigger translation
+    // Trigger translation
+    input  logic    req_trans_i,
 
     // Translation request data
     input  logic [23:0]                     device_id_i,
@@ -133,23 +134,23 @@ module iommu_translation_wrapper #(
 
     // DDTC
     logic                       ddtc_access;
-    rv_iommu::dc_ext_t         ddtc_lu_content;
+    rv_iommu::dc_ext_t          ddtc_lu_content;
     logic                       ddtc_lu_hit;
 
     // PDTC
     logic                       pdtc_access;
-    rv_iommu::pc_t             pdtc_lu_content;
+    rv_iommu::pc_t              pdtc_lu_content;
     logic                       pdtc_lu_hit;
 
     // IOTLB
     logic                       iotlb_access;
     logic [riscv::GPLEN-1:0]    iotlb_lu_gpaddr;
-    riscv::pte_t                iotlb_lu_content;
-    riscv::pte_t                iotlb_lu_g_content;
-    logic                       iotlb_lu_is_s_2M;
-    logic                       iotlb_lu_is_s_1G;
-    logic                       iotlb_lu_is_g_2M;
-    logic                       iotlb_lu_is_g_1G;
+    riscv::pte_t                iotlb_lu_1S_content;
+    riscv::pte_t                iotlb_lu_2S_content;
+    logic                       iotlb_lu_1S_2M;
+    logic                       iotlb_lu_1S_1G;
+    logic                       iotlb_lu_2S_2M;
+    logic                       iotlb_lu_2S_1G;
     logic                       iotlb_lu_is_msi;
     logic                       iotlb_lu_hit;
 
@@ -165,7 +166,7 @@ module iommu_translation_wrapper #(
     logic [(rv_iommu::CAUSE_LEN-1):0]  cdw_cause_code;
 
     // Address translation parameters
-    logic en_stage1, en_stage2;
+    logic en_1S, en_2S;
     logic [15:0] gscid;
     logic [19:0] pscid;
     logic [riscv::PPNW-1:0] iohgatp_ppn, iosatp_ppn;
@@ -221,10 +222,10 @@ module iommu_translation_wrapper #(
     logic [riscv::PPNW-1:0] ptw_iohgatp_ppn;
     assign ptw_iohgatp_ppn = (is_ddt_walk & cdw_implicit_access) ? iohgatp_ppn_fw : iohgatp_ppn;
 
-    // To select en_stage1 and en_stage2 source for PTW implicit second-stage translations in CDW Walks
-    logic   ptw_en_stage1, ptw_en_stage2;
-    assign  ptw_en_stage1 = (cdw_implicit_access) ? 1'b0 : en_stage1;
-    assign  ptw_en_stage2 = (cdw_implicit_access) ? 1'b1 : en_stage2;
+    // To select en_1S and en_2S source for PTW implicit second-stage translations in CDW Walks
+    logic   ptw_en_1S, ptw_en_2S;
+    assign  ptw_en_1S = (cdw_implicit_access) ? 1'b0 : en_1S;
+    assign  ptw_en_2S = (cdw_implicit_access) ? 1'b1 : en_2S;
 
     // Set for faults occurred before DDTC lookup
     logic   report_always;
@@ -240,8 +241,8 @@ module iommu_translation_wrapper #(
     assign  trans_error_o   = trans_error;  // The requesting device needs to know if an error occurred
 
     logic   is_implicit;
-    logic   ptw_error_stage2_int;
-    assign  is_implicit = (ptw_error_stage2_int | (flush_cdw & ~is_ddt_walk));
+    logic   ptw_error_2S_int;
+    assign  is_implicit = (ptw_error_2S_int | (flush_cdw & ~is_ddt_walk));
 
     // To indicate if the IOMMU supports and uses WSI as interrupt generation mechanism
     logic   wsi_en;
@@ -256,48 +257,48 @@ module iommu_translation_wrapper #(
     assign iotlb_miss_o = iotlb_access & (~iotlb_lu_hit);
     assign ddt_walk_o   = cdw_active & (is_ddt_walk);
     assign pdt_walk_o   = cdw_active & (~is_ddt_walk);
-    assign s1_ptw_o     = ptw_active & (ptw_en_stage1);
-    assign s2_ptw_o     = ptw_active & (ptw_en_stage2);
+    assign s1_ptw_o     = ptw_active & (ptw_en_1S);
+    assign s2_ptw_o     = ptw_active & (ptw_en_2S);
     assign gscid_o      = gscid;
     assign pscid_o      = pscid;
 
 
     // Update wires
-    logic                           ddtc_update;
-    logic [23:0]     ddtc_up_did;
-    rv_iommu::dc_ext_t             ddtc_up_content;
+    logic                       ddtc_update;
+    logic [23:0]                ddtc_up_did;
+    rv_iommu::dc_ext_t          ddtc_up_content;
 
-    logic                           pdtc_update;
-    logic [19:0]    pdtc_up_pid;
-    rv_iommu::pc_t                 pdtc_up_content;
+    logic                       pdtc_update;
+    logic [19:0]                pdtc_up_pid;
+    rv_iommu::pc_t              pdtc_up_content;
 
-    logic                           iotlb_update;
-    logic                           iotlb_up_is_s_2M;
-    logic                           iotlb_up_is_s_1G;
-    logic                           iotlb_up_is_g_2M;
-    logic                           iotlb_up_is_g_1G;
-    logic                           iotlb_up_is_msi;
-    logic [riscv::GPPNW-1:0]        iotlb_up_vpn;
-    logic [19:0]         iotlb_up_pscid;
-    logic [15:0]         iotlb_up_gscid;
-    riscv::pte_t                    iotlb_up_content;
-    riscv::pte_t                    iotlb_up_g_content;
+    logic                       iotlb_update;
+    logic                       iotlb_up_1S_2M;
+    logic                       iotlb_up_1S_1G;
+    logic                       iotlb_up_2S_2M;
+    logic                       iotlb_up_2S_1G;
+    logic                       iotlb_up_is_msi;
+    logic [riscv::GPPNW-1:0]    iotlb_up_vpn;
+    logic [19:0]                iotlb_up_pscid;
+    logic [15:0]                iotlb_up_gscid;
+    riscv::pte_t                iotlb_up_1S_content;
+    riscv::pte_t                iotlb_up_2S_content;
 
     // Flush wires
-    logic                           flush_ddtc;
-    logic                           flush_dv;
-    logic [23:0]     flush_did;
-    logic                           flush_pdtc;
-    logic                           flush_pv;
-    logic [19:0]    flush_pid;
-    logic                           flush_vma;
-    logic                           flush_gvma;
-    logic                           flush_av;
-    logic                           flush_gv;
-    logic                           flush_pscv;
-    logic [riscv::GPPNW-1:0]        flush_vpn;
-    logic [15:0]         flush_gscid;
-    logic [19:0]         flush_pscid;
+    logic                       flush_ddtc;
+    logic                       flush_dv;
+    logic [23:0]                flush_did;
+    logic                       flush_pdtc;
+    logic                       flush_pv;
+    logic [19:0]                flush_pid;
+    logic                       flush_vma;
+    logic                       flush_gvma;
+    logic                       flush_av;
+    logic                       flush_gv;
+    logic                       flush_pscv;
+    logic [riscv::GPPNW-1:0]    flush_vpn;
+    logic [15:0]                flush_gscid;
+    logic [19:0]                flush_pscid;
 
     // AXI interfaces
     ariane_axi::resp_t  ptw_axi_resp;
@@ -313,7 +314,7 @@ module iommu_translation_wrapper #(
 
 
     // More wires
-    logic                       ptw_error_stage2;   // Set when a guest page fault occurs
+    logic                       ptw_error_2S;   // Set when a guest page fault occurs
     logic [riscv::GPLEN-1:0]    ptw_bad_gpaddr;
 
     // Interrupt vectors
@@ -359,23 +360,23 @@ module iommu_translation_wrapper #(
     iommu_ddtc #(
         .DDTC_ENTRIES       (DDTC_ENTRIES)
     ) i_iommu_ddtc (
-        .clk_i              (clk_i),            // Clock
-        .rst_ni             (rst_ni),           // Asynchronous reset active low
+        .clk_i              (clk_i          ),  // Clock
+        .rst_ni             (rst_ni         ),  // Asynchronous reset active low
 
-        .flush_i            (flush_ddtc),                 // IODIR.INVAL_DDT
-        .flush_dv_i         (flush_dv),                 // device_id valid
-        .flush_did_i        (flush_did),                 // device_id to be flushed
+        .flush_i            (flush_ddtc     ),  // IODIR.INVAL_DDT
+        .flush_dv_i         (flush_dv       ),  // device_id valid
+        .flush_did_i        (flush_did      ),  // device_id to be flushed
 
         // Update signals
-        .update_i           (ddtc_update),      // update flag
-        .up_did_i           (ddtc_up_did),      // device ID to be updated
+        .update_i           (ddtc_update    ),  // update flag
+        .up_did_i           (ddtc_up_did    ),  // device ID to be updated
         .up_content_i       (ddtc_up_content),  // DC to be inserted
 
         // Lookup signals
-        .lookup_i           (ddtc_access),      // lookup flag
-        .lu_did_i           (device_id_i),      // device_id to look for 
+        .lookup_i           (ddtc_access    ),  // lookup flag
+        .lu_did_i           (device_id_i    ),  // device_id to look for 
         .lu_content_o       (ddtc_lu_content),  // DC found in DDTC
-        .lu_hit_o           (ddtc_lu_hit)       // hit flag
+        .lu_hit_o           (ddtc_lu_hit    )   // hit flag
     );
 
     //# Process Directory Table Cache
@@ -383,31 +384,31 @@ module iommu_translation_wrapper #(
         iommu_pdtc #(
             .PDTC_ENTRIES       (PDTC_ENTRIES)
         ) i_iommu_pdtc (
-            .clk_i              (clk_i),            // Clock
-            .rst_ni             (rst_ni),           // Asynchronous reset active low
+            .clk_i              (clk_i          ),  // Clock
+            .rst_ni             (rst_ni         ),  // Asynchronous reset active low
 
             // Flush signals
-            .flush_i            (flush_pdtc),                 // IODIR.INVAL_DDT or IODIR.INVAL_PDT
-            .flush_dv_i         (flush_dv),                 // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
-            .flush_pv_i         (flush_pv),                 // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
-            .flush_did_i        (flush_did),                 // device_id to be flushed
-            .flush_pid_i        (flush_pid),                 // process_id to be flushed (if flush_pv_i = 1)
+            .flush_i            (flush_pdtc     ),  // IODIR.INVAL_DDT or IODIR.INVAL_PDT
+            .flush_dv_i         (flush_dv       ),  // flush everything or only entries associated to DID (IODIR.INVAL_DDT)
+            .flush_pv_i         (flush_pv       ),  // flush entries tagged with DID and PID only (IODIR.INVAL_PDT)
+            .flush_did_i        (flush_did      ),  // device_id to be flushed
+            .flush_pid_i        (flush_pid      ),  // process_id to be flushed (if flush_pv_i = 1)
 
             // Update signals
-            .update_i           (pdtc_update),      // update flag
-            .up_did_i           (ddtc_up_did),      // device ID to be inserted
-            .up_pid_i           (pdtc_up_pid),      // process ID to be inserted
+            .update_i           (pdtc_update    ),  // update flag
+            .up_did_i           (ddtc_up_did    ),  // device ID to be inserted
+            .up_pid_i           (pdtc_up_pid    ),  // process ID to be inserted
             .up_content_i       (pdtc_up_content),  // PC to be inserted
 
             // Lookup signals
-            .lookup_i           (pdtc_access),      // lookup flag
-            .lu_did_i           (device_id_i),      // device_id to tag PDTC
-            .lu_pid_i           (process_id),       // process_id to tag PDTC
+            .lookup_i           (pdtc_access    ),  // lookup flag
+            .lu_did_i           (device_id_i    ),  // device_id to tag PDTC
+            .lu_pid_i           (process_id     ),  // process_id to tag PDTC
             .lu_content_o       (pdtc_lu_content),  // PC found in PDTC
-            .lu_hit_o           (pdtc_lu_hit)       // hit flag
+            .lu_hit_o           (pdtc_lu_hit    )   // hit flag
         );
     end
-    // No process_id support
+    // No PC support
     else begin
         assign pdtc_lu_content  = '0;
         assign pdtc_lu_hit      = 1'b0;
@@ -418,297 +419,297 @@ module iommu_translation_wrapper #(
     iommu_iotlb_sv39x4 #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES)
     ) i_iommu_iotlb_sv39x4 (
-        .clk_i              (clk_i),    // Clock
-        .rst_ni             (rst_ni),   // Asynchronous reset active low
+        .clk_i              (clk_i      ),  // Clock
+        .rst_ni             (rst_ni     ),  // Asynchronous reset active low
 
         // Flush signals
-        .flush_vma_i        (flush_vma),         // IOTINVAL.VMA
-        .flush_gvma_i       (flush_gvma),         // IOTINVAL.GVMA
-        .flush_av_i         (flush_av),         // ADDR valid
-        .flush_gv_i         (flush_gv),         // GSCID valid
-        .flush_pscv_i       (flush_pscv),         // PSCID valid
-        .flush_vpn_i        (flush_vpn),         // VPN to be flushed
-        .flush_gscid_i      (flush_gscid),         // GSCID identifier to be flushed (VM identifier)
-        .flush_pscid_i      (flush_pscid),         // PSCID identifier to be flushed (address space identifier)
+        .flush_vma_i        (flush_vma  ),  // IOTINVAL.VMA
+        .flush_gvma_i       (flush_gvma ),  // IOTINVAL.GVMA
+        .flush_av_i         (flush_av   ),  // ADDR valid
+        .flush_gv_i         (flush_gv   ),  // GSCID valid
+        .flush_pscv_i       (flush_pscv ),  // PSCID valid
+        .flush_vpn_i        (flush_vpn  ),  // VPN to be flushed
+        .flush_gscid_i      (flush_gscid),  // GSCID identifier to be flushed (VM identifier)
+        .flush_pscid_i      (flush_pscid),  // PSCID identifier to be flushed (address space identifier)
 
         // Update signals
-        .update_i           (iotlb_update),
-        .up_is_s_2M_i       (iotlb_up_is_s_2M),
-        .up_is_s_1G_i       (iotlb_up_is_s_1G),
-        .up_is_g_2M_i       (iotlb_up_is_g_2M),
-        .up_is_g_1G_i       (iotlb_up_is_g_1G),
-        .up_is_msi_i        (iotlb_up_is_msi),
-        .up_vpn_i           (iotlb_up_vpn),
-        .up_pscid_i         (iotlb_up_pscid),
-        .up_gscid_i         (iotlb_up_gscid),
-        .up_content_i       (iotlb_up_content),
-        .up_g_content_i     (iotlb_up_g_content),
+        .update_i           (iotlb_update       ),
+        .up_1S_2M_i         (iotlb_up_1S_2M     ),
+        .up_1S_1G_i         (iotlb_up_1S_1G     ),
+        .up_2S_2M_i         (iotlb_up_2S_2M     ),
+        .up_2S_1G_i         (iotlb_up_2S_1G     ),
+        .up_is_msi_i        (iotlb_up_is_msi    ),
+        .up_vpn_i           (iotlb_up_vpn       ),
+        .up_pscid_i         (iotlb_up_pscid     ),
+        .up_gscid_i         (iotlb_up_gscid     ),
+        .up_1S_content_i    (iotlb_up_1S_content),
+        .up_2S_content_i    (iotlb_up_2S_content),
 
         // Lookup signals
-        .lookup_i           (iotlb_access),         // lookup flag
-        .lu_iova_i          (iova_i),               // IOVA to look for 
-        .lu_pscid_i         (pscid),                // PSCID to look for
-        .lu_gscid_i         (gscid),                // GSCID to look for
-        .lu_gpaddr_o        (iotlb_lu_gpaddr),      // GPA to return in case of an exception
-        .lu_content_o       (iotlb_lu_content),     // S/VS-stage PTE (GPA PPN)
-        .lu_g_content_o     (iotlb_lu_g_content),   // G-stage PTE (SPA PPN)
-        .lu_is_s_2M_o       (iotlb_lu_is_s_2M),               
-        .lu_is_s_1G_o       (iotlb_lu_is_s_1G),
-        .lu_is_g_2M_o       (iotlb_lu_is_g_2M),               
-        .lu_is_g_1G_o       (iotlb_lu_is_g_1G),
-        .lu_is_msi_o        (iotlb_lu_is_msi),      // IOTLB entry contains a GPA associated with a guest vIMSIC
-        .s_stg_en_i         (en_stage1),            // s-stage enabled
-        .g_stg_en_i         (en_stage2),            // g-stage enabled
-        .lu_hit_o           (iotlb_lu_hit)          // hit flag
+        .lookup_i           (iotlb_access       ),  // lookup flag
+        .lu_iova_i          (iova_i             ),  // IOVA to look for 
+        .lu_pscid_i         (pscid              ),  // PSCID to look for
+        .lu_gscid_i         (gscid              ),  // GSCID to look for
+        .lu_gpaddr_o        (iotlb_lu_gpaddr    ),  // GPA to return in case of an exception
+        .lu_1S_content_o    (iotlb_lu_1S_content),  // first-stage PTE (GPA PPN)
+        .lu_2S_content_o    (iotlb_lu_2S_content),  // second-stage PTE (SPA PPN)
+        .lu_1S_2M_o         (iotlb_lu_1S_2M     ),
+        .lu_1S_1G_o         (iotlb_lu_1S_1G     ),
+        .lu_2S_2M_o         (iotlb_lu_2S_2M     ),
+        .lu_2S_1G_o         (iotlb_lu_2S_1G     ),
+        .lu_is_msi_o        (iotlb_lu_is_msi    ),  // IOTLB entry contains a GPA associated with a guest vIMSIC
+        .en_1S_i            (en_1S              ),  // first-stage enabled
+        .en_2S_i            (en_2S              ),  // second-stage enabled
+        .lu_hit_o           (iotlb_lu_hit       )   // hit flag
     );
 
     //# Page Table Walker
     iommu_ptw_sv39x4 i_iommu_ptw_sv39x4 (
-        .clk_i              (clk_i),                  // Clock
-        .rst_ni             (rst_ni),                 // Asynchronous reset active low
+        .clk_i                  (clk_i              ),  // Clock
+        .rst_ni                 (rst_ni             ),  // Asynchronous reset active low
         
         // Error signaling
-        .ptw_active_o           (ptw_active),           // Set when PTW is walking memory
-        .ptw_error_o            (ptw_error),            // set when an error occurred (excluding access errors)
-        .ptw_error_stage2_o     (ptw_error_stage2),     // set when the fault occurred in stage 2
-        .ptw_error_stage2_int_o (ptw_error_stage2_int), // set when fault occurred during an implicit access for 1st-stage translation
-        .cause_code_o           (ptw_cause_code),
+        .ptw_active_o           (ptw_active         ),  // Set when PTW is walking memory
+        .ptw_error_o            (ptw_error          ),  // set when an error occurred (excluding access errors)
+        .ptw_error_2S_o         (ptw_error_2S       ),  // set when the fault occurred in stage 2
+        .ptw_error_2S_int_o     (ptw_error_2S_int   ),  // set when fault occurred during an implicit access for 1st-stage translation
+        .cause_code_o           (ptw_cause_code     ),
 
-        .en_stage1_i            (ptw_en_stage1),        // Enable signal for stage 1 translation. Defined by DC/PC
-        .en_stage2_i            (ptw_en_stage2),        // Enable signal for stage 2 translation. Defined by DC only
-        .is_store_i             (is_store),             // Indicate whether this translation was triggered by a store or a load
-        .is_rx_i                (is_rx),                // Read-for-execute
+        .en_1S_i                (ptw_en_1S          ),  // Enable signal for stage 1 translation. Defined by DC/PC
+        .en_2S_i                (ptw_en_2S          ),  // Enable signal for stage 2 translation. Defined by DC only
+        .is_store_i             (is_store           ),  // Indicate whether this translation was triggered by a store or a load
+        .is_rx_i                (is_rx              ),  // Read-for-execute
 
         // PTW AXI Master memory interface
-        .mem_resp_i             (ptw_axi_resp),           // Response port from memory
-        .mem_req_o              (ptw_axi_req),            // Request port to memory
+        .mem_resp_i             (ptw_axi_resp       ),  // Response port from memory
+        .mem_req_o              (ptw_axi_req        ),  // Request port to memory
 
         // to IOTLB, update logic
-        .update_o               (iotlb_update),
-        .up_is_s_2M_o           (iotlb_up_is_s_2M),
-        .up_is_s_1G_o           (iotlb_up_is_s_1G),
-        .up_is_g_2M_o           (iotlb_up_is_g_2M),
-        .up_is_g_1G_o           (iotlb_up_is_g_1G),
-        .up_is_msi_o            (iotlb_up_is_msi),
-        .up_vpn_o               (iotlb_up_vpn),
-        .up_pscid_o             (iotlb_up_pscid),
-        .up_gscid_o             (iotlb_up_gscid),
-        .up_content_o           (iotlb_up_content),
-        .up_g_content_o         (iotlb_up_g_content),
+        .update_o               (iotlb_update       ),
+        .up_1S_2M_o             (iotlb_up_1S_2M     ),
+        .up_1S_1G_o             (iotlb_up_1S_1G     ),
+        .up_2S_2M_o             (iotlb_up_2S_2M     ),
+        .up_2S_1G_o             (iotlb_up_2S_1G     ),
+        .up_is_msi_o            (iotlb_up_is_msi    ),
+        .up_vpn_o               (iotlb_up_vpn       ),
+        .up_pscid_o             (iotlb_up_pscid     ),
+        .up_gscid_o             (iotlb_up_gscid     ),
+        .up_1S_content_o        (iotlb_up_1S_content),
+        .up_2S_content_o        (iotlb_up_2S_content),
 
         // IOTLB tags
-        .req_iova_i             (iova_i),
-        .pscid_i                (pscid),
-        .gscid_i                (gscid),
+        .req_iova_i             (iova_i             ),
+        .pscid_i                (pscid              ),
+        .gscid_i                (gscid              ),
 
         // MSI translation
-        .msi_en_i               (msi_enabled),
-        .msiptp_ppn_i           (ddtc_lu_content.msiptp.ppn),
-        .msi_addr_mask_i        (ddtc_lu_content.msi_addr_mask.mask),
-        .msi_addr_pattern_i     (ddtc_lu_content.msi_addr_pattern.pattern),
-        .bare_translation_o     (is_bare_translation),     // both stages are in bare mode and address is not MSI
+        .msi_en_i               (msi_enabled                                ),
+        .msiptp_ppn_i           (ddtc_lu_content.msiptp.ppn                 ),
+        .msi_addr_mask_i        (ddtc_lu_content.msi_addr_mask.mask         ),
+        .msi_addr_pattern_i     (ddtc_lu_content.msi_addr_pattern.pattern   ),
+        .bare_translation_o     (is_bare_translation                        ),     // both stages are in bare mode and address is not MSI
 
         // CDW implicit translations (Second-stage only)
         .cdw_implicit_access_i  (cdw_implicit_access),
-        .pdt_gppn_i             (pdt_gppn),
-        .cdw_done_o             (cdw_done),
-        .flush_cdw_o            (flush_cdw),
+        .pdt_gppn_i             (pdt_gppn           ),
+        .cdw_done_o             (cdw_done           ),
+        .flush_cdw_o            (flush_cdw          ),
 
         // from IOTLB, to monitor misses
-        .iotlb_access_i         (iotlb_access),
-        .iotlb_hit_i            (iotlb_lu_hit),
+        .iotlb_access_i         (iotlb_access       ),
+        .iotlb_hit_i            (iotlb_lu_hit       ),
 
         // from DC/PC
-        .iosatp_ppn_i           (iosatp_ppn),       // ppn from iosatp
-        .iohgatp_ppn_i          (ptw_iohgatp_ppn),  // ppn from iohgatp (may be forwarded by the CDW)
+        .iosatp_ppn_i           (iosatp_ppn         ),  // ppn from iosatp
+        .iohgatp_ppn_i          (ptw_iohgatp_ppn    ),  // ppn from iohgatp (may be forwarded by the CDW)
 
-        .bad_gpaddr_o           (ptw_bad_gpaddr)    // to return the GPA in case of guest page fault
+        .bad_gpaddr_o           (ptw_bad_gpaddr     )   // to return the GPA in case of guest page fault
     );
 
     //# Context Directory Walker
     iommu_cdw #(
         .InclPID                (InclPID)
     ) i_iommu_cdw (
-        .clk_i                  (clk_i),                // Clock
-        .rst_ni                 (rst_ni),               // Asynchronous reset active low
+        .clk_i                  (clk_i              ),  // Clock
+        .rst_ni                 (rst_ni             ),  // Asynchronous reset active low
         
         // Error signaling
-        .cdw_active_o           (cdw_active),                     // Set when CDW is walking memory
-        .cdw_error_o            (cdw_error),            // set when an error occurred
-        .cause_code_o           (cdw_cause_code),       // Fault code as defined by IOMMU and Priv Spec
+        .cdw_active_o           (cdw_active         ),  // Set when CDW is walking memory
+        .cdw_error_o            (cdw_error          ),  // set when an error occurred
+        .cause_code_o           (cdw_cause_code     ),  // Fault code as defined by IOMMU and Priv Spec
 
         // DC config checks
-        .caps_ats_i             (capabilities_i.ats.q),
-        .caps_t2gpa_i           (capabilities_i.t2gpa.q),
-        .caps_pd20_i            (capabilities_i.pd20.q),
-        .caps_pd17_i            (capabilities_i.pd17.q),
-        .caps_pd8_i             (capabilities_i.pd8.q),
-        .caps_sv32_i            (capabilities_i.sv32.q),
-        .caps_sv39_i            (capabilities_i.sv39.q),
-        .caps_sv48_i            (capabilities_i.sv48.q), 
-        .caps_sv57_i            (capabilities_i.sv57.q),
-        .fctl_gxl_i             (fctl_i.gxl.q),
-        .caps_sv32x4_i          (capabilities_i.sv32x4.q),
-        .caps_sv39x4_i          (capabilities_i.sv39x4.q),
-        .caps_sv48x4_i          (capabilities_i.sv48x4.q),
-        .caps_sv57x4_i          (capabilities_i.sv57x4.q),
-        .caps_msi_flat_i        (capabilities_i.msi_flat.q),
-        .caps_amo_hwad_i        (capabilities_i.amo_hwad.q),
-        .caps_end_i             (capabilities_i.endi.q),
-        .fctl_be_i              (fctl_i.be.q),
+        .caps_ats_i             (capabilities_i.ats.q       ),
+        .caps_t2gpa_i           (capabilities_i.t2gpa.q     ),
+        .caps_pd20_i            (capabilities_i.pd20.q      ),
+        .caps_pd17_i            (capabilities_i.pd17.q      ),
+        .caps_pd8_i             (capabilities_i.pd8.q       ),
+        .caps_sv32_i            (capabilities_i.sv32.q      ),
+        .caps_sv39_i            (capabilities_i.sv39.q      ),
+        .caps_sv48_i            (capabilities_i.sv48.q      ), 
+        .caps_sv57_i            (capabilities_i.sv57.q      ),
+        .fctl_gxl_i             (fctl_i.gxl.q               ),
+        .caps_sv32x4_i          (capabilities_i.sv32x4.q    ),
+        .caps_sv39x4_i          (capabilities_i.sv39x4.q    ),
+        .caps_sv48x4_i          (capabilities_i.sv48x4.q    ),
+        .caps_sv57x4_i          (capabilities_i.sv57x4.q    ),
+        .caps_msi_flat_i        (capabilities_i.msi_flat.q  ),
+        .caps_amo_hwad_i        (capabilities_i.amo_hwad.q  ),
+        .caps_end_i             (capabilities_i.endi.q      ),
+        .fctl_be_i              (fctl_i.be.q                ),
 
         // PC checks
-        .dc_sxl_i               (ddtc_lu_content.tc.sxl),
+        .dc_sxl_i               (ddtc_lu_content.tc.sxl     ),
 
         // PTW memory interface
-        .mem_resp_i             (cdw_axi_resp),            // Response port from memory
-        .mem_req_o              (cdw_axi_req),             // Request port to memory
+        .mem_resp_i             (cdw_axi_resp   ),      // Response port from memory
+        .mem_req_o              (cdw_axi_req    ),      // Request port to memory
 
         // Update logic
-        .update_dc_o            (ddtc_update),
-        .up_did_o               (ddtc_up_did),
+        .update_dc_o            (ddtc_update    ),
+        .up_did_o               (ddtc_up_did    ),
         .up_dc_content_o        (ddtc_up_content),
 
-        .update_pc_o            (pdtc_update),
-        .up_pid_o               (pdtc_up_pid),
+        .update_pc_o            (pdtc_update    ),
+        .up_pid_o               (pdtc_up_pid    ),
         .up_pc_content_o        (pdtc_up_content),
 
         // CDCs tags
-        .req_did_i              (device_id_i),          // device ID associated with request
-        .req_pid_i              (process_id),           // process ID associated with request
+        .req_did_i              (device_id_i    ),      // device ID associated with request
+        .req_pid_i              (process_id     ),      // process ID associated with request
 
         // from DDTC / PDTC, to monitor misses
-        .ddtc_access_i          (ddtc_access),
-        .ddtc_hit_i             (ddtc_lu_hit),
+        .ddtc_access_i          (ddtc_access    ),
+        .ddtc_hit_i             (ddtc_lu_hit    ),
 
-        .pdtc_access_i          (pdtc_access),
-        .pdtc_hit_i             (pdtc_lu_hit),
+        .pdtc_access_i          (pdtc_access    ),
+        .pdtc_hit_i             (pdtc_lu_hit    ),
 
         // from regmap
-        .ddtp_ppn_i             (ddtp_i.ppn.q),       // PPN from ddtp register
-        .ddtp_mode_i            (ddtp_i.iommu_mode.q),      // DDT levels and IOMMU mode
+        .ddtp_ppn_i             (ddtp_i.ppn.q       ),  // PPN from ddtp register
+        .ddtp_mode_i            (ddtp_i.iommu_mode.q),  // DDT levels and IOMMU mode
 
         // from DC (for PC walks)
-        .en_stage2_i            (en_stage2),                    // Second-stage translation is enabled
-        .pdtp_ppn_i             (ddtc_lu_content.fsc.ppn),      // PPN from DC.fsc.PPN
-        .pdtp_mode_i            (ddtc_lu_content.fsc.mode),     // PDT levels from DC.fsc.MODE
+        .en_stage2_i            (en_2S                      ),  // Second-stage translation is enabled
+        .pdtp_ppn_i             (ddtc_lu_content.fsc.ppn    ),  // PPN from DC.fsc.PPN
+        .pdtp_mode_i            (ddtc_lu_content.fsc.mode   ),  // PDT levels from DC.fsc.MODE
 
         // CDW implicit translations (Second-stage only)
-        .ptw_done_i             (cdw_done),
-        .flush_i                (flush_cdw),
-        .pdt_ppn_i              (iotlb_up_g_content.ppn),
-        .cdw_implicit_access_o  (cdw_implicit_access),
-        .is_ddt_walk_o          (is_ddt_walk),
-        .pdt_gppn_o             (pdt_gppn),
-        .iohgatp_ppn_fw_o       (iohgatp_ppn_fw)  // to forward iohgatp.PPN to PTW when translating pdtp.PPN
+        .ptw_done_i             (cdw_done               ),
+        .flush_i                (flush_cdw              ),
+        .pdt_ppn_i              (iotlb_up_2S_content.ppn),
+        .cdw_implicit_access_o  (cdw_implicit_access    ),
+        .is_ddt_walk_o          (is_ddt_walk            ),
+        .pdt_gppn_o             (pdt_gppn               ),
+        .iohgatp_ppn_fw_o       (iohgatp_ppn_fw         )  // to forward iohgatp.PPN to PTW when translating pdtp.PPN
     );
 
     //# Command Queue
     cq_handler i_cq_handler (
-        .clk_i                  (clk_i),
-        .rst_ni                 (rst_ni),
+        .clk_i                  (clk_i      ),
+        .rst_ni                 (rst_ni     ),
 
         // Regmap
-        .cq_base_ppn_i          (cqb_ppn_i),        // Base address of the CQ in memory (Should be aligned. See Spec)
-        .cq_size_i              (cqb_size_i),        // Size of the CQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+        .cq_base_ppn_i          (cqb_ppn_i  ),  // Base address of the CQ in memory (Should be aligned. See Spec)
+        .cq_size_i              (cqb_size_i ),  // Size of the CQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
 
-        .cq_en_i                (cq_en_i),          // CQ enable bit from cqcsr, handled by SW
-        .cq_ie_i                (cq_ie_i),          // CQ interrupt enable bit from cqcsr, handled by SW
+        .cq_en_i                (cq_en_i    ),  // CQ enable bit from cqcsr, handled by SW
+        .cq_ie_i                (cq_ie_i    ),  // CQ interrupt enable bit from cqcsr, handled by SW
 
-        .cq_tail_i              (cqt_i),            // CQ tail index (SW writes the next CQ entry to cq_base + cq_tail * 16 bytes)
-        .cq_head_i              (cqh_i),            // CQ head index (the IOMMU reads the next entry from cq_base + cq_head * 16 bytes)
-        .cq_head_o              (cqh_o),
+        .cq_tail_i              (cqt_i      ),  // CQ tail index (SW writes the next CQ entry to cq_base + cq_tail * 16 bytes)
+        .cq_head_i              (cqh_i      ),  // CQ head index (the IOMMU reads the next entry from cq_base + cq_head * 16 bytes)
+        .cq_head_o              (cqh_o      ),
 
-        .cq_on_o                (cq_on_o),          // CQ active bit. Indicates to SW whether the CQ is active or not
-        .busy_o                 (cq_busy_o),        // CQ busy bit. Indicates SW that the CQ is in the middle of a state transition, 
-                                                    //              so it has to wait to write to cqcsr.
+        .cq_on_o                (cq_on_o    ), // CQ active bit. Indicates to SW whether the CQ is active or not
+        .busy_o                 (cq_busy_o  ), // CQ busy bit. Indicates SW that the CQ is in the middle of a state transition, 
+                                               //              so it has to wait to write to cqcsr.
 
-        .cq_mf_i                (cq_mf_i),          // Error bit status 
-        .cmd_to_i               (cq_cmd_to_i),    
-        .cmd_ill_i              (cq_cmd_ill_i),
+        .cq_mf_i                (cq_mf_i        ),  // Error bit status 
+        .cmd_to_i               (cq_cmd_to_i    ),    
+        .cmd_ill_i              (cq_cmd_ill_i   ),
         .fence_w_ip_i           (cq_fence_w_ip_i), 
 
-        .error_wen_o            (cq_error_wen_o),   // To enable write of corresponding error bit to regmap
-        .cq_mf_o                (cq_mf_o),          // Set when a memory fault occurred during CQ access
-        .cmd_to_o               (cq_cmd_to_o),      // The execution of a command lead to a timeout //! Future work for PCIe ATS
-        .cmd_ill_o              (cq_cmd_ill_o),     // Illegal or unsupported command was fetched from CQ
+        .error_wen_o            (cq_error_wen_o ),  // To enable write of corresponding error bit to regmap
+        .cq_mf_o                (cq_mf_o        ),  // Set when a memory fault occurred during CQ access
+        .cmd_to_o               (cq_cmd_to_o    ),  // The execution of a command lead to a timeout
+        .cmd_ill_o              (cq_cmd_ill_o   ),  // Illegal or unsupported command was fetched from CQ
         .fence_w_ip_o           (cq_fence_w_ip_o),  // Set to indicate completion of an IOFENCE command
-        .cq_ip_o                (cq_ip_o),          // To set cip bit in ipsr register if a fault occurs and cq_ie is set
+        .cq_ip_o                (cq_ip_o        ),  // To set cip bit in ipsr register if a fault occurs and cq_ie is set
 
-        .wsi_en_i               (wsi_en),           // To know whether WSI generation is supported
+        .wsi_en_i               (wsi_en         ),  // To know whether WSI generation is supported
 
         // DDTC Invalidation
-        .flush_ddtc_o           (flush_ddtc),       // Flush DDTC
-        .flush_dv_o             (flush_dv),         // Indicates if device_id is valid
-        .flush_did_o            (flush_did),        // device_id to tag entries to be flushed
+        .flush_ddtc_o           (flush_ddtc     ),  // Flush DDTC
+        .flush_dv_o             (flush_dv       ),  // Indicates if device_id is valid
+        .flush_did_o            (flush_did      ),  // device_id to tag entries to be flushed
 
         // PDTC Invalidation
-        .flush_pdtc_o           (flush_pdtc),       // Flush PDTC
-        .flush_pv_o             (flush_pv),         // This is used to difference between IODIR.INVAL_DDT and IODIR.INVAL_PDT
-        .flush_pid_o            (flush_pid),        // process_id to be flushed if PV = 1
+        .flush_pdtc_o           (flush_pdtc     ),  // Flush PDTC
+        .flush_pv_o             (flush_pv       ),  // This is used to difference between IODIR.INVAL_DDT and IODIR.INVAL_PDT
+        .flush_pid_o            (flush_pid      ),  // process_id to be flushed if PV = 1
 
         // IOTLB Invalidation
-        .flush_vma_o            (flush_vma),        // Flush first-stage PTEs cached entries in IOTLB
-        .flush_gvma_o           (flush_gvma),       // Flush second-stage PTEs cached entries in IOTLB 
-        .flush_av_o             (flush_av),         // Address valid
-        .flush_gv_o             (flush_gv),         // GSCID valid
-        .flush_pscv_o           (flush_pscv),       // PSCID valid
-        .flush_vpn_o            (flush_vpn),        // IOVA to tag entries to be flushed
-        .flush_gscid_o          (flush_gscid),      // GSCID (Guest physical address space identifier) to tag entries to be flushed
-        .flush_pscid_o          (flush_pscid),      // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+        .flush_vma_o            (flush_vma      ),  // Flush first-stage PTEs cached entries in IOTLB
+        .flush_gvma_o           (flush_gvma     ),  // Flush second-stage PTEs cached entries in IOTLB 
+        .flush_av_o             (flush_av       ),  // Address valid
+        .flush_gv_o             (flush_gv       ),  // GSCID valid
+        .flush_pscv_o           (flush_pscv     ),  // PSCID valid
+        .flush_vpn_o            (flush_vpn      ),  // IOVA to tag entries to be flushed
+        .flush_gscid_o          (flush_gscid    ),  // GSCID (Guest physical address space identifier) to tag entries to be flushed
+        .flush_pscid_o          (flush_pscid    ),  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
         // Memory Bus
-        .mem_resp_i             (cq_axi_resp),
-        .mem_req_o              (cq_axi_req)
+        .mem_resp_i             (cq_axi_resp    ),
+        .mem_req_o              (cq_axi_req     )
     );
 
     /* verilator lint_off WIDTH */
     //# Fault/Event Queue
     fq_handler i_fq_handler ( 
-        .clk_i                  (clk_i),
-        .rst_ni                 (rst_ni),
+        .clk_i                  (clk_i      ),
+        .rst_ni                 (rst_ni     ),
 
         // Regmap
-        .fq_base_ppn_i          (fqb_ppn_i),        // Base address of the FQ in memory (Should be aligned. See Spec)
-        .fq_size_i              (fqb_size_i),        // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+        .fq_base_ppn_i          (fqb_ppn_i  ),  // Base address of the FQ in memory (Should be aligned. See Spec)
+        .fq_size_i              (fqb_size_i ),  // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
 
-        .fq_en_i                (fq_en_i),          // FQ enable bit from fqcsr, handled by SW
-        .fq_ie_i                (fq_ie_i),          // FQ interrupt enable bit from fqcsr, handled by SW
+        .fq_en_i                (fq_en_i    ),  // FQ enable bit from fqcsr, handled by SW
+        .fq_ie_i                (fq_ie_i    ),  // FQ interrupt enable bit from fqcsr, handled by SW
 
-        .fq_head_i              (fqh_i),            // FQ head index (SW reads the next entry from fq_base + fq_head * 32 bytes)
-        .fq_tail_i              (fqt_i),            // FQ tail index (IOMMU writes the next FQ entry to fq_base + fq_tail * 32 bytes)
-        .fq_tail_o              (fqt_o),
+        .fq_head_i              (fqh_i      ),  // FQ head index (SW reads the next entry from fq_base + fq_head * 32 bytes)
+        .fq_tail_i              (fqt_i      ),  // FQ tail index (IOMMU writes the next FQ entry to fq_base + fq_tail * 32 bytes)
+        .fq_tail_o              (fqt_o      ),
 
-        .fq_on_o                (fq_on_o),          // FQ active bit. Indicates to SW whether the FQ is active or not
-        .busy_o                 (fq_busy_o),        // FQ busy bit. Indicates SW that the FQ is in the middle of a state transition, 
-                                                    //              so it has to wait to write to fqcsr.
+        .fq_on_o                (fq_on_o    ),  // FQ active bit. Indicates to SW whether the FQ is active or not
+        .busy_o                 (fq_busy_o  ),  // FQ busy bit. Indicates SW that the FQ is in the middle of a state transition, 
+                                                //              so it has to wait to write to fqcsr.
 
-        .fq_mf_i                (fq_mf_i),             
-        .fq_of_i                (fq_of_i),  
+        .fq_mf_i                (fq_mf_i    ),             
+        .fq_of_i                (fq_of_i    ),  
 
-        .error_wen_o            (fq_error_wen_o),   // To enable write of corresponding error bit to regmap
-        .fq_mf_o                (fq_mf_o),          // Set when a memory fault occurred during FQ access
-        .fq_of_o                (fq_of_o),          // The execution of a command lead to a timeout 
-        .fq_ip_o                (fq_ip_o),          // To set ipsr.fip register if a fault occurs and fq_ie is set
+        .error_wen_o            (fq_error_wen_o ),  // To enable write of corresponding error bit to regmap
+        .fq_mf_o                (fq_mf_o        ),  // Set when a memory fault occurred during FQ access
+        .fq_of_o                (fq_of_o        ),  // The execution of a command lead to a timeout 
+        .fq_ip_o                (fq_ip_o        ),  // To set ipsr.fip register if a fault occurs and fq_ie is set
 
         // Event data
-        .event_valid_i          (report_fault),     // a fault/event has occurred
-        .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),     // transaction type
-        .cause_code_i           ((msi_write_error) ? (rv_iommu::MSI_ST_ACCESS_FAULT) : (cause_code)), // Fault code as defined by IOMMU and Priv Spec
-        .iova_i                 ((msi_write_error) ? (ig_axi_req.aw.addr[55:2]) : (iova_i)),  // to report if transaction has an IOVA
-        .gpaddr_i               (ptw_bad_gpaddr),   // to report bits [63:2] of the GPA in case of a Guest Page Fault
-        .did_i                  (device_id_i),      // device_id associated with the transaction
-        .pv_i                   (pid_v_i),          // to indicate if transaction has a valid process_id
-        .pid_i                  (process_id),       // process_id associated with the transaction
-        .is_supervisor_i        (is_s_priv),        // indicate if transaction has supervisor privilege
-        .is_guest_pf_i          (ptw_error_stage2), // indicate if event is a guest page fault
-        .is_implicit_i          (is_implicit),      // Guest page fault caused by implicit access for 1st-stage addr translation
+        .event_valid_i          (report_fault   ),  // a fault/event has occurred
+        .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),                            // transaction type
+        .cause_code_i           ((msi_write_error) ? (rv_iommu::MSI_ST_ACCESS_FAULT) : (cause_code)),   // Fault code as defined by IOMMU and Priv Spec
+        .iova_i                 ((msi_write_error) ? (ig_axi_req.aw.addr[55:2]) : (iova_i)),            // to report if transaction has an IOVA
+        .gpaddr_i               (ptw_bad_gpaddr ),  // to report bits [63:2] of the GPA in case of a Guest Page Fault
+        .did_i                  (device_id_i    ),  // device_id associated with the transaction
+        .pv_i                   (pid_v_i        ),  // to indicate if transaction has a valid process_id
+        .pid_i                  (process_id     ),  // process_id associated with the transaction
+        .is_supervisor_i        (is_s_priv      ),  // indicate if transaction has supervisor privilege
+        .is_guest_pf_i          (ptw_error_2S   ),  // indicate if event is a guest page fault
+        .is_implicit_i          (is_implicit    ),  // Guest page fault caused by implicit access for 1st-stage addr translation
 
         // Memory Bus
-        .mem_resp_i             (fq_axi_resp),
-        .mem_req_o              (fq_axi_req),
+        .mem_resp_i             (fq_axi_resp    ),
+        .mem_req_o              (fq_axi_req     ),
 
-        .is_full_o            (is_fq_fifo_full_o)
+        .is_full_o              (is_fq_fifo_full_o)
     );
     /* verilator lint_on WIDTH */
 
@@ -719,24 +720,24 @@ module iommu_translation_wrapper #(
             .N_INT_VEC          (N_INT_VEC  ),
             .N_INT_SRCS         (3          )
         ) i_iommu_msi_ig (
-            .clk_i              (clk_i),
-            .rst_ni             (rst_ni),
+            .clk_i              (clk_i      ),
+            .rst_ni             (rst_ni     ),
 
-            .msi_ig_enabled_i   (msi_ig_en),
+            .msi_ig_enabled_i   (msi_ig_en  ),
 
             // Indexes in IV and IP vectors must be consistent!
             // 2: HPM; 1: FQ; 0: CQ
             .intp_i             ({hpm_ip_i,fq_ip_i,cq_ip_i}),
-            .intv_i             (intv),
+            .intv_i             (intv       ),
 
-            .msi_addr_x_i       (msi_addr_x_i),
-            .msi_data_x_i       (msi_data_x_i),
-            .msi_vec_masked_x_i (msi_vec_masked_x_i),
+            .msi_addr_x_i       (msi_addr_x_i       ),
+            .msi_data_x_i       (msi_data_x_i       ),
+            .msi_vec_masked_x_i (msi_vec_masked_x_i ),
 
-            .msi_write_error_o  (msi_write_error),
+            .msi_write_error_o  (msi_write_error    ),
 
-            .mem_resp_i         (ig_axi_resp),
-            .mem_req_o          (ig_axi_req)
+            .mem_resp_i         (ig_axi_resp        ),
+            .mem_req_o          (ig_axi_req         )
         );
     end
 
@@ -753,8 +754,8 @@ module iommu_translation_wrapper #(
 
         ddtc_access         = 1'b0;
         pdtc_access         = 1'b0;
-        en_stage1           = 1'b0;
-        en_stage2           = 1'b0;
+        en_1S               = 1'b0;
+        en_2S               = 1'b0;
         gscid               = '0;
         pscid               = '0;
         iosatp_ppn          = '0;
@@ -818,8 +819,8 @@ module iommu_translation_wrapper #(
                 (pid_v_i && !ddtc_lu_content.tc.pdtv) ||
                 (pid_v_i && ddtc_lu_content.tc.pdtv && pid_wider_than_supported)) begin
 
-                cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
-                trans_error   = 1'b1;
+                cause_code  = rv_iommu::TRANS_TYPE_DISALLOWED;
+                trans_error = 1'b1;
             end
 
             // avoid triggering a CDW walk for a PC or a PTW walk when the previous fault occurs 
@@ -837,7 +838,7 @@ module iommu_translation_wrapper #(
                     // If DC.tc.T2GPA = 1, translated requests are performed using a GPA. The IOMMU performs second-stage translation
                     else begin
                         // Stage 1 Bare
-                        en_stage2       = ~second_stage_is_bare;
+                        en_2S           = ~second_stage_is_bare;
                         gscid           = ddtc_lu_content.iohgatp.gscid;
                         // PSCID not used since Stage 1 is Bare
                         iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
@@ -851,8 +852,8 @@ module iommu_translation_wrapper #(
                     
                     // No Process Context
                     if (!ddtc_lu_content.tc.pdtv) begin
-                        en_stage1       = ~first_stage_is_bare;
-                        en_stage2       = ~second_stage_is_bare;
+                        en_1S           = ~first_stage_is_bare;
+                        en_2S           = ~second_stage_is_bare;
                         gscid           = ddtc_lu_content.iohgatp.gscid;
                         pscid           = ddtc_lu_content.ta.pscid;
                         iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
@@ -867,7 +868,7 @@ module iommu_translation_wrapper #(
                         // "perform first-stage translation in Bare mode"
                         if ((!pid_v_i && !ddtc_lu_content.tc.dpe) || (ddtc_lu_content.fsc.mode == 4'b0000)) begin
                             // Stage 1 Bare
-                            en_stage2       = ~second_stage_is_bare;
+                            en_2S           = ~second_stage_is_bare;
                             gscid           = ddtc_lu_content.iohgatp.gscid;
                             // PSCID not used since Stage 1 is Bare
                             iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
@@ -891,8 +892,8 @@ module iommu_translation_wrapper #(
                     end
 
                     else begin
-                        en_stage1       = ~first_stage_is_bare;
-                        en_stage2       = ~second_stage_is_bare;
+                        en_1S           = ~first_stage_is_bare;
+                        en_2S           = ~second_stage_is_bare;
                         gscid           = ddtc_lu_content.iohgatp.gscid;
                         pscid           = pdtc_lu_content.ta.pscid;
                         iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
@@ -911,12 +912,12 @@ module iommu_translation_wrapper #(
                 if (iotlb_lu_is_msi && msi_enabled) begin
                     is_msi_o            = 1'b1;
                     // MSI PTEs contain the PPN in the same position as normal PTEs
-                    translated_addr_o   = {iotlb_lu_g_content.ppn, iova_i[11:0]};
+                    translated_addr_o   = {iotlb_lu_2S_content.ppn, iova_i[11:0]};
                 end
 
                 //# Normal entry
                 // INFO: IOTLB should not have entries with both stages disabled and MSI flag clear. However, we double-check
-                else if (en_stage1 || en_stage2) begin
+                else if (en_1S || en_2S) begin
                     /*
                     A fault is generated if:
                         - A bit is not set (checked in PTW);
@@ -926,10 +927,10 @@ module iommu_translation_wrapper #(
                         - (3): U-mode transaction and PTE has U=0;
                         - (4): S-mode transaction and PTE has U=1 and (SUM=0 or x=1).
                     */
-                    if  ((is_store && (!iotlb_lu_content.w && en_stage1)                                     ) ||    // (1)
-                         (is_rx && (!iotlb_lu_content.x && en_stage1)                                        ) ||    // (2)
-                         ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_content.u && en_stage1              ) ||    // (3)
-                         (is_s_priv && iotlb_lu_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_content.x) )       // (4)
+                    if  ((is_store && (!iotlb_lu_1S_content.w && en_1S)                                     ) ||    // (1)
+                         (is_rx && (!iotlb_lu_1S_content.x && en_1S)                                        ) ||    // (2)
+                         ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_1S_content.u && en_1S              ) ||    // (3)
+                         (is_s_priv && iotlb_lu_1S_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_1S_content.x) )       // (4)
                         ) begin
                             if (is_store)   cause_code = rv_iommu::STORE_PAGE_FAULT;
                             else            cause_code = rv_iommu::LOAD_PAGE_FAULT;
@@ -937,8 +938,8 @@ module iommu_translation_wrapper #(
                             trans_valid_o   = 1'b0;
                     end
 
-                    else if ((is_store && (!iotlb_lu_g_content.w && en_stage2)  ) ||    // (1)
-                             (is_rx && (!iotlb_lu_g_content.x && en_stage2)     )       // (2)
+                    else if ((is_store && (!iotlb_lu_2S_content.w && en_2S)  ) ||    // (1)
+                             (is_rx && (!iotlb_lu_2S_content.x && en_2S)     )       // (2)
                             ) begin
                             if (is_store)   cause_code = rv_iommu::STORE_GUEST_PAGE_FAULT;
                             else            cause_code = rv_iommu::LOAD_GUEST_PAGE_FAULT;
@@ -949,27 +950,27 @@ module iommu_translation_wrapper #(
                     //# Address Translation Found
                     else begin
                         
-                        translated_addr_o = {((en_stage2) ? iotlb_lu_g_content.ppn : iotlb_lu_content.ppn), iova_i[11:0]};
+                        translated_addr_o = {((en_2S) ? iotlb_lu_2S_content.ppn : iotlb_lu_1S_content.ppn), iova_i[11:0]};
 
                         // Apply superpage cases
-                        if (en_stage1 && en_stage2) begin
-                            case ({iotlb_lu_is_s_2M, iotlb_lu_is_s_1G, iotlb_lu_is_g_2M, iotlb_lu_is_g_1G})
+                        if (en_1S && en_2S) begin
+                            case ({iotlb_lu_1S_2M, iotlb_lu_1S_1G, iotlb_lu_2S_2M, iotlb_lu_2S_1G})
 
                                 // 1-S: 4k | 2-S: 2M:   {PPN[2], PPN[1],  GPPN[0], OFF}
-                                4'b0010:    translated_addr_o[20:12] = iotlb_lu_content.ppn[20:12];
+                                4'b0010:    translated_addr_o[20:12] = iotlb_lu_1S_content.ppn[20:12];
 
                                 // 1-S: 2M | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
                                 // 1-S: 1G | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
                                 4'b1010, 4'b0110:   translated_addr_o[20:12] = iova_i[20:12];
 
                                 // 1-S: 4k | 2-S: 1G:   {PPN[2], GPPN[1], GPPN[0], OFF}
-                                4'b0001:    translated_addr_o[29:12] = iotlb_lu_content.ppn[29:12];
+                                4'b0001:    translated_addr_o[29:12] = iotlb_lu_1S_content.ppn[29:12];
 
                                 // 1-S: 1G | 2-S: 1G:   {PPN[2], VPN[1],  VPN[0],  OFF}
                                 4'b0101:    translated_addr_o[29:12] = iova_i[29:12];
 
                                 // 1-S: 2M | 2-S: 1G:   {PPN[2], GPPN[1], VPN[0],  OFF}
-                                4'b1001:    translated_addr_o[29:12] = {iotlb_lu_content.ppn[29:21], iova_i[20:12]};
+                                4'b1001:    translated_addr_o[29:12] = {iotlb_lu_1S_content.ppn[29:21], iova_i[20:12]};
                                 
                                 default:;
                                     // 1-S: 4k | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
@@ -979,8 +980,8 @@ module iommu_translation_wrapper #(
                         end
 
                         else begin
-                            if (iotlb_lu_is_g_1G || iotlb_lu_is_s_1G)   translated_addr_o[29:12] = iova_i[29:12];
-                            if (iotlb_lu_is_g_2M || iotlb_lu_is_s_2M)   translated_addr_o[20:12] = iova_i[20:12];
+                            if (iotlb_lu_2S_1G || iotlb_lu_1S_1G)   translated_addr_o[29:12] = iova_i[29:12];
+                            if (iotlb_lu_2S_2M || iotlb_lu_1S_2M)   translated_addr_o[20:12] = iova_i[20:12];
                         end
                     end
                 end

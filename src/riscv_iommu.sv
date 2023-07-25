@@ -366,7 +366,7 @@ module riscv_iommu #(
         .cq_cmd_ill_o   (hw2reg.cqcsr.cmd_ill.d     ),
         .cq_fence_w_ip_o(hw2reg.cqcsr.fence_w_ip.d  ),
         .cq_on_o        (hw2reg.cqcsr.cqon.d        ),      // WE always set to 1
-        .cq_busy_o      (hw2reg.cqcsr.busy.d    ),
+        .cq_busy_o      (hw2reg.cqcsr.busy.d        ),
         // fqcsr
         .fq_en_i        (reg2hw.fqcsr.fqen.q),
         .fq_ie_i        (reg2hw.fqcsr.fie.q ),
@@ -392,8 +392,8 @@ module riscv_iommu #(
         .msi_vec_masked_x_i (msi_vec_masked_x),
 
         // To enable write of error bits to cqcsr and fqcsr
-        .cq_error_wen_o (cq_error_wen),
-        .fq_error_wen_o (fq_error_wen),
+        .cq_error_wen_o     (cq_error_wen),
+        .fq_error_wen_o     (fq_error_wen),
 
         .trans_valid_o      (trans_valid),  // Translation successfully completed
         .is_msi_o           (),             // Indicate whether the translated address is an MSI address
@@ -413,27 +413,27 @@ module riscv_iommu #(
     );
 
     iommu_regmap_if #(
-        .ADDR_WIDTH     (ADDR_WIDTH    ),
-        .DATA_WIDTH     (DATA_WIDTH    ),
-        .ID_WIDTH       (ID_SLV_WIDTH  ),
-        .USER_WIDTH     (USER_WIDTH    ),
-        .DECOUPLE_W     (1             ), // Channel W is decoupled with registers
-        .IGS            (IGS           ),
-        .N_INT_VEC      (N_INT_VEC     ),
-        .N_IOHPMCTR     (N_IOHPMCTR    ),
-        .axi_req_t      (axi_req_slv_t ),
-        .axi_rsp_t      (axi_rsp_slv_t ),
-        .reg_req_t      (reg_req_t     ),
-        .reg_rsp_t      (reg_rsp_t     )
+        .ADDR_WIDTH     (ADDR_WIDTH     ),
+        .DATA_WIDTH     (DATA_WIDTH     ),
+        .ID_WIDTH       (ID_SLV_WIDTH   ),
+        .USER_WIDTH     (USER_WIDTH     ),
+        .DECOUPLE_W     (1              ), // Channel W is decoupled with registers
+        .IGS            (IGS            ),
+        .N_INT_VEC      (N_INT_VEC      ),
+        .N_IOHPMCTR     (N_IOHPMCTR     ),
+        .axi_req_t      (axi_req_slv_t  ),
+        .axi_rsp_t      (axi_rsp_slv_t  ),
+        .reg_req_t      (reg_req_t      ),
+        .reg_rsp_t      (reg_rsp_t      )
     ) i_iommu_regmap_if (
-        .clk_i          (clk_i           ),
-        .rst_ni         (rst_ni          ),
+        .clk_i          (clk_i          ),
+        .rst_ni         (rst_ni         ),
 
-        .prog_req_i     (prog_req_i      ),
-        .prog_resp_o    (prog_resp_o     ),
+        .prog_req_i     (prog_req_i     ),
+        .prog_resp_o    (prog_resp_o    ),
 
-        .reg2hw_o       (reg2hw          ),
-        .hw2reg_i       (hw2reg          )
+        .reg2hw_o       (reg2hw         ),
+        .hw2reg_i       (hw2reg         )
     );
 
     //# Hardware Performance Monitor

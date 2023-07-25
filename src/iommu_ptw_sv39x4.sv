@@ -27,30 +27,30 @@ module iommu_ptw_sv39x4 (
     // Error signaling
     output logic                                ptw_active_o,           // Set when PTW is walking memory
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
-    output logic                                ptw_error_stage2_o,     // set when the fault occurred in stage 2
-    output logic                                ptw_error_stage2_int_o, // set when an error occurred in stage 2 during stage 1 translation
-    output logic [(rv_iommu::CAUSE_LEN-1):0]   cause_code_o,
+    output logic                                ptw_error_2S_o,         // set when the fault occurred in stage 2
+    output logic                                ptw_error_2S_int_o,     // set when an error occurred in stage 2 during stage 1 translation
+    output logic [(rv_iommu::CAUSE_LEN-1):0]    cause_code_o,
 
-    input  logic                    en_stage1_i,            // Enable signal for stage 1 translation. Defined by DC/PC
-    input  logic                    en_stage2_i,            // Enable signal for stage 2 translation. Defined by DC only
-    input  logic                    is_store_i,             // Indicate whether this translation was triggered by a store or a load
-    input  logic                    is_rx_i,                // Indicate whether the access is read-for-execute
+    input  logic                    en_1S_i,        // Enable signal for first-stage translation. Defined by DC/PC
+    input  logic                    en_2S_i,        // Enable signal for second-stage translation. Defined by DC only
+    input  logic                    is_store_i,     // Indicate whether this translation was triggered by a store or a load
+    input  logic                    is_rx_i,        // Indicate whether the access is read-for-execute
 
     input  ariane_axi_soc::resp_t   mem_resp_i,
     output ariane_axi_soc::req_t    mem_req_o,
 
     // to IOTLB, update logic
     output logic                    update_o,
-    output logic                    up_is_s_2M_o,
-    output logic                    up_is_s_1G_o,
-    output logic                    up_is_g_2M_o,
-    output logic                    up_is_g_1G_o,
+    output logic                    up_1S_2M_o,
+    output logic                    up_1S_1G_o,
+    output logic                    up_2S_2M_o,
+    output logic                    up_2S_1G_o,
     output logic                    up_is_msi_o,
     output logic [riscv::GPPNW-1:0] up_vpn_o,
     output logic [19:0]             up_pscid_o,
     output logic [15:0]             up_gscid_o,
-    output riscv::pte_t             up_content_o,
-    output riscv::pte_t             up_g_content_o,
+    output riscv::pte_t             up_1S_content_o,
+    output riscv::pte_t             up_2S_content_o,
 
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]  req_iova_i,
@@ -81,14 +81,6 @@ module iommu_ptw_sv39x4 (
     output logic [riscv::GPLEN-1:0] bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
 
-    riscv::pte_t pte;
-    // register to perform context switch between stages
-    riscv::pte_t gpte_q, gpte_n;    // gpte is only used to store final GPA to be updated in the IOTLB
-    assign pte = riscv::pte_t'(mem_resp_i.r.data);
-
-    rv_iommu::msi_wt_pte_t msi_pte;
-    assign msi_pte = rv_iommu::msi_wt_pte_t'(mem_resp_i.r.data);
-
     // PTW states
     enum logic[2:0] {
       IDLE,             // 000
@@ -100,19 +92,27 @@ module iommu_ptw_sv39x4 (
     // Page levels: 3 for Sv39x4
     enum logic [1:0] {
         LVL1, LVL2, LVL3
-    } ptw_lvl_q, ptw_lvl_n, gptw_lvl_n, gptw_lvl_q;     // GPTW_LVL is stage-1, PTW_LVL is stage-2
+    } main_lvl_q, main_lvl_n, s1_lvl_n, s1_lvl_q;
 
-    // define 3 PTW stages
-    // STAGE_1 -> Stage-1 normal translation controlled by iosatp
-    // STAGE_2_INTERMED -> Converts the stage-1 non-leaf GPA pointers to SPA (controlled by iohgatp)
-    // STAGE_2_FINAL -> Converts the stage-1 leaf GPA to SPA (controlled by iohgatp)
+    // Internal PTW stages
     enum logic [1:0] {
-        STAGE_1,
-        STAGE_2_INTERMED,
-        STAGE_2_FINAL
+        STAGE_1,            // Comes from a S1_XX memory access
+        STAGE_2_INTERMED,   // Comes from a S2_XX memory access different from the last one
+        STAGE_2_FINAL       // Comes from the last S2_XX memory accesses
     } ptw_stage_q, ptw_stage_n;
 
-    // global mapping aux signal
+    // To cast input memory port to normal PTE data
+    riscv::pte_t pte;
+    assign pte = riscv::pte_t'(mem_resp_i.r.data);
+
+    // Register to store leaf first-stage PTE to be updated in the IOTLB
+    riscv::pte_t leaf_1Spte_q, leaf_1Spte_n;
+
+    // To cast input memory port to MSI PTE data
+    rv_iommu::msi_wt_pte_t msi_pte;
+    assign msi_pte = rv_iommu::msi_wt_pte_t'(mem_resp_i.r.data);
+
+    // global bit register
     logic global_mapping_q, global_mapping_n;
     // to register PSCID to be updated
     logic [19:0]  iotlb_update_pscid_q, iotlb_update_pscid_n;
@@ -124,7 +124,8 @@ module iommu_ptw_sv39x4 (
     logic [riscv::GPLEN-1:0] gpaddr_q, gpaddr_n;
     // 4 byte aligned physical pointer
     logic [riscv::PLEN-1:0] ptw_pptr_q, ptw_pptr_n;     // address used to access (read memory)
-    logic [riscv::PLEN-1:0] gptw_pptr_q, gptw_pptr_n;   // contains GPA of non-leaf entries of VS-stage page tables (direct GPA from iovsatp in the first iteration)
+    // To save GPA_n
+    logic [riscv::PLEN-1:0] gpa_x_q, gpa_x_n;
     
     // MSI address translation
     logic msi_translation_q, msi_translation_n;
@@ -134,16 +135,16 @@ module iommu_ptw_sv39x4 (
     logic cdw_implicit_access_q, cdw_implicit_access_n;
 
     // To save final GPA
-    logic [riscv::GPLEN-1:0] gpaddr;
+    logic [riscv::GPLEN-1:0] final_gpa;
 
     // To signal page faults / guest page faults
-    logic page_fault_q, page_fault_n;
+    logic pf_excep_q, pf_excep_n;
 
     // input IOVA (GPA) is the address of a virtual IMSIC
-    assign iova_is_imsic_addr =   (!en_stage1_i && msi_en_i && is_store_i &&
+    assign iova_is_imsic_addr =   (!en_1S_i && msi_en_i && is_store_i &&
                                    ((req_iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
     // GPA is the address of a virtual IMSIC
-    assign gpaddr_is_imsic_addr = (en_stage1_i && msi_en_i && is_store_i &&
+    assign gpaddr_is_imsic_addr = (en_1S_i && msi_en_i && is_store_i &&
                                    ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
     // PTW walking
@@ -156,32 +157,32 @@ module iommu_ptw_sv39x4 (
         up_vpn_o = {{41-riscv::SVX{1'b0}}, iova_q[riscv::SVX-1:12]};
         up_is_msi_o  = 1'b0;
 
-        up_is_s_2M_o = 1'b0;
-        up_is_s_1G_o = 1'b0;
-        up_is_g_2M_o = 1'b0;
-        up_is_g_1G_o = 1'b0;
+        up_1S_2M_o = 1'b0;
+        up_1S_1G_o = 1'b0;
+        up_2S_2M_o = 1'b0;
+        up_2S_1G_o = 1'b0;
 
         // Two-stage
-        if(en_stage2_i && en_stage1_i) begin 
+        if(en_2S_i && en_1S_i) begin 
 
-            up_is_g_2M_o = (ptw_lvl_q == LVL2);
-            up_is_g_1G_o = (ptw_lvl_q == LVL1);
-            up_is_s_2M_o = (gptw_lvl_q == LVL2);
-            up_is_s_1G_o = (gptw_lvl_q == LVL1);
+            up_2S_2M_o = (main_lvl_q == LVL2);
+            up_2S_1G_o = (main_lvl_q == LVL1);
+            up_1S_2M_o = (s1_lvl_q == LVL2);
+            up_1S_1G_o = (s1_lvl_q == LVL1);
         end
 
         // stage 1 only
-        else if(en_stage1_i) begin
+        else if(en_1S_i) begin
 
-            up_is_s_2M_o = (ptw_lvl_q == LVL2);
-            up_is_s_1G_o = (ptw_lvl_q == LVL1);
+            up_1S_2M_o = (main_lvl_q == LVL2);
+            up_1S_1G_o = (main_lvl_q == LVL1);
         end
 
         // stage 2 only
-        else if (en_stage2_i) begin
+        else if (en_2S_i) begin
             
-            up_is_g_2M_o = (ptw_lvl_q == LVL2);
-            up_is_g_1G_o = (ptw_lvl_q == LVL1);
+            up_2S_2M_o = (main_lvl_q == LVL2);
+            up_2S_1G_o = (main_lvl_q == LVL1);
         end
 
         if(msi_translation_q)    up_is_msi_o  = 1'b1;
@@ -190,31 +191,31 @@ module iommu_ptw_sv39x4 (
         up_gscid_o = iotlb_update_gscid_q;
 
         // set the global mapping bit
-        if(en_stage2_i) begin   // if stage 2 is enabled
-            up_content_o = gpte_q | (global_mapping_q << 5);
-            up_g_content_o = pte;
+        if(en_2S_i) begin   // if stage 2 is enabled
+            up_1S_content_o = leaf_1Spte_q | (global_mapping_q << 5);
+            up_2S_content_o = pte;
         end 
         
         else begin
             // If stage 2 is disabled and GPA (SPA) is an MSI address, first-stage PTE is stored in gpte
             if (msi_translation_q) begin
-                up_content_o = gpte_q | (global_mapping_q << 5);
-                up_g_content_o = pte;
+                up_1S_content_o = leaf_1Spte_q | (global_mapping_q << 5);
+                up_2S_content_o = pte;
             end
             else begin
-                up_content_o = pte | (global_mapping_q << 5);
-                up_g_content_o = '0;
+                up_1S_content_o = pte | (global_mapping_q << 5);
+                up_2S_content_o = '0;
             end
         end
     end
 
     logic [(rv_iommu::CAUSE_LEN-1):0] cause_q, cause_n;
 
-    assign bad_gpaddr_o = ptw_error_stage2_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gptw_pptr_q[riscv::GPLEN-1:0] : gpaddr_q) : '0;
+    assign bad_gpaddr_o = ptw_error_2S_o ? ((ptw_stage_q == STAGE_2_INTERMED) ? gpa_x_q[riscv::GPLEN-1:0] : gpaddr_q) : '0;
 
     //# Page table walker
     always_comb begin : ptw
-        automatic logic [riscv::PLEN-1:0] pptr;
+        automatic logic [riscv::PLEN-1:0] gpa_x;
         // default assignments
         // AXI parameters
         // AW
@@ -261,88 +262,92 @@ module iommu_ptw_sv39x4 (
         mem_req_o.r_ready       = 1'b0;                 // to signal read completion
         
         ptw_error_o             = 1'b0;
-        ptw_error_stage2_o      = 1'b0;
-        ptw_error_stage2_int_o  = 1'b0;
+        ptw_error_2S_o          = 1'b0;
+        ptw_error_2S_int_o      = 1'b0;
         cause_code_o            = '0;
         update_o                = 1'b0;
         cdw_done_o              = 1'b0;
         flush_cdw_o             = 1'b0;
         bare_translation_o      = 1'b0;
         
-        ptw_lvl_n               = ptw_lvl_q;
-        gptw_lvl_n              = gptw_lvl_q;
+        main_lvl_n              = main_lvl_q;
+        s1_lvl_n                = s1_lvl_q;
         ptw_pptr_n              = ptw_pptr_q;
-        gptw_pptr_n             = gptw_pptr_q;
+        gpa_x_n                 = gpa_x_q;
         state_n                 = state_q;
         ptw_stage_n             = ptw_stage_q;
-        gpte_n                  = gpte_q;
+        leaf_1Spte_n            = leaf_1Spte_q;
         global_mapping_n        = global_mapping_q;
         msi_translation_n       = msi_translation_q;
         iotlb_update_pscid_n    = iotlb_update_pscid_q;
         iotlb_update_gscid_n    = iotlb_update_gscid_q;
         iova_n                  = iova_q;
         gpaddr_n                = gpaddr_q;
-        pptr                    = ptw_pptr_q;
-        gpaddr                  = gpaddr_q;
+        gpa_x                   = ptw_pptr_q;
+        final_gpa               = gpaddr_q;
         cause_n                 = cause_q;
         cdw_implicit_access_n   = cdw_implicit_access_q;
 
-        // itlb_miss_o           = 1'b0;
-        // dtlb_miss_o           = 1'b0;
-
         case (state_q)
 
-            // check for possible misses to trigger PTW
+            // Check for possible misses to trigger PTW
             IDLE: begin
                 // by default we start with the top-most page table
-                ptw_lvl_n           = LVL1;
-                gptw_lvl_n          = LVL1;
+                main_lvl_n          = LVL1;
+                s1_lvl_n            = LVL1;
                 global_mapping_n    = 1'b0;
                 msi_translation_n   = 1'b0;
                 gpaddr_n            = '0;
-                gpte_n              = '0;
-                page_fault_n        = 1'b0;
+                leaf_1Spte_n        = '0;
+                pf_excep_n          = 1'b0;
 
                 // check for possible IOTLB miss
                 if ((iotlb_access_i & ~iotlb_hit_i) || cdw_implicit_access_i) begin
 
-                    // Two-stage
-                    if (en_stage1_i && en_stage2_i) begin
-                        // Start in G-L1
+                    // Two-stage: start in S2-L1
+                    if (en_1S_i && en_2S_i) begin
+
                         ptw_stage_n = STAGE_2_INTERMED;
-                        // Store GPA to be segmented for all three levels of G-stage translation
-                        pptr = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};   //* VS-L1
-                        gptw_pptr_n = pptr;
-                        // Load memory pointer with hgatp and GPPN[2] to access physical memory
-                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
+
+                        //# GPA_1
+                        // Translate iosatp. Segments of the GVA are used as offset
+                        gpa_x = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
+                        gpa_x_n = gpa_x;
+
+                        // pptr for first S2-L1
+                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
                     end
 
-                    // Stage 2 only
-                    else if ((!en_stage1_i && en_stage2_i)) begin
+                    // Stage 2 only: Start in unique S2-L1
+                    else if ((!en_1S_i && en_2S_i)) begin
                         
-                        // Save the GPA in all cases to report if an error occurs
+                        // Save the GPA
                         if (!cdw_implicit_access_i) gpaddr_n = req_iova_i[riscv::SVX-1:0];
                         else                        gpaddr_n = {pdt_gppn_i[riscv::GPPNW-1:0], 12'b0};
 
-                        // MSI Address translation ( //? Exclude CDW translations? These should not trigger an MSI translation)
+                        // MSI Address translation
                         if (iova_is_imsic_addr) begin
                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | (rv_iommu::extract_imsic_num(req_iova_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
                             msi_translation_n = 1'b1;   // signal next cycle
-                            ptw_lvl_n         = LVL3;
-                            gptw_lvl_n        = LVL3;
+                            main_lvl_n         = LVL3;
+                            s1_lvl_n        = LVL3;
                         end
 
                         // normal second-stage translation
                         else begin
                             ptw_stage_n = STAGE_2_FINAL;
+
+                            // pptr for unique S2-L1
                             if (!cdw_implicit_access_i) ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
                             else                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pdt_gppn_i[riscv::GPPNW-1:18], 3'b0};
                         end
                     end
                     
-                    // Stage 1 only
-                    else if (en_stage1_i) begin
+                    // Stage 1 only: Start in S1-L1
+                    else if (en_1S_i) begin
                         ptw_stage_n = STAGE_1;
+
+                        // pptr for S1-L1
                         ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
                     end
 
@@ -352,18 +357,14 @@ module iommu_ptw_sv39x4 (
                         msi_translation_n   = 1'b1;   // signal next cycle
                     end
 
-                    if (en_stage1_i || en_stage2_i || iova_is_imsic_addr) begin
+                    if (en_1S_i || en_2S_i || iova_is_imsic_addr) begin
 
                         // register PSCID, GSCID and IOVA
                         iotlb_update_pscid_n   = pscid_i;
                         iotlb_update_gscid_n   = gscid_i;
-                        if (!cdw_implicit_access_i)
-                            iova_n             = req_iova_i;
-                        else
-                            iova_n             = {pdt_gppn_i, 12'b0};
+                        iova_n = (cdw_implicit_access_i) ? ({pdt_gppn_i, 12'b0}) : (req_iova_i);
                         cdw_implicit_access_n  = cdw_implicit_access_i;
                         state_n                = WAIT_GRANT;
-                        // iotlb_miss_o        = 1'b1;     // to HPM
                     end
 
                     // If no stage is enabled and the input address is not associated with an IMSIC,
@@ -372,7 +373,7 @@ module iommu_ptw_sv39x4 (
                 end
             end
 
-            // perform memory access with address hold in ptw_pptr_q
+            // Perform memory access with address hold in ptw_pptr_q
             WAIT_GRANT: begin
                 // send request to AXI Bus
                 mem_req_o.ar_valid = 1'b1;
@@ -383,100 +384,109 @@ module iommu_ptw_sv39x4 (
                 end
             end
 
-            // process the incoming memory data (hold in pte)
+            // Process the incoming memory data (hold in pte)
             PTE_LOOKUP: begin
                 // we wait for RVALID to start reading
                 if (mem_resp_i.r_valid) begin
 
                     mem_req_o.r_ready   = 1'b1;
-                    // RLAST should be set
 
                     //# MSI address translation
-                    if (msi_translation_q) begin
+                    if (msi_translation_q) begin : msi_translation
                         state_n = IDLE;
-                        
-                        // Invalid MSI PTE
+
+                        update_o = 1'b1;
+
+                        // MSI Translation faults: No priorities/order is defined by the spec.
+                        // We stick to the translation process specified in section 2.3.
+
                         // "If msipte.V == 0, then stop and report "MSI PTE not valid" (cause = 262)"
-                        // This implementation will only support standard MSI PTE formats (msi_pte.c = 0)
+                        // This implementation only supports standard MSI PTE formats (msi_pte.c = 0)
                         if (!msi_pte.v || msi_pte.c) begin
+                            update_o = 1'b0;
                             cause_n = rv_iommu::MSI_PTE_INVALID;
                             state_n = PROPAGATE_ERROR;
                         end
 
-                        else begin
-                            update_o = 1'b1;
-
-                            // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
-                            if (msi_pte.m != rv_iommu::WRITE_THROUGH) begin
-                                update_o = 1'b0;
-                                cause_n = rv_iommu::TRANS_TYPE_DISALLOWED;
-                                state_n = PROPAGATE_ERROR;
-                            end
-
-                            // "If any bits or encoding that are reserved for future standard use are set within msipte," 
-                            // "stop and report "MSI PTE misconfigured" (cause = 263)."
-                            if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2))begin
-                                update_o = 1'b0;
-                                cause_n = rv_iommu::MSI_PTE_MISCONFIGURED;
-                                state_n = PROPAGATE_ERROR;
-                            end
-
-                            // "If the transaction is an Untranslated or Translated read-for-execute"
-                            // "then stop and report Instruction access fault (cause = 1)."
-                            if (is_rx_i) begin
-                                update_o = 1'b0;
-                                cause_n = rv_iommu::INSTR_ACCESS_FAULT;
-                                state_n = PROPAGATE_ERROR;
-                            end
-
-                            // MSI translation successful
+                        // "If any bits or encoding that are reserved for future standard use are set within msipte," 
+                        // "stop and report "MSI PTE misconfigured" (cause = 263)."
+                        if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2))begin
+                            update_o = 1'b0;
+                            cause_n = rv_iommu::MSI_PTE_MISCONFIGURED;
+                            state_n = PROPAGATE_ERROR;
                         end
-                    end
+
+                        // "If the transaction is an Untranslated or Translated read-for-execute"
+                        // "then stop and report Instruction access fault (cause = 1)."
+                        if (is_rx_i) begin
+                            update_o = 1'b0;
+                            cause_n = rv_iommu::INSTR_ACCESS_FAULT;
+                            state_n = PROPAGATE_ERROR;
+                        end
+
+                        // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
+                        if (msi_pte.m != rv_iommu::WRITE_THROUGH) begin
+                            update_o = 1'b0;
+                            cause_n = rv_iommu::TRANS_TYPE_DISALLOWED;
+                            state_n = PROPAGATE_ERROR;
+                        end
+
+                        // MSI translation successful
+                    end : msi_translation
 
                     //# Normal address translation
-                    else begin
+                    else begin : normal_translation
                         
-                        // check if the global mapping bit is set
+                        // We need to save global configuration for non-leaf PTEs marked as global
                         if (pte.g && ptw_stage_q == STAGE_1)
                             global_mapping_n = 1'b1;
 
                         // Invalid PTE
                         // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
                         if (!pte.v || (!pte.r && pte.w)) begin
-                            page_fault_n    = 1'b1;
+                            pf_excep_n    = 1'b1;
                             state_n         = PROPAGATE_ERROR;
                         end
 
                         //# Valid PTE
-                        else begin
+                        else begin : valid_pte
                             state_n = IDLE;
 
                             //# Leaf PTE
-                            if (pte.r || pte.x) begin
+                            if (pte.r || pte.x) begin : leaf_pte
                                 case (ptw_stage_q)
                                     
-                                    //# S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
+                                    // Result of S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
                                     STAGE_1: begin
 
-                                        // construct FINAL GPA
-                                        gpaddr = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};
+                                        //# FINAL GPA
+                                        final_gpa = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};
+
                                         // update according to the size of the page
-                                        if (ptw_lvl_q == LVL2)
-                                            gpaddr[20:0] = iova_q[20:0];
-                                        if(ptw_lvl_q == LVL1)
-                                            gpaddr[29:0] = iova_q[29:0];
-                                        gpte_n = pte;                   // save GPA to update in TLB
+                                        if (main_lvl_q == LVL2)
+                                            final_gpa[20:0] = iova_q[20:0];
+                                        if (main_lvl_q == LVL1)
+                                            final_gpa[29:0] = iova_q[29:0];
+
+                                        // Save leaf first-stage PTE to update in IOTLB
+                                        leaf_1Spte_n = pte;
 
                                         // If second-stage translation is enabled
-                                        if (en_stage2_i) begin
+                                        if (en_2S_i) begin
                                             state_n = WAIT_GRANT;
-                                            gptw_lvl_n = ptw_lvl_q;         // VS lvl = G lvl (for superpage cases)
-                                            gpaddr_n = gpaddr;              // register FINAL GPA
+                                            
+                                            // Save first-stage level where leaf PTE was found
+                                            s1_lvl_n = main_lvl_q;
+
+                                            // save FINAL GPA
+                                            gpaddr_n = final_gpa;
 
                                             // Proceed with final second-stage translation
                                             ptw_stage_n = STAGE_2_FINAL;
-                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpaddr[riscv::SVX-1:30], 3'b0};
-                                            ptw_lvl_n = LVL1;
+
+                                            // pptr for final S2-L1
+                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], final_gpa[riscv::SVX-1:30], 3'b0};
+                                            main_lvl_n = LVL1;
                                         end
 
                                         // GPA is an IMSIC address (even if Stage 2 is disabled)
@@ -484,24 +494,30 @@ module iommu_ptw_sv39x4 (
                                             state_n = WAIT_GRANT;
                                             ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {rv_iommu::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
                                             msi_translation_n = 1'b1;
-                                            ptw_lvl_n = LVL3;
-                                            gptw_lvl_n = LVL3;
+                                            main_lvl_n = LVL3;
+                                            s1_lvl_n = LVL3;
                                         end
                                     end
 
-                                    // triggered when valid G-stage PTE is found, without being the last level of VS
-                                    //# S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages
+                                    // result of any S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages,
+                                    // but the last
                                     STAGE_2_INTERMED: begin
                                         state_n = WAIT_GRANT;
                                         ptw_stage_n = STAGE_1;
-                                        ptw_lvl_n = gptw_lvl_q;     // equalized to avoid comparing two types of level
-                                        pptr = {pte.ppn[riscv::GPPNW-1:0], gptw_pptr_q[11:0]};  // join lvlx PPN with lvlx GPA's offset
+
+                                        // Restore first-stage walk level
+                                        main_lvl_n = s1_lvl_q;
+
+                                        gpa_x = {pte.ppn[riscv::GPPNW-1:0], gpa_x_q[11:0]};
+
                                         // Consider case of superpages
-                                        if (ptw_lvl_q == LVL2)
-                                            pptr[20:0] = gptw_pptr_q[20:0];
-                                        if(ptw_lvl_q == LVL1)
-                                            pptr[29:0] = gptw_pptr_q[29:0];
-                                        ptw_pptr_n = pptr;
+                                        if (main_lvl_q == LVL2)
+                                            gpa_x[20:0] = gpa_x_q[20:0];
+                                        if (main_lvl_q == LVL1)
+                                            gpa_x[29:0] = gpa_x_q[29:0];
+
+                                        // pptr for S1-L1, S1-L2 or S1-L3
+                                        ptw_pptr_n = gpa_x;
                                     end
                                     default:;
                                 endcase
@@ -513,7 +529,7 @@ module iommu_ptw_sv39x4 (
                                 // Do not update IOTLB for CDW implicit accesses
                                 // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
                                 // MSI translation process is invoked
-                                if ((ptw_stage_q == STAGE_2_FINAL) || (!en_stage2_i && !gpaddr_is_imsic_addr)) begin
+                                if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_imsic_addr)) begin
                                         if (!cdw_implicit_access_q) update_o = 1'b1;
                                         else                        cdw_done_o = 1'b1;
                                 end
@@ -524,81 +540,105 @@ module iommu_ptw_sv39x4 (
                                 // "     a page-fault exception is raised."
                                 // "(3): For G-stage address translation, all memory accesses are considered to be user-level accesses," 
                                 // "     as though executed in U-mode."
-                                if ((ptw_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
-                                    (ptw_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
+                                if ((main_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
+                                    (main_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
                                     (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
                                     (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                     
-                                    page_fault_n        = 1'b1;
+                                    pf_excep_n        = 1'b1;
                                     state_n             = PROPAGATE_ERROR;
                                     ptw_stage_n         = ptw_stage_q;
                                     update_o            = 1'b0;
                                     cdw_done_o          = 1'b0;
                                 end
-                            end
+                            end : leaf_pte
                             
                             //# non-leaf PTE
-                            else begin
-                                if (ptw_lvl_q == LVL1) begin
-                                    // we are in the second level now
-                                    ptw_lvl_n = LVL2;
+                            else begin : non_leaf_pte
+                                if (main_lvl_q == LVL1) begin
+
+                                    main_lvl_n = LVL2;
                                     case (ptw_stage_q)
 
-                                        //# S1-L1
+                                        // Result of S1-L1
                                         STAGE_1: begin
-                                            if (en_stage2_i) begin
+
+                                            // Second-stage enabled: Construct GPA_2
+                                            if (en_2S_i) begin
                                                 ptw_stage_n = STAGE_2_INTERMED;
-                                                gpte_n = pte;   // PTE representing the GPA base pointer
-                                                gptw_lvl_n = LVL2;  // update VS level
-                                                pptr = {pte.ppn, iova_q[29:21], 3'b0};     // join GPA base pointer with VPN[1] => GPA lvl2
-                                                gptw_pptr_n = pptr;     // update GPA for new level
-                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
-                                                ptw_lvl_n = LVL1;       // restart G-stage level
-                                            end else begin
+                                                s1_lvl_n = LVL2;    // save first-stage level
+
+                                                //# GPA_2
+                                                gpa_x = {pte.ppn, iova_q[29:21], 3'b0};
+                                                gpa_x_n = gpa_x;
+
+                                                // pptr for second S2-L1
+                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
+                                                // restart second-stage walk level
+                                                main_lvl_n = LVL1;
+                                            end 
+                                            
+                                            // Second-stage disabled
+                                            else begin
+                                                // pptr for S1-L2
                                                 ptw_pptr_n = {pte.ppn, iova_q[29:21], 3'b0};
                                             end
                                         end
 
-                                        //# S2-L1 (GPA_n)
+                                        // Result of any S2-L1 but the last
                                         STAGE_2_INTERMED: begin
-                                                ptw_pptr_n = {pte.ppn, gptw_pptr_q[29:21], 3'b0};   // pointer received from G-L1, to be used with GPPN[1]
+                                                // pptr for any S2-L2 but the last
+                                                ptw_pptr_n = {pte.ppn, gpa_x_q[29:21], 3'b0};
                                         end
 
-                                        //# S2-L1 (final GPA)
+                                        // Result of last S2-L1
                                         STAGE_2_FINAL: begin
+                                                // pptr for last S2-L2
                                                 ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
                                         end
                                         default:;
                                     endcase
                                 end
 
-                                if (ptw_lvl_q == LVL2) begin
-                                    // here we received a pointer to the third level
-                                    ptw_lvl_n  = LVL3;
+                                if (main_lvl_q == LVL2) begin
+                                    
+                                    main_lvl_n  = LVL3;
                                     unique case (ptw_stage_q)
 
-                                        //# S1-L2
+                                        // Result of S1-L2
                                         STAGE_1: begin
-                                            if (en_stage2_i) begin
+
+                                            // Second-stage enabled: Construct GPA_3
+                                            if (en_2S_i) begin
                                                 ptw_stage_n = STAGE_2_INTERMED;
-                                                gpte_n = pte;
-                                                gptw_lvl_n = LVL3;
-                                                pptr = {pte.ppn, iova_q[20:12], 3'b0};
-                                                gptw_pptr_n = pptr;
-                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], pptr[riscv::SVX-1:30], 3'b0};
-                                                ptw_lvl_n = LVL1;
-                                            end else begin
+                                                s1_lvl_n = LVL3;
+
+                                                //# GPA_3
+                                                gpa_x = {pte.ppn, iova_q[20:12], 3'b0};
+                                                gpa_x_n = gpa_x;
+
+                                                // pptr for third S2-L1
+                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
+                                                // restart second-stage walk level
+                                                main_lvl_n = LVL1;
+                                            end 
+                                            
+                                            // Second-stage disabled
+                                            else begin
+                                                // pptr for S1-L3
                                                 ptw_pptr_n = {pte.ppn, iova_q[20:12], 3'b0};
                                             end
                                         end
 
-                                        //# S2-L2 (GPA_n)
+                                        // Result S2-L2 but the last
                                         STAGE_2_INTERMED: begin
-                                                ptw_pptr_n = {pte.ppn, gptw_pptr_q[20:12], 3'b0};   // pointer received from G-L2, to be used with GPPN[1]
+                                                // pptr for any S2-L3 but the last
+                                                ptw_pptr_n = {pte.ppn, gpa_x_q[20:12], 3'b0};
                                         end
 
-                                        //# S2-L2 (final GPA)
+                                        // Result of last S2-L2
                                         STAGE_2_FINAL: begin
+                                                // pptr for last S2-L3
                                                 ptw_pptr_n = {pte.ppn, gpaddr_q[20:12], 3'b0};
                                         end
                                         default:;
@@ -610,25 +650,24 @@ module iommu_ptw_sv39x4 (
                                 // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
                                 // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
                                 if(pte.a || pte.d || pte.u) begin
-                                    page_fault_n    = 1'b1;
-                                    state_n = PROPAGATE_ERROR;
+                                    pf_excep_n  = 1'b1;
+                                    state_n     = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
                                 end
 
                                 //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
                                 //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
-                                if (ptw_lvl_q == LVL3) begin
-                                    page_fault_n    = 1'b1;
-                                    state_n = PROPAGATE_ERROR;
+                                if (main_lvl_q == LVL3) begin
+                                    pf_excep_n  = 1'b1;
+                                    state_n     = PROPAGATE_ERROR;
                                     ptw_stage_n = ptw_stage_q;
                                 end
-                            end
-                        end
+                            end : non_leaf_pte
+                        end : valid_pte
 
                         // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
-                        // Svnapot and Svpbmt are not implemented
                         if ((|pte.reserved) != 1'b0) begin
-                            page_fault_n    = 1'b1;
+                            pf_excep_n    = 1'b1;
                             state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n     = ptw_stage_q;
                             update_o        = 1'b0;
@@ -637,13 +676,13 @@ module iommu_ptw_sv39x4 (
 
                         // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                         if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                            page_fault_n    = 1'b1;
+                            pf_excep_n    = 1'b1;
                             state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
                             ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
                             update_o        = 1'b0;
                             cdw_done_o      = 1'b0;
                         end
-                    end
+                    end : normal_translation
                     
                     /*
                         # Note about IOPMP faults for PTW accesses:
@@ -671,9 +710,9 @@ module iommu_ptw_sv39x4 (
                 ptw_error_o = 1'b1;
 
                 // Set cause code and flags
-                if (page_fault_q) begin
+                if (pf_excep_q) begin
                     if (ptw_stage_q != STAGE_1) begin
-                        ptw_error_stage2_o   = 1'b1;
+                        ptw_error_2S_o   = 1'b1;
                         if (is_store_i) cause_code_o = rv_iommu::STORE_GUEST_PAGE_FAULT;
                         else            cause_code_o = rv_iommu::LOAD_GUEST_PAGE_FAULT;
                     end
@@ -683,7 +722,7 @@ module iommu_ptw_sv39x4 (
                     end
                 end
                 else cause_code_o = cause_q;
-                ptw_error_stage2_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
+                ptw_error_2S_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
                 flush_cdw_o = cdw_implicit_access_q;
             end
 
@@ -698,38 +737,38 @@ module iommu_ptw_sv39x4 (
         if (~rst_ni) begin
             state_q                 <= IDLE;
             ptw_stage_q             <= STAGE_1;
-            ptw_lvl_q               <= LVL1;
-            gptw_lvl_q              <= LVL1;
+            main_lvl_q              <= LVL1;
+            s1_lvl_q                <= LVL1;
             iotlb_update_pscid_q    <= '0;
             iotlb_update_gscid_q    <= '0;
             iova_q                  <= '0;
             gpaddr_q                <= '0;
             ptw_pptr_q              <= '0;
-            gptw_pptr_q             <= '0;
+            gpa_x_q                 <= '0;
             global_mapping_q        <= 1'b0;
             msi_translation_q       <= 1'b0;
-            gpte_q                  <= '0;
+            leaf_1Spte_q            <= '0;
             cause_q                 <= '0;
             cdw_implicit_access_q   <= 1'b0;
-            page_fault_q            <= 1'b0;
+            pf_excep_q              <= 1'b0;
 
         end else begin
             state_q                 <= state_n;
             ptw_stage_q             <= ptw_stage_n;
             ptw_pptr_q              <= ptw_pptr_n;
-            gptw_pptr_q             <= gptw_pptr_n;
-            ptw_lvl_q               <= ptw_lvl_n;
-            gptw_lvl_q              <= gptw_lvl_n;
+            gpa_x_q                 <= gpa_x_n;
+            main_lvl_q              <= main_lvl_n;
+            s1_lvl_q                <= s1_lvl_n;
             iotlb_update_pscid_q    <= iotlb_update_pscid_n;
             iotlb_update_gscid_q    <= iotlb_update_gscid_n;
             iova_q                  <= iova_n;
             gpaddr_q                <= gpaddr_n;
             global_mapping_q        <= global_mapping_n;
             msi_translation_q       <= msi_translation_n;
-            gpte_q                  <= gpte_n;
+            leaf_1Spte_q            <= leaf_1Spte_n;
             cause_q                 <= cause_n;
             cdw_implicit_access_q   <= cdw_implicit_access_n;
-            page_fault_q            <= page_fault_n;
+            pf_excep_q              <= pf_excep_n;
         end
     end
 

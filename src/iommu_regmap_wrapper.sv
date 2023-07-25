@@ -1341,7 +1341,7 @@ module iommu_regmap_wrapper #(
 
       // from register interface
       .we     (iocountinh_hpm_we),
-      .wd     (iocountinh_hpm_wd),
+      .wd     (iocountinh_hpm_wd[N_IOHPMCTR-1:0]),
 
       // from internal hardware
       .de     ('0),
@@ -1353,7 +1353,7 @@ module iommu_regmap_wrapper #(
       .q      (reg2hw.iocountinh.hpm.q[N_IOHPMCTR-1:0]),
 
       // to register interface (read)
-      .qs     (iocountinh_hpm_qs)
+      .qs     (iocountinh_hpm_qs[N_IOHPMCTR-1:0])
     );
 
     // R[iohpmcycles]: V(False)
@@ -2166,7 +2166,7 @@ module iommu_regmap_wrapper #(
     assign iocountinh_cy_wd = reg_wdata[0];
 
     assign iocountinh_hpm_we = addr_hit[13] & reg_we & !reg_error;
-    assign iocountinh_hpm_wd = reg_wdata[N_IOHPMCTR:1];
+    assign iocountinh_hpm_wd[N_IOHPMCTR-1:0] = reg_wdata[N_IOHPMCTR:1];
 
     assign iohpmcycles_counter_we = addr_hit[14] & reg_we & !reg_error;
     assign iohpmcycles_counter_wd = reg_wdata[62:0];
