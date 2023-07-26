@@ -25,8 +25,8 @@
 `include "register_interface/typedef.svh"
 
 module iommu_regmap_wrapper #(
-  parameter int 			        ADDR_WIDTH = 64,
-  parameter int 			        DATA_WIDTH = 64,
+  parameter int 			        ADDR_WIDTH = 32,
+  parameter int 			        DATA_WIDTH = 32,
 
   // Interrupt Generation Support
   parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
@@ -72,7 +72,7 @@ module iommu_regmap_wrapper #(
   logic           			  reg_ready;
 
   logic addrmiss;
-  logic [125:0] wr_err;
+  logic [210:0] wr_err;
   logic [DATA_WIDTH-1:0] reg_rdata_next;
 
   reg_req_t  reg_intf_req;
@@ -96,37 +96,33 @@ module iommu_regmap_wrapper #(
   assign reg_rdata = reg_re ? reg_rdata_next : '0;
   assign reg_error = (devmode_i & addrmiss) | (reg_we & |wr_err);   // when in development mode, address misses are not silent
 
-  // Define SW related signals
-  // Format: <reg>_<field>_{wd|we|qs}
-  //        or <reg>_{wd|we|qs} if field == 1 or 0
-  //
-  // EXP: qs signals are connected from the registers (those that can be read from SW);
-
-  // caps
+  // caps (low)
   logic [7:0] 	capabilities_version_qs;
-  logic 		capabilities_sv32_qs;
-  logic 		capabilities_sv39_qs;
-  logic 		capabilities_sv48_qs;
-  logic 		capabilities_sv57_qs;
-  logic 		capabilities_svpbmt_qs;
-  logic 		capabilities_sv32x4_qs;
-  logic 		capabilities_sv39x4_qs;
-  logic 		capabilities_sv48x4_qs;
-  logic 		capabilities_sv57x4_qs;
-  logic 		capabilities_amo_mrif_qs;
-  logic 		capabilities_msi_flat_qs;
-  logic 		capabilities_msi_mrif_qs;
-  logic 		capabilities_amo_hwad_qs;
-  logic 		capabilities_ats_qs;
-  logic 		capabilities_t2gpa_qs;
-  logic 		capabilities_endi_qs;
+  logic 		    capabilities_sv32_qs;
+  logic 		    capabilities_sv39_qs;
+  logic 		    capabilities_sv48_qs;
+  logic 		    capabilities_sv57_qs;
+  logic 		    capabilities_svpbmt_qs;
+  logic 		    capabilities_sv32x4_qs;
+  logic 		    capabilities_sv39x4_qs;
+  logic 		    capabilities_sv48x4_qs;
+  logic 		    capabilities_sv57x4_qs;
+  logic 		    capabilities_amo_mrif_qs;
+  logic 		    capabilities_msi_flat_qs;
+  logic 		    capabilities_msi_mrif_qs;
+  logic 		    capabilities_amo_hwad_qs;
+  logic 		    capabilities_ats_qs;
+  logic 		    capabilities_t2gpa_qs;
+  logic 		    capabilities_endi_qs;
   logic [1:0] 	capabilities_igs_qs;
-  logic 		capabilities_hpm_qs;
-  logic 		capabilities_dbg_qs;
+  logic 		    capabilities_hpm_qs;
+  logic 		    capabilities_dbg_qs;
+
+  // caps (high)
   logic [5:0] 	capabilities_pas_qs;
-  logic 		capabilities_pd8_qs;
-  logic 		capabilities_pd17_qs;
-  logic 		capabilities_pd20_qs;
+  logic 		    capabilities_pd8_qs;
+  logic 		    capabilities_pd17_qs;
+  logic 		    capabilities_pd20_qs;
 
   // fctl
   logic 		fctl_be_qs;
@@ -139,22 +135,32 @@ module iommu_regmap_wrapper #(
   logic 		fctl_gxl_wd;
   logic 		fctl_gxl_we;
 
-  // ddtp
+  // ddtp (low)
   logic [3:0] 	ddtp_iommu_mode_qs;
   logic [3:0] 	ddtp_iommu_mode_wd;
-  logic 		ddtp_iommu_mode_we;
-  logic 		ddtp_busy_qs;
-  logic [43:0] 	ddtp_ppn_qs;
-  logic [43:0] 	ddtp_ppn_wd;
-  logic 		ddtp_ppn_we;
+  logic 		    ddtp_iommu_mode_we;
+  logic 		    ddtp_busy_qs;
+  logic [21:0] 	ddtp_ppn_l_qs;
+  logic [21:0] 	ddtp_ppn_l_wd;
+  logic 		    ddtp_ppn_l_we;
 
-  // cqb
+  // ddtp (high)
+  logic [21:0] 	ddtp_ppn_h_qs;
+  logic [21:0] 	ddtp_ppn_h_wd;
+  logic 		    ddtp_ppn_h_we;
+
+  // cqb (low)
   logic [4:0] 	cqb_log2sz_1_qs;
   logic [4:0] 	cqb_log2sz_1_wd;
-  logic 		cqb_log2sz_1_we;
-  logic [43:0] 	cqb_ppn_qs;
-  logic [43:0] 	cqb_ppn_wd;
-  logic 		cqb_ppn_we;
+  logic 		    cqb_log2sz_1_we;
+  logic [21:0] 	cqb_ppn_l_qs;
+  logic [21:0] 	cqb_ppn_l_wd;
+  logic 		    cqb_ppn_l_we;
+
+  // cqb (high)
+  logic [21:0] 	cqb_ppn_h_qs;
+  logic [21:0] 	cqb_ppn_h_wd;
+  logic 		    cqb_ppn_h_we;
 
   // cqh
   logic [31:0] 	cqh_qs;
@@ -162,15 +168,20 @@ module iommu_regmap_wrapper #(
   // cqt
   logic [31:0] 	cqt_qs;
   logic [31:0] 	cqt_wd;
-  logic cqt_we;
+  logic         cqt_we;
 
-  // fqb
+  // fqb (low)
   logic [4:0] 	fqb_log2sz_1_qs;
   logic [4:0] 	fqb_log2sz_1_wd;
-  logic 		fqb_log2sz_1_we;
-  logic [43:0] 	fqb_ppn_qs;
-  logic [43:0] 	fqb_ppn_wd;
-  logic 		fqb_ppn_we;
+  logic 		    fqb_log2sz_1_we;
+  logic [21:0] 	fqb_ppn_l_qs;
+  logic [21:0] 	fqb_ppn_l_wd;
+  logic 		    fqb_ppn_l_we;
+
+  // fqb (high)
+  logic [21:0] 	fqb_ppn_h_qs;
+  logic [21:0] 	fqb_ppn_h_wd;
+  logic 		    fqb_ppn_h_we;
 
   // fqh
   logic [31:0] 	fqh_qs;
@@ -226,44 +237,59 @@ module iommu_regmap_wrapper #(
   logic [31-1:0]	        iocountinh_hpm_wd;
   logic 		              iocountinh_hpm_we;
 
-  // iohpmcycles
-  logic [62:0]	iohpmcycles_counter_qs;
-  logic [62:0]	iohpmcycles_counter_wd;
-  logic 		    iohpmcycles_counter_we;
+  // iohpmcycles (low)
+  logic [31:0]	iohpmcycles_counter_l_qs;
+  logic [31:0]	iohpmcycles_counter_l_wd;
+  logic 		    iohpmcycles_counter_l_we;
+
+  // iohpmcycles (high)
+  logic [30:0]	iohpmcycles_counter_h_qs;
+  logic [30:0]	iohpmcycles_counter_h_wd;
+  logic 		    iohpmcycles_counter_h_we;
   logic 		    iohpmcycles_of_qs;
   logic 		    iohpmcycles_of_wd;
   logic 		    iohpmcycles_of_we;
 
-  // iohpmctr
-  logic [63:0]	iohpmctr_counter_qs   [31];
-  logic [63:0]	iohpmctr_counter_wd   [31];
-  logic 		    iohpmctr_counter_we   [31];
+  // iohpmctr (low)
+  logic [31:0]	iohpmctr_counter_l_qs   [31];
+  logic [31:0]	iohpmctr_counter_l_wd   [31];
+  logic 		    iohpmctr_counter_l_we   [31];
 
-  // iohpmevt
-  logic [14:0]	iohpmevt_eventid_qs   [31];
-  logic [14:0]	iohpmevt_eventid_wd   [31];
-  logic 		    iohpmevt_eventid_we   [31];
-  logic 	      iohpmevt_dmask_qs     [31];
-  logic 	      iohpmevt_dmask_wd     [31];
-  logic 		    iohpmevt_dmask_we     [31];
-  logic [19:0]	iohpmevt_pid_pscid_qs [31];
-  logic [19:0]	iohpmevt_pid_pscid_wd [31];
-  logic 		    iohpmevt_pid_pscid_we [31];
-  logic [23:0]	iohpmevt_did_gscid_qs [31];
-  logic [23:0]	iohpmevt_did_gscid_wd [31];
-  logic 		    iohpmevt_did_gscid_we [31];
-  logic 	      iohpmevt_pv_pscv_qs   [31];
-  logic 	      iohpmevt_pv_pscv_wd   [31];
-  logic 		    iohpmevt_pv_pscv_we   [31];
-  logic 	      iohpmevt_dv_gscv_qs   [31];
-  logic 	      iohpmevt_dv_gscv_wd   [31];
-  logic 		    iohpmevt_dv_gscv_we   [31];
-  logic 	      iohpmevt_idt_qs       [31];
-  logic 	      iohpmevt_idt_wd       [31];
-  logic 		    iohpmevt_idt_we       [31];
-  logic 	      iohpmevt_of_qs        [31];
-  logic 	      iohpmevt_of_wd        [31];
-  logic 		    iohpmevt_of_we        [31];
+  // iohpmctr (high)
+  logic [31:0]	iohpmctr_counter_h_qs   [31];
+  logic [31:0]	iohpmctr_counter_h_wd   [31];
+  logic 		    iohpmctr_counter_h_we   [31];
+
+  // iohpmevt (low)
+  logic [14:0]	iohpmevt_eventid_qs     [31];
+  logic [14:0]	iohpmevt_eventid_wd     [31];
+  logic 		    iohpmevt_eventid_we     [31];
+  logic 	      iohpmevt_dmask_qs       [31];
+  logic 	      iohpmevt_dmask_wd       [31];
+  logic 		    iohpmevt_dmask_we       [31];
+  logic [15:0]	iohpmevt_pid_pscid_l_qs [31];
+  logic [15:0]	iohpmevt_pid_pscid_l_wd [31];
+  logic 		    iohpmevt_pid_pscid_l_we [31];
+
+  // iohpmevt (high)
+  logic [3:0]	  iohpmevt_pid_pscid_h_qs [31];
+  logic [3:0]	  iohpmevt_pid_pscid_h_wd [31];
+  logic 		    iohpmevt_pid_pscid_h_we [31];
+  logic [23:0]	iohpmevt_did_gscid_qs   [31];
+  logic [23:0]	iohpmevt_did_gscid_wd   [31];
+  logic 		    iohpmevt_did_gscid_we   [31];
+  logic 	      iohpmevt_pv_pscv_qs     [31];
+  logic 	      iohpmevt_pv_pscv_wd     [31];
+  logic 		    iohpmevt_pv_pscv_we     [31];
+  logic 	      iohpmevt_dv_gscv_qs     [31];
+  logic 	      iohpmevt_dv_gscv_wd     [31];
+  logic 		    iohpmevt_dv_gscv_we     [31];
+  logic 	      iohpmevt_idt_qs         [31];
+  logic 	      iohpmevt_idt_wd         [31];
+  logic 		    iohpmevt_idt_we         [31];
+  logic 	      iohpmevt_of_qs          [31];
+  logic 	      iohpmevt_of_wd          [31];
+  logic 		    iohpmevt_of_we          [31];
   
   // ipsr
   logic 		ipsr_cip_qs;
@@ -279,24 +305,27 @@ module iommu_regmap_wrapper #(
   logic 		ipsr_pip_wd;
   logic 		ipsr_pip_we;
 
-  // icvec
+  // icvec (low)
   logic [(LOG2_INTVEC-1):0] 	icvec_civ_qs;
   logic [(LOG2_INTVEC-1):0] 	icvec_civ_wd;
-  logic 		icvec_civ_we;
+  logic 		                  icvec_civ_we;
   logic [(LOG2_INTVEC-1):0] 	icvec_fiv_qs;
   logic [(LOG2_INTVEC-1):0] 	icvec_fiv_wd;
-  logic 		icvec_fiv_we;
+  logic 		                  icvec_fiv_we;
   logic [(LOG2_INTVEC-1):0] 	icvec_pmiv_qs;
   logic [(LOG2_INTVEC-1):0] 	icvec_pmiv_wd;
-  logic 		icvec_pmiv_we;
+  logic 		                  icvec_pmiv_we;
   logic [(LOG2_INTVEC-1):0] 	icvec_piv_qs;
   logic [(LOG2_INTVEC-1):0] 	icvec_piv_wd;
-  logic 		icvec_piv_we;
+  logic 		                  icvec_piv_we;
 
   // MSI configuration table
-  logic [53:0]  msi_addr_qs     [16];
-  logic [53:0]  msi_addr_wd     [16];
-  logic         msi_addr_we     [16];
+  logic [29:0]  msi_addr_l_qs   [16];
+  logic [29:0]  msi_addr_l_wd   [16];
+  logic         msi_addr_l_we   [16];
+  logic [23:0]  msi_addr_h_qs   [16];
+  logic [23:0]  msi_addr_h_wd   [16];
+  logic         msi_addr_h_we   [16];
   logic [31:0]  msi_data_qs     [16];
   logic [31:0]  msi_data_wd     [16];
   logic         msi_data_we     [16];
@@ -548,7 +577,7 @@ module iommu_regmap_wrapper #(
     .we     (1'b0),
     .wd     ('0  ),
 
-    // from internal hardware   //? don't know if it is not written by IOMMU...
+    // from internal hardware
     .de     ('0),
     .d      ('0),
     .ds     (),
@@ -562,18 +591,18 @@ module iommu_regmap_wrapper #(
   );
 
 
-  //   F[ppn]: 53:10
+  //   F[ppn_low]: 31:10
   iommu_field #(
-    .DATA_WIDTH      (44),
+    .DATA_WIDTH      (22),
     .SwAccess(SwAccessRW),
-    .RESVAL  (44'h0)
-  ) u_ddtp_ppn (
+    .RESVAL  (22'h0)
+  ) u_ddtp_ppn_l (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (ddtp_ppn_we),
-    .wd     (ddtp_ppn_wd),
+    .we     (ddtp_ppn_l_we),
+    .wd     (ddtp_ppn_l_wd),
 
     // from internal hardware
     .de     ('0),
@@ -582,10 +611,36 @@ module iommu_regmap_wrapper #(
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.ddtp.ppn.q ),
+    .q      (reg2hw.ddtp.ppn.q[21:0] ),
 
     // to register interface (read)
-    .qs     (ddtp_ppn_qs)
+    .qs     (ddtp_ppn_l_qs)
+  );
+
+  //   F[ppn_high]: 21:0
+  iommu_field #(
+    .DATA_WIDTH      (22),
+    .SwAccess(SwAccessRW),
+    .RESVAL  (22'h0)
+  ) u_ddtp_ppn_h (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (ddtp_ppn_h_we),
+    .wd     (ddtp_ppn_h_wd),
+
+    // from internal hardware
+    .de     ('0),
+    .d      ('0),
+    .ds     (),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.ddtp.ppn.q[43:22] ),
+
+    // to register interface (read)
+    .qs     (ddtp_ppn_h_qs)
   );
 
 
@@ -618,18 +673,18 @@ module iommu_regmap_wrapper #(
   );
 
 
-  //   F[ppn]: 53:10
+  //   F[ppn_low]: 31:10
   iommu_field #(
-    .DATA_WIDTH      (44),
+    .DATA_WIDTH      (22),
     .SwAccess(SwAccessRW),
-    .RESVAL  (44'h0)
-  ) u_cqb_ppn (
+    .RESVAL  (22'h0)
+  ) u_cqb_ppn_l (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (cqb_ppn_we),
-    .wd     (cqb_ppn_wd),
+    .we     (cqb_ppn_l_we),
+    .wd     (cqb_ppn_l_wd),
 
     // from internal hardware
     .de     ('0),
@@ -638,10 +693,36 @@ module iommu_regmap_wrapper #(
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.cqb.ppn.q ),
+    .q      (reg2hw.cqb.ppn.q[21:0] ),
 
     // to register interface (read)
-    .qs     (cqb_ppn_qs)
+    .qs     (cqb_ppn_l_qs)
+  );
+
+  //   F[ppn_high]: 21:0
+  iommu_field #(
+    .DATA_WIDTH      (22),
+    .SwAccess(SwAccessRW),
+    .RESVAL  (22'h0)
+  ) u_cqb_ppn_h (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (cqb_ppn_h_we),
+    .wd     (cqb_ppn_h_wd),
+
+    // from internal hardware
+    .de     ('0),
+    .d      ('0),
+    .ds     (),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.cqb.ppn.q[43:22] ),
+
+    // to register interface (read)
+    .qs     (cqb_ppn_h_qs)
   );
 
 
@@ -707,7 +788,7 @@ module iommu_regmap_wrapper #(
     .DATA_WIDTH      (5),
     .SwAccess(SwAccessRW),
     .RESVAL  (5'h0)
-  ) fqb_log2sz_1 (
+  ) u_fqb_log2sz_1 (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
@@ -729,18 +810,18 @@ module iommu_regmap_wrapper #(
   );
 
 
-  //   F[ppn]: 53:10
+  //   F[ppn]: 31:10
   iommu_field #(
-    .DATA_WIDTH      (44),
+    .DATA_WIDTH      (22),
     .SwAccess(SwAccessRW),
-    .RESVAL  (44'h0)
-  ) fqb_ppn (
+    .RESVAL  (22'h0)
+  ) u_fqb_ppn_l (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
 
     // from register interface
-    .we     (fqb_ppn_we),
-    .wd     (fqb_ppn_wd),
+    .we     (fqb_ppn_l_we),
+    .wd     (fqb_ppn_l_wd),
 
     // from internal hardware
     .de     ('0),
@@ -749,10 +830,37 @@ module iommu_regmap_wrapper #(
 
     // to internal hardware
     .qe     (),
-    .q      (reg2hw.fqb.ppn.q ),
+    .q      (reg2hw.fqb.ppn.q[21:0] ),
 
     // to register interface (read)
-    .qs     (fqb_ppn_qs)
+    .qs     (fqb_ppn_l_qs)
+  );
+
+
+  //   F[ppn]: 21:0
+  iommu_field #(
+    .DATA_WIDTH      (22),
+    .SwAccess(SwAccessRW),
+    .RESVAL  (22'h0)
+  ) u_fqb_ppn_h (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (fqb_ppn_h_we),
+    .wd     (fqb_ppn_h_wd),
+
+    // from internal hardware
+    .de     ('0),
+    .d      ('0),
+    .ds     (),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.fqb.ppn.q[43:22] ),
+
+    // to register interface (read)
+    .qs     (fqb_ppn_h_qs)
   );
 
 
@@ -1358,33 +1466,59 @@ module iommu_regmap_wrapper #(
 
     // R[iohpmcycles]: V(False)
 
-    //   F[counter]: 62:0
+    //   F[counter_low]: 31:0
     iommu_field #(
-      .DATA_WIDTH      (63),
+      .DATA_WIDTH      (32),
       .SwAccess(SwAccessRW),
-      .RESVAL  (63'h0)
-    ) u_iohpmcycles_counter (
+      .RESVAL  (32'h0)
+    ) u_iohpmcycles_counter_l (
       .clk_i   (clk_i    ),
       .rst_ni  (rst_ni  ),
 
       // from register interface
-      .we     (iohpmcycles_counter_we),
-      .wd     (iohpmcycles_counter_wd),
+      .we     (iohpmcycles_counter_l_we),
+      .wd     (iohpmcycles_counter_l_wd),
 
       // from internal hardware
       .de     (hw2reg.iohpmcycles.counter.de),
       .ds     (),
-      .d      (hw2reg.iohpmcycles.counter.d ),
+      .d      (hw2reg.iohpmcycles.counter.d[31:0] ),
 
       // to internal hardware
       .qe     (),
-      .q      (reg2hw.iohpmcycles.counter.q ),
+      .q      (reg2hw.iohpmcycles.counter.q[31:0] ),
 
       // to register interface (read)
-      .qs     (iohpmcycles_counter_qs)
+      .qs     (iohpmcycles_counter_l_qs)
     );
 
-    //   F[of]: 63:63
+    //   F[counter_high]: 30:0
+    iommu_field #(
+      .DATA_WIDTH      (31),
+      .SwAccess(SwAccessRW),
+      .RESVAL  (31'h0)
+    ) u_iohpmcycles_counter_h (
+      .clk_i   (clk_i    ),
+      .rst_ni  (rst_ni  ),
+
+      // from register interface
+      .we     (iohpmcycles_counter_h_we),
+      .wd     (iohpmcycles_counter_h_wd),
+
+      // from internal hardware
+      .de     (hw2reg.iohpmcycles.counter.de),
+      .ds     (),
+      .d      (hw2reg.iohpmcycles.counter.d[62:32] ),
+
+      // to internal hardware
+      .qe     (),
+      .q      (reg2hw.iohpmcycles.counter.q[62:32] ),
+
+      // to register interface (read)
+      .qs     (iohpmcycles_counter_h_qs)
+    );
+
+    //   F[of]: 31:31
     iommu_field #(
       .DATA_WIDTH      (1),
       .SwAccess(SwAccessRW),
@@ -1414,30 +1548,56 @@ module iommu_regmap_wrapper #(
 
       // R[iohpmctr]: V(False)
 
-      //   F[counter]: 63:0
+      //   F[counter_low]: 31:0
       iommu_field #(
-        .DATA_WIDTH      (64),
+        .DATA_WIDTH      (32),
         .SwAccess(SwAccessRW),
-        .RESVAL  (64'h0)
-      ) u_iohpmctr_counter (
+        .RESVAL  (32'h0)
+      ) u_iohpmctr_counter_l (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (iohpmctr_counter_we[i]),
-        .wd     (iohpmctr_counter_wd[i]),
+        .we     (iohpmctr_counter_l_we[i]),
+        .wd     (iohpmctr_counter_l_wd[i]),
 
         // from internal hardware
         .de     (hw2reg.iohpmctr[i].counter.de),
         .ds     (),
-        .d      (hw2reg.iohpmctr[i].counter.d ),
+        .d      (hw2reg.iohpmctr[i].counter.d[31:0] ),
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.iohpmctr[i].counter.q ),
+        .q      (reg2hw.iohpmctr[i].counter.q[31:0] ),
 
         // to register interface (read)
-        .qs     (iohpmctr_counter_qs[i])
+        .qs     (iohpmctr_counter_l_qs[i])
+      );
+
+      //   F[counter_high]: 31:0
+      iommu_field #(
+        .DATA_WIDTH      (32),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (32'h0)
+      ) u_iohpmctr_counter_h (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmctr_counter_h_we[i]),
+        .wd     (iohpmctr_counter_h_wd[i]),
+
+        // from internal hardware
+        .de     (hw2reg.iohpmctr[i].counter.de),
+        .ds     (),
+        .d      (hw2reg.iohpmctr[i].counter.d[63:32] ),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmctr[i].counter.q[63:32] ),
+
+        // to register interface (read)
+        .qs     (iohpmctr_counter_h_qs[i])
       );
 
       // R[iohpmevt]: V(False)
@@ -1494,18 +1654,18 @@ module iommu_regmap_wrapper #(
         .qs     (iohpmevt_dmask_qs[i])
       );
 
-      //   F[pid_pscid]: 35:16
+      //   F[pid_pscid_low]: 31:16
       iommu_field #(
-        .DATA_WIDTH      (20),
+        .DATA_WIDTH      (16),
         .SwAccess(SwAccessRW),
-        .RESVAL  (20'h0)
-      ) u_iohpmevt_pid_pscid (
+        .RESVAL  (16'h0)
+      ) u_iohpmevt_pid_pscid_l (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (iohpmevt_pid_pscid_we[i]),
-        .wd     (iohpmevt_pid_pscid_wd[i]),
+        .we     (iohpmevt_pid_pscid_l_we[i]),
+        .wd     (iohpmevt_pid_pscid_l_wd[i]),
 
         // from internal hardware
         .de     ('0),
@@ -1514,10 +1674,36 @@ module iommu_regmap_wrapper #(
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.iohpmevt[i].pid_pscid.q ),
+        .q      (reg2hw.iohpmevt[i].pid_pscid.q[15:0] ),
 
         // to register interface (read)
-        .qs     (iohpmevt_pid_pscid_qs[i])
+        .qs     (iohpmevt_pid_pscid_l_qs[i])
+      );
+
+      //   F[pid_pscid_high]: 31:16
+      iommu_field #(
+        .DATA_WIDTH      (4),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (4'h0)
+      ) u_iohpmevt_pid_pscid_h (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (iohpmevt_pid_pscid_h_we[i]),
+        .wd     (iohpmevt_pid_pscid_h_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .ds     (),
+        .d      ('0),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.iohpmevt[i].pid_pscid.q[19:16] ),
+
+        // to register interface (read)
+        .qs     (iohpmevt_pid_pscid_h_qs[i])
       );
 
       //   F[did_gscid]: 59:36
@@ -1650,45 +1836,40 @@ module iommu_regmap_wrapper #(
         .qs     (iohpmevt_of_qs[i])
       );
     end
-
-    // Hardwire unused ports to 0
-    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
-
-      assign reg2hw.iohpmctr[i].counter.q   = '0;
-      assign reg2hw.iohpmevt[i].eventid.q   = '0;
-      assign reg2hw.iohpmevt[i].dmask.q     = '0;
-      assign reg2hw.iohpmevt[i].pid_pscid.q = '0;
-      assign reg2hw.iohpmevt[i].did_gscid.q = '0;
-      assign reg2hw.iohpmevt[i].pv_pscv.q   = '0;
-      assign reg2hw.iohpmevt[i].dv_gscv.q   = '0;
-      assign reg2hw.iohpmevt[i].idt.q       = '0;
-      assign reg2hw.iohpmevt[i].of.q        = '0;
-    end
   end
 
   else begin
     
     assign iocountinh_cy_qs       = '0;
     assign iocountinh_hpm_qs      = '0;
-    assign iohpmcycles_counter_qs = '0;
-    assign iohpmcycles_of_qs      = '0;
+
+    assign iohpmcycles_counter_l_qs = '0;
+    assign iohpmcycles_counter_h_qs = '0;
+    assign iohpmcycles_of_qs        = '0;
 
     assign reg2hw.iocountinh.cy.q       = '0;
     assign reg2hw.iocountinh.hpm.q      = '0;
+
     assign reg2hw.iohpmcycles.counter.q = '0;
     assign reg2hw.iohpmcycles.of.q      = '0;
+  end
 
-    for (genvar i = 0; i < 31; i++) begin
+  // Hardwire unused wires to zero
+  for (genvar i = N_IOHPMCTR; i < 31; i++) begin
 
-      assign iohpmctr_counter_qs[i]    = '0;
-      assign iohpmevt_eventid_qs[i]    = '0;
-      assign iohpmevt_dmask_qs[i]      = '0;
-      assign iohpmevt_pid_pscid_qs[i]  = '0;
-      assign iohpmevt_did_gscid_qs[i]  = '0;
-      assign iohpmevt_pv_pscv_qs[i]    = '0;
-      assign iohpmevt_dv_gscv_qs[i]    = '0;
-      assign iohpmevt_idt_qs[i]        = '0;
-      assign iohpmevt_of_qs[i]         = '0;
+      assign iohpmctr_counter_l_qs[i]    = '0;
+      assign iohpmctr_counter_h_qs[i]    = '0;
+
+      assign iohpmevt_eventid_qs[i]      = '0;
+      assign iohpmevt_dmask_qs[i]        = '0;
+      assign iohpmevt_pid_pscid_l_qs[i]  = '0;
+
+      assign iohpmevt_pid_pscid_h_qs[i]  = '0;
+      assign iohpmevt_did_gscid_qs[i]    = '0;
+      assign iohpmevt_pv_pscv_qs[i]      = '0;
+      assign iohpmevt_dv_gscv_qs[i]      = '0;
+      assign iohpmevt_idt_qs[i]          = '0;
+      assign iohpmevt_of_qs[i]           = '0;
 
       assign reg2hw.iohpmctr[i].counter.q   = '0;
       assign reg2hw.iohpmevt[i].eventid.q   = '0;
@@ -1700,7 +1881,6 @@ module iommu_regmap_wrapper #(
       assign reg2hw.iohpmevt[i].idt.q       = '0;
       assign reg2hw.iohpmevt[i].of.q        = '0;
     end
-  end
 
   // R[icvec]: V(False)
 
@@ -1838,18 +2018,18 @@ module iommu_regmap_wrapper #(
       
       // R[msi_addr_x]: V(False)
 
-      //   F[addr]: 55:2
+      //   F[addr_low]: 31:2
       iommu_field #(
-        .DATA_WIDTH      (54),
+        .DATA_WIDTH      (30),
         .SwAccess(SwAccessRW),
-        .RESVAL  (54'h0)
-      ) u_msi_addr_x (
+        .RESVAL  (30'h0)
+      ) u_msi_addr_x_l (
         .clk_i   (clk_i    ),
         .rst_ni  (rst_ni  ),
 
         // from register interface
-        .we     (msi_addr_we[i]),
-        .wd     (msi_addr_wd[i]),
+        .we     (msi_addr_l_we[i]),
+        .wd     (msi_addr_l_wd[i]),
 
         // from internal hardware
         .de     ('0),
@@ -1858,10 +2038,37 @@ module iommu_regmap_wrapper #(
 
         // to internal hardware
         .qe     (),
-        .q      (reg2hw.msi_addr[i].addr.q ),
+        .q      (reg2hw.msi_addr[i].addr.q[29:0] ),
 
         // to register interface (read)
-        .qs     (msi_addr_qs[i])
+        .qs     (msi_addr_l_qs[i])
+      );
+
+
+      //   F[addr_high]: 23:0
+      iommu_field #(
+        .DATA_WIDTH      (24),
+        .SwAccess(SwAccessRW),
+        .RESVAL  (24'h0)
+      ) u_msi_addr_x_h (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (msi_addr_h_we[i]),
+        .wd     (msi_addr_h_wd[i]),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.msi_addr[i].addr.q[53:30] ),
+
+        // to register interface (read)
+        .qs     (msi_addr_h_qs[i])
       );
 
 
@@ -1920,157 +2127,162 @@ module iommu_regmap_wrapper #(
         .qs     (msi_vec_ctl_qs[i])
       );
     end
-
-    // Hardwire unimplemented vectors to zero 
-    for (genvar i = N_INT_VEC; i < 16; i++) begin
-      
-      assign reg2hw.msi_addr[i].addr.q  = '0;
-      assign reg2hw.msi_data[i].data.q  = '0;
-      assign reg2hw.msi_vec_ctl[i].m.q  = 1'b0;
-    end
   end
 
-  // Do not generate MSI Configuration Table
-  else begin : gen_msi_cfg_tbl_disabled
+  // Hardwire unimplemented vectors to zero 
+  for (genvar i = N_INT_VEC; i < 16; i++) begin
+
+    assign msi_addr_l_qs[i]   = '0;
+    assign msi_addr_h_qs[i]   = '0;
+    assign msi_data_qs[i]     = '0;
+    assign msi_vec_ctl_qs[i]  = 1'b0;
     
-    for (genvar i = 0; i < 16; i++) begin
-        
-      assign reg2hw.msi_addr[i].addr.q  = '0;
-      assign reg2hw.msi_data[i].data.q  = '0;
-      assign reg2hw.msi_vec_ctl[i].m.q  = 1'b0;
-    end
+    assign reg2hw.msi_addr[i].addr.q  = '0;
+    assign reg2hw.msi_data[i].data.q  = '0;
+    assign reg2hw.msi_vec_ctl[i].m.q  = 1'b0;
   end
   
 
   //-------------------
   //# Address hit logic
   //-------------------
-  logic [125:0] addr_hit;
+  logic [210:0] addr_hit;
+
+  /*
+    Address hit map:
+    [ 0]      Capabilities (low)
+    [ 1]      Capabilities (high)
+    [ 2]      fctl
+    [ 3]      ddtp (low)
+    [ 4]      ddtp (high)
+    [ 5]      cqb (low)
+    [ 6]      cqb (high)
+    [ 7]      cqh
+    [ 8]      cqt
+    [ 9]      fqb (low)
+    [10]      fqb (high)
+    [11]      fqh
+    [12]      fqt
+    [13]      cqcsr
+    [14]      fqcsr
+    [15]      ipsr
+    [16]      iocntovf
+    [17]      iocntinh
+    [18]      iohpmcycles (low)
+    [19]      iohpmcycles (high)
+    [50:20]   iohpmctr_n (low)
+    [81:51]   iohpmctr_n (high)
+    [112:82]  iohpmevt_n (low)
+    [143:113] iohpmevt_n (high)
+    [144]     icvec (low)
+    [145]     icvec (high)
+    [161:146] msi_addr_x (low)
+    [177:162] msi_addr_x (high)
+    [193:178] msi_data_x
+    [209:194] msi_vec_ctl_x
+  */
 
   // Mandatory registers
-  assign addr_hit[ 0] = (reg_addr == IOMMU_CAPABILITIES_OFFSET);
-  assign addr_hit[ 1] = (reg_addr == IOMMU_FCTL_OFFSET);
-  assign addr_hit[ 2] = (reg_addr == IOMMU_DDTP_OFFSET);
-  assign addr_hit[ 3] = (reg_addr == IOMMU_CQB_OFFSET);
-  assign addr_hit[ 4] = (reg_addr == IOMMU_CQH_OFFSET);
-  assign addr_hit[ 5] = (reg_addr == IOMMU_CQT_OFFSET);
-  assign addr_hit[ 6] = (reg_addr == IOMMU_FQB_OFFSET);
-  assign addr_hit[ 7] = (reg_addr == IOMMU_FQH_OFFSET);
-  assign addr_hit[ 8] = (reg_addr == IOMMU_FQT_OFFSET);
-  assign addr_hit[ 9] = (reg_addr == IOMMU_CQCSR_OFFSET);
-  assign addr_hit[10] = (reg_addr == IOMMU_FQCSR_OFFSET);
-  assign addr_hit[11] = (reg_addr == IOMMU_IPSR_OFFSET);
+  assign addr_hit[ 0] = (reg_addr == IOMMU_CAPABILITIES_OFFSET_L);
+  assign addr_hit[ 1] = (reg_addr == IOMMU_CAPABILITIES_OFFSET_H);
+  assign addr_hit[ 2] = (reg_addr == IOMMU_FCTL_OFFSET);
+  assign addr_hit[ 3] = (reg_addr == IOMMU_DDTP_OFFSET_L);
+  assign addr_hit[ 4] = (reg_addr == IOMMU_DDTP_OFFSET_H);
+  assign addr_hit[ 5] = (reg_addr == IOMMU_CQB_OFFSET_L);
+  assign addr_hit[ 6] = (reg_addr == IOMMU_CQB_OFFSET_H);
+  assign addr_hit[ 7] = (reg_addr == IOMMU_CQH_OFFSET);
+  assign addr_hit[ 8] = (reg_addr == IOMMU_CQT_OFFSET);
+  assign addr_hit[ 9] = (reg_addr == IOMMU_FQB_OFFSET_L);
+  assign addr_hit[10] = (reg_addr == IOMMU_FQB_OFFSET_H);
+  assign addr_hit[11] = (reg_addr == IOMMU_FQH_OFFSET);
+  assign addr_hit[12] = (reg_addr == IOMMU_FQT_OFFSET);
+  assign addr_hit[13] = (reg_addr == IOMMU_CQCSR_OFFSET);
+  assign addr_hit[14] = (reg_addr == IOMMU_FQCSR_OFFSET);
+  assign addr_hit[15] = (reg_addr == IOMMU_IPSR_OFFSET);
 
-  // HPM (optional)
-  if (N_IOHPMCTR > 0 ) begin
-    assign addr_hit[12] = (reg_addr == IOMMU_IOCNTOVF_OFFSET);
-    assign addr_hit[13] = (reg_addr == IOMMU_IOCNTINH_OFFSET);
-    assign addr_hit[14] = (reg_addr == IOMMU_IOHPMCYCLES_OFFSET);
+  // HPM
+  assign addr_hit[16] = (N_IOHPMCTR > 0) ? (reg_addr == IOMMU_IOCNTOVF_OFFSET)      : 1'b0;
+  assign addr_hit[17] = (N_IOHPMCTR > 0) ? (reg_addr == IOMMU_IOCNTINH_OFFSET)      : 1'b0;
+  assign addr_hit[18] = (N_IOHPMCTR > 0) ? (reg_addr == IOMMU_IOHPMCYCLES_OFFSET_L) : 1'b0;
+  assign addr_hit[19] = (N_IOHPMCTR > 0) ? (reg_addr == IOMMU_IOHPMCYCLES_OFFSET_H) : 1'b0;
 
-    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
-      assign addr_hit[15+i]     = (reg_addr == (IOMMU_IOHPMCTR_OFFSET + i*8));
-      assign addr_hit[15+31+i]  = (reg_addr == (IOMMU_IOHPMEVT_OFFSET + i*8));
-    end
-
-    // Hardwire unused bits to 0
-    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
-      assign addr_hit[15+i]     = 1'b0;
-      assign addr_hit[15+31+i]  = 1'b0;
-    end
+  for (genvar i = 0; i < N_IOHPMCTR; i++) begin
+    assign addr_hit[20+i]   = (reg_addr == (IOMMU_IOHPMCTR_OFFSET_L + i*8));
+    assign addr_hit[51+i]   = (reg_addr == (IOMMU_IOHPMCTR_OFFSET_H + i*8));
+    assign addr_hit[82+i]   = (reg_addr == (IOMMU_IOHPMEVT_OFFSET_L + i*8));
+    assign addr_hit[113+i]  = (reg_addr == (IOMMU_IOHPMEVT_OFFSET_H + i*8));
   end
 
-  // No HPM
-  else begin
-    assign addr_hit[12] = 1'b0;
-    assign addr_hit[13] = 1'b0;
-    assign addr_hit[14] = 1'b0;
-
-    for (genvar i = 0; i < 31; i++) begin
-      assign addr_hit[15+i]     = 1'b0;
-      assign addr_hit[15+31+i]  = 1'b0;
-    end
+  // Hardwire unused bits to 0
+  for (genvar i = N_IOHPMCTR; i < 31; i++) begin
+    assign addr_hit[20+i]  = 1'b0;
+    assign addr_hit[51+i]  = 1'b0;
+    assign addr_hit[82+i]  = 1'b0;
+    assign addr_hit[113+i] = 1'b0;
   end
 
-  assign addr_hit[77] = (reg_addr == IOMMU_ICVEC_OFFSET);
+  assign addr_hit[144] = (reg_addr == IOMMU_ICVEC_OFFSET_L);
+  assign addr_hit[145] = (reg_addr == IOMMU_ICVEC_OFFSET_H);
 
   // MSI Config Table
   for (genvar i = 0; i < N_INT_VEC; i++) begin
-    assign addr_hit[78+(i*3)] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET     + i*16));
-    assign addr_hit[79+(i*3)] = (reg_addr == (IOMMU_MSI_DATA_OFFSET     + i*16));
-    assign addr_hit[80+(i*3)] = (reg_addr == (IOMMU_MSI_VEC_CTL_OFFSET  + i*16));
+    assign addr_hit[146+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_L  + i*16));
+    assign addr_hit[162+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_H  + i*16));
+    assign addr_hit[178+i] = (reg_addr == (IOMMU_MSI_DATA_OFFSET    + i*16));
+    assign addr_hit[194+i] = (reg_addr == (IOMMU_MSI_VEC_CTL_OFFSET + i*16));
   end
 
   // Hardwire unimplemented vectors to zero
   for (genvar i = N_INT_VEC; i < 16; i++) begin
-    assign addr_hit[78+(i*3)] = 1'b0;
-    assign addr_hit[79+(i*3)] = 1'b0;
-    assign addr_hit[80+(i*3)] = 1'b0;
+    assign addr_hit[146+i] = 1'b0;
+    assign addr_hit[162+i] = 1'b0;
+    assign addr_hit[178+i] = 1'b0;
+    assign addr_hit[194+i] = 1'b0;
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;  // a miss occurs when reading or writing and no addr_hit flag is set
 
   //# Check whether sub-word write is permitted
-  assign wr_err[ 0] = (addr_hit[ 0] & (|(IOMMU_PERMIT[ 0] & ~reg_be)));
-  assign wr_err[ 1] = (addr_hit[ 1] & (|(IOMMU_PERMIT[ 1] & ~reg_be)));
-  assign wr_err[ 2] = (addr_hit[ 2] & (|(IOMMU_PERMIT[ 2] & ~reg_be)));
-  assign wr_err[ 3] = (addr_hit[ 3] & (|(IOMMU_PERMIT[ 3] & ~reg_be)));
-  assign wr_err[ 4] = (addr_hit[ 4] & (|(IOMMU_PERMIT[ 4] & ~reg_be)));
-  assign wr_err[ 5] = (addr_hit[ 5] & (|(IOMMU_PERMIT[ 5] & ~reg_be)));
-  assign wr_err[ 6] = (addr_hit[ 6] & (|(IOMMU_PERMIT[ 6] & ~reg_be)));
-  assign wr_err[ 7] = (addr_hit[ 7] & (|(IOMMU_PERMIT[ 7] & ~reg_be)));
-  assign wr_err[ 8] = (addr_hit[ 8] & (|(IOMMU_PERMIT[ 8] & ~reg_be)));
-  assign wr_err[ 9] = (addr_hit[ 9] & (|(IOMMU_PERMIT[ 9] & ~reg_be)));
-  assign wr_err[10] = (addr_hit[10] & (|(IOMMU_PERMIT[10] & ~reg_be)));
-  assign wr_err[11] = (addr_hit[11] & (|(IOMMU_PERMIT[11] & ~reg_be)));
 
-  // HPM
-  if (N_IOHPMCTR > 0 ) begin
-
-    assign wr_err[12] = (addr_hit[12] & (|(IOMMU_PERMIT[12] & ~reg_be)));
-    assign wr_err[13] = (addr_hit[13] & (|(IOMMU_PERMIT[13] & ~reg_be)));
-    assign wr_err[14] = (addr_hit[14] & (|(IOMMU_PERMIT[14] & ~reg_be)));
-
-    for (genvar i = 0; i < N_IOHPMCTR; i++) begin
-      assign wr_err[15+i]     = (addr_hit[15+i] & (|(IOMMU_PERMIT[15] & ~reg_be)));
-      assign wr_err[15+31+i]  = (addr_hit[15+31+i] & (|(IOMMU_PERMIT[16] & ~reg_be)));
-    end
-
-    // Hardwire unused bits to 0
-    for (genvar i = N_IOHPMCTR; i < 31; i++) begin
-      assign wr_err[15+i]     = 1'b0;
-      assign wr_err[15+31+i]  = 1'b0;
-    end
+  // Mandatory registers
+  for (genvar i = 0; i < 20; i++) begin
+    assign wr_err[i] = (addr_hit[i] & (|(IOMMU_PERMIT[i] & ~reg_be)));
   end
 
-  // No HPM
-  else begin
-
-    assign wr_err[12] = 1'b0;
-    assign wr_err[13] = 1'b0;
-    assign wr_err[14] = 1'b0;
-    
-    for (genvar i = 0; i < 31; i++) begin
-      assign wr_err[15+i]     = 1'b0;
-      assign wr_err[15+31+i]  = 1'b0;
-    end
+  for (genvar i = 0; i < N_IOHPMCTR; i++) begin
+    assign wr_err[20+i]   = (addr_hit[20+i ] & (|(IOMMU_PERMIT[20] & ~reg_be)));
+    assign wr_err[51+i]   = (addr_hit[51+i ] & (|(IOMMU_PERMIT[21] & ~reg_be)));
+    assign wr_err[82+i]   = (addr_hit[82+i ] & (|(IOMMU_PERMIT[22] & ~reg_be)));
+    assign wr_err[113+i]  = (addr_hit[113+i] & (|(IOMMU_PERMIT[23] & ~reg_be)));
   end
 
-  assign wr_err[77] = (addr_hit[77] & (|(IOMMU_PERMIT[17] & ~reg_be)));
+  // Hardwire unused bits to 0
+  for (genvar i = N_IOHPMCTR; i < 31; i++) begin
+    assign wr_err[20+i]   = 1'b0;
+    assign wr_err[51+i]   = 1'b0;
+    assign wr_err[82+i]   = 1'b0;
+    assign wr_err[113+i]  = 1'b0;
+  end
+
+  assign wr_err[144] = (addr_hit[144] & (|(IOMMU_PERMIT[24] & ~reg_be)));
+  assign wr_err[145] = (addr_hit[145] & (|(IOMMU_PERMIT[25] & ~reg_be)));
 
   // MSI Config Table
   for (genvar i = 0; i < N_INT_VEC; i++) begin
     
-    assign wr_err[78+(i*3)] = (addr_hit[78+(i*3)] & (|(IOMMU_PERMIT[18] & ~reg_be)));
-    assign wr_err[79+(i*3)] = (addr_hit[79+(i*3)] & (|(IOMMU_PERMIT[19] & ~reg_be)));
-    assign wr_err[80+(i*3)] = (addr_hit[80+(i*3)] & (|(IOMMU_PERMIT[20] & ~reg_be)));
+    assign wr_err[146+i] = (addr_hit[146+i] & (|(IOMMU_PERMIT[26] & ~reg_be)));
+    assign wr_err[162+i] = (addr_hit[162+i] & (|(IOMMU_PERMIT[27] & ~reg_be)));
+    assign wr_err[178+i] = (addr_hit[178+i] & (|(IOMMU_PERMIT[28] & ~reg_be)));
+    assign wr_err[194+i] = (addr_hit[194+i] & (|(IOMMU_PERMIT[29] & ~reg_be)));
   end
 
   // Hardwire unused bits to zero
   for (genvar i = N_INT_VEC; i < 16; i++) begin
     
-    assign wr_err[78+(i*3)] = 1'b0;
-    assign wr_err[79+(i*3)] = 1'b0;
-    assign wr_err[80+(i*3)] = 1'b0;
+    assign wr_err[146+i] = 1'b0;
+    assign wr_err[162+i] = 1'b0;
+    assign wr_err[178+i] = 1'b0;
+    assign wr_err[194+i] = 1'b0;
   end
 
   //------------------
@@ -2081,120 +2293,157 @@ module iommu_regmap_wrapper #(
 	// assign fctl_be_we = addr_hit[1] & reg_we & !reg_error;
 	// assign fctl_be_wd = reg_wdata[0];
 
+  // fctl
   // Interrupts can not be generated as MSI (0) if caps.IGS != {0,2}, and can not be generated as WSI (1) if caps.IGS != {1,2}
-  assign fctl_wsi_we = (addr_hit[1] & reg_we & !reg_error) & 
+  assign fctl_wsi_we = (addr_hit[2] & reg_we & !reg_error) & 
     (((reg_wdata[1] == 1'b0) & (reg2hw.capabilities.igs.q inside {2'b00, 2'b10})) | 
      ((reg_wdata[1] == 1'b1) & (reg2hw.capabilities.igs.q inside {2'b01, 2'b10})));
   assign fctl_wsi_wd = reg_wdata[1];
 
-  assign fctl_gxl_we = addr_hit[1] & reg_we & !reg_error;
+  assign fctl_gxl_we = addr_hit[2] & reg_we & !reg_error;
   assign fctl_gxl_wd = reg_wdata[2];
 
+  // ddtp (low)
   // Only values less or equal than 4 can be written to ddtp.iommu_mode
-  assign ddtp_iommu_mode_we = addr_hit[2] & reg_we & !reg_error & (reg_wdata[3:0] <= 4);
+  assign ddtp_iommu_mode_we = addr_hit[3] & reg_we & !reg_error & (reg_wdata[3:0] <= 4);
   assign ddtp_iommu_mode_wd = reg_wdata[3:0];
 
-  assign ddtp_ppn_we = addr_hit[2] & reg_we & !reg_error;
-  assign ddtp_ppn_wd = reg_wdata[53:10];
+  assign ddtp_ppn_l_we = addr_hit[3] & reg_we & !reg_error;
+  assign ddtp_ppn_l_wd = reg_wdata[31:10];
 
-  assign cqb_log2sz_1_we = addr_hit[3] & reg_we & !reg_error;
+  // ddtp (high)
+  assign ddtp_ppn_h_we = addr_hit[4] & reg_we & !reg_error;
+  assign ddtp_ppn_h_wd = reg_wdata[21:0];
+
+  // cqb (low)
+  assign cqb_log2sz_1_we = addr_hit[5] & reg_we & !reg_error;
   assign cqb_log2sz_1_wd = reg_wdata[4:0];
 
-  assign cqb_ppn_we = addr_hit[3] & reg_we & !reg_error;
-  assign cqb_ppn_wd = reg_wdata[53:10];
+  assign cqb_ppn_l_we = addr_hit[5] & reg_we & !reg_error;
+  assign cqb_ppn_l_wd = reg_wdata[31:10];
 
+  // cqb (high)
+  assign cqb_ppn_h_we = addr_hit[6] & reg_we & !reg_error;
+  assign cqb_ppn_h_wd = reg_wdata[21:0];
+
+  // cqt
   // Only LOG2SZ-1:0 bits are writable.
-  assign cqt_we = addr_hit[5] & reg_we & !reg_error;
+  assign cqt_we = addr_hit[8] & reg_we & !reg_error;
   assign cqt_wd = reg_wdata[31:0] & ({32{1'b1}} >> (31 - reg2hw.cqb.log2sz_1.q));
 
-  assign fqb_log2sz_1_we = addr_hit[6] & reg_we & !reg_error;
+  // fqb (low)
+  assign fqb_log2sz_1_we = addr_hit[9] & reg_we & !reg_error;
   assign fqb_log2sz_1_wd = reg_wdata[4:0];
 
-  assign fqb_ppn_we = addr_hit[6] & reg_we & !reg_error;
-  assign fqb_ppn_wd = reg_wdata[53:10];
+  assign fqb_ppn_l_we = addr_hit[9] & reg_we & !reg_error;
+  assign fqb_ppn_l_wd = reg_wdata[31:10];
 
+  // fqb (high)
+  assign fqb_ppn_h_we = addr_hit[10] & reg_we & !reg_error;
+  assign fqb_ppn_h_wd = reg_wdata[21:0];
+
+  // fqh
   // Only LOG2SZ-1:0 bits are writable.
-  assign fqh_we = addr_hit[7] & reg_we & !reg_error;
+  assign fqh_we = addr_hit[11] & reg_we & !reg_error;
   assign fqh_wd = reg_wdata[31:0] & ({32{1'b1}} >> (31 - reg2hw.fqb.log2sz_1.q));
 
-  assign cqcsr_cqen_we = addr_hit[9] & reg_we & !reg_error;
+  // cqcsr
+  assign cqcsr_cqen_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_cqen_wd = reg_wdata[0];
 
-  assign cqcsr_cie_we = addr_hit[9] & reg_we & !reg_error;
+  assign cqcsr_cie_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_cie_wd = reg_wdata[1];
 
-  assign cqcsr_cqmf_we = addr_hit[9] & reg_we & !reg_error;
+  assign cqcsr_cqmf_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_cqmf_wd = reg_wdata[8];
 
-  assign cqcsr_cmd_to_we = addr_hit[9] & reg_we & !reg_error;
+  assign cqcsr_cmd_to_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_cmd_to_wd = reg_wdata[9];
 
-  assign cqcsr_cmd_ill_we = addr_hit[9] & reg_we & !reg_error;
+  assign cqcsr_cmd_ill_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_cmd_ill_wd = reg_wdata[10];
 
-  assign cqcsr_fence_w_ip_we = addr_hit[9] & reg_we & !reg_error;
+  assign cqcsr_fence_w_ip_we = addr_hit[13] & reg_we & !reg_error;
   assign cqcsr_fence_w_ip_wd = reg_wdata[11];
 
-  assign fqcsr_fqen_we = addr_hit[10] & reg_we & !reg_error;
+  // fqcsr
+  assign fqcsr_fqen_we = addr_hit[14] & reg_we & !reg_error;
   assign fqcsr_fqen_wd = reg_wdata[0];
 
-  assign fqcsr_fie_we = addr_hit[10] & reg_we & !reg_error;
+  assign fqcsr_fie_we = addr_hit[14] & reg_we & !reg_error;
   assign fqcsr_fie_wd = reg_wdata[1];
 
-  assign fqcsr_fqmf_we = addr_hit[10] & reg_we & !reg_error;
+  assign fqcsr_fqmf_we = addr_hit[14] & reg_we & !reg_error;
   assign fqcsr_fqmf_wd = reg_wdata[8];
 
-  assign fqcsr_fqof_we = addr_hit[10] & reg_we & !reg_error;
+  assign fqcsr_fqof_we = addr_hit[14] & reg_we & !reg_error;
   assign fqcsr_fqof_wd = reg_wdata[9];
 
-  assign ipsr_cip_we = addr_hit[11] & reg_we & !reg_error;
+  // ipsr
+  assign ipsr_cip_we = addr_hit[15] & reg_we & !reg_error;
   assign ipsr_cip_wd = reg_wdata[0];
 
-  assign ipsr_fip_we = addr_hit[11] & reg_we & !reg_error;
+  assign ipsr_fip_we = addr_hit[15] & reg_we & !reg_error;
   assign ipsr_fip_wd = reg_wdata[1];
 
-  assign ipsr_pmip_we = addr_hit[11] & reg_we & !reg_error;
+  assign ipsr_pmip_we = addr_hit[15] & reg_we & !reg_error;
   assign ipsr_pmip_wd = reg_wdata[2];
 
-  assign ipsr_pip_we = addr_hit[11] & reg_we & !reg_error;
+  assign ipsr_pip_we = addr_hit[15] & reg_we & !reg_error;
   assign ipsr_pip_wd = reg_wdata[3];
 
   // HPM
   if (N_IOHPMCTR > 0) begin
     
-    assign iocountinh_cy_we = addr_hit[13] & reg_we & !reg_error;
+    // iocntinh
+    assign iocountinh_cy_we = addr_hit[17] & reg_we & !reg_error;
     assign iocountinh_cy_wd = reg_wdata[0];
 
-    assign iocountinh_hpm_we = addr_hit[13] & reg_we & !reg_error;
+    assign iocountinh_hpm_we = addr_hit[17] & reg_we & !reg_error;
     assign iocountinh_hpm_wd[N_IOHPMCTR-1:0] = reg_wdata[N_IOHPMCTR:1];
 
-    assign iohpmcycles_counter_we = addr_hit[14] & reg_we & !reg_error;
-    assign iohpmcycles_counter_wd = reg_wdata[62:0];
+    // iohpmcycles (low)
+    assign iohpmcycles_counter_l_we = addr_hit[18] & reg_we & !reg_error;
+    assign iohpmcycles_counter_l_wd = reg_wdata[31:0];
 
-    assign iohpmcycles_of_we = addr_hit[14] & reg_we & !reg_error;
-    assign iohpmcycles_of_wd = reg_wdata[63];
+    // iohpmcycles (high)
+    assign iohpmcycles_counter_h_we = addr_hit[19] & reg_we & !reg_error;
+    assign iohpmcycles_counter_h_wd = reg_wdata[30:0];
+
+    assign iohpmcycles_of_we = addr_hit[19] & reg_we & !reg_error;
+    assign iohpmcycles_of_wd = reg_wdata[31];
 
     for (genvar i = 0; i < N_IOHPMCTR; i++) begin
       
-      assign iohpmctr_counter_we[i] = addr_hit[15+i] & reg_we & !reg_error;
-      assign iohpmctr_counter_wd[i] = reg_wdata[63:0];
+      // iohpmctr_n (low)
+      assign iohpmctr_counter_l_we[i]   = addr_hit[20+i] & reg_we & !reg_error;
+      assign iohpmctr_counter_l_wd[i]   = reg_wdata[31:0];
 
-      assign iohpmevt_eventid_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_eventid_wd[i]   = reg_wdata[14:0];
-      assign iohpmevt_dmask_we[i]     = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_dmask_wd[i]     = reg_wdata[15];
-      assign iohpmevt_pid_pscid_we[i] = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_pid_pscid_wd[i] = reg_wdata[35:16];
-      assign iohpmevt_did_gscid_we[i] = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_did_gscid_wd[i] = reg_wdata[59:36];
-      assign iohpmevt_pv_pscv_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_pv_pscv_wd[i]   = reg_wdata[60];
-      assign iohpmevt_dv_gscv_we[i]   = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_dv_gscv_wd[i]   = reg_wdata[61];
-      assign iohpmevt_idt_we[i]       = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_idt_wd[i]       = reg_wdata[62];
-      assign iohpmevt_of_we[i]        = addr_hit[15+31+i] & reg_we & !reg_error;
-      assign iohpmevt_of_wd[i]        = reg_wdata[63];
+      // iohpmctr_n (high)
+      assign iohpmctr_counter_h_we[i]   = addr_hit[51+i] & reg_we & !reg_error;
+      assign iohpmctr_counter_h_wd[i]   = reg_wdata[31:0];
+
+      // iohpmevt_n (low)
+      assign iohpmevt_eventid_we[i]     = addr_hit[82+i] & reg_we & !reg_error;
+      assign iohpmevt_eventid_wd[i]     = reg_wdata[14:0];
+      assign iohpmevt_dmask_we[i]       = addr_hit[82+i] & reg_we & !reg_error;
+      assign iohpmevt_dmask_wd[i]       = reg_wdata[15];
+      assign iohpmevt_pid_pscid_l_we[i] = addr_hit[82+i] & reg_we & !reg_error;
+      assign iohpmevt_pid_pscid_l_wd[i] = reg_wdata[31:16];
+
+      // iohpmevt_n (high)
+      assign iohpmevt_pid_pscid_h_we[i] = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_pid_pscid_h_wd[i] = reg_wdata[3:0];
+      assign iohpmevt_did_gscid_we[i]   = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_did_gscid_wd[i]   = reg_wdata[27:4];
+      assign iohpmevt_pv_pscv_we[i]     = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_pv_pscv_wd[i]     = reg_wdata[28];
+      assign iohpmevt_dv_gscv_we[i]     = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_dv_gscv_wd[i]     = reg_wdata[29];
+      assign iohpmevt_idt_we[i]         = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_idt_wd[i]         = reg_wdata[30];
+      assign iohpmevt_of_we[i]          = addr_hit[113+i] & reg_we & !reg_error;
+      assign iohpmevt_of_wd[i]          = reg_wdata[31];
     end
   end
 
@@ -2203,70 +2452,87 @@ module iommu_regmap_wrapper #(
     
     assign iocountinh_cy_we = 1'b0;
     assign iocountinh_cy_wd = '0;
-
     assign iocountinh_hpm_we = 1'b0;
     assign iocountinh_hpm_wd = '0;
 
-    assign iohpmcycles_counter_we = 1'b0;
-    assign iohpmcycles_counter_wd = '0;
-
+    assign iohpmcycles_counter_l_we = 1'b0;
+    assign iohpmcycles_counter_l_wd = '0;
+    assign iohpmcycles_counter_h_we = 1'b0;
+    assign iohpmcycles_counter_h_wd = '0;
     assign iohpmcycles_of_we = 1'b0;
     assign iohpmcycles_of_wd = '0;
-
-    for (genvar i = 0; i < 31; i++) begin
-
-      assign iohpmctr_counter_we[i] = 1'b0;
-      assign iohpmctr_counter_wd[i] = '0;
-
-      assign iohpmevt_eventid_we[i]   = 1'b0;
-      assign iohpmevt_eventid_wd[i]   = '0;
-      assign iohpmevt_dmask_we[i]     = 1'b0;
-      assign iohpmevt_dmask_wd[i]     = '0;
-      assign iohpmevt_pid_pscid_we[i] = 1'b0;
-      assign iohpmevt_pid_pscid_wd[i] = '0;
-      assign iohpmevt_did_gscid_we[i] = 1'b0;
-      assign iohpmevt_did_gscid_wd[i] = '0;
-      assign iohpmevt_pv_pscv_we[i]   = 1'b0;
-      assign iohpmevt_pv_pscv_wd[i]   = '0;
-      assign iohpmevt_dv_gscv_we[i]   = 1'b0;
-      assign iohpmevt_dv_gscv_wd[i]   = '0;
-      assign iohpmevt_idt_we[i]       = 1'b0;
-      assign iohpmevt_idt_wd[i]       = '0;
-      assign iohpmevt_of_we[i]        = 1'b0;
-      assign iohpmevt_of_wd[i]        = '0;
-    end
   end
 
-  assign icvec_civ_we = addr_hit[12+65] & reg_we & !reg_error;
+  // Hardwire unused wires to zero
+  for (genvar i = N_IOHPMCTR; i < 31; i++) begin
+
+      assign iohpmctr_counter_l_we[i]   = 1'b0;
+      assign iohpmctr_counter_l_wd[i]   = '0;
+      assign iohpmctr_counter_h_we[i]   = 1'b0;
+      assign iohpmctr_counter_h_wd[i]   = '0;
+
+      assign iohpmevt_eventid_we[i]     = 1'b0;
+      assign iohpmevt_eventid_wd[i]     = '0;
+      assign iohpmevt_dmask_we[i]       = 1'b0;
+      assign iohpmevt_dmask_wd[i]       = '0;
+      assign iohpmevt_pid_pscid_l_we[i] = 1'b0;
+      assign iohpmevt_pid_pscid_l_wd[i] = '0;
+
+      assign iohpmevt_pid_pscid_h_we[i] = 1'b0;
+      assign iohpmevt_pid_pscid_h_wd[i] = '0;
+      assign iohpmevt_did_gscid_we[i]   = 1'b0;
+      assign iohpmevt_did_gscid_wd[i]   = '0;
+      assign iohpmevt_pv_pscv_we[i]     = 1'b0;
+      assign iohpmevt_pv_pscv_wd[i]     = '0;
+      assign iohpmevt_dv_gscv_we[i]     = 1'b0;
+      assign iohpmevt_dv_gscv_wd[i]     = '0;
+      assign iohpmevt_idt_we[i]         = 1'b0;
+      assign iohpmevt_idt_wd[i]         = '0;
+      assign iohpmevt_of_we[i]          = 1'b0;
+      assign iohpmevt_of_wd[i]          = '0;
+    end
+
+  // icvec
+  assign icvec_civ_we = addr_hit[144] & reg_we & !reg_error;
   assign icvec_civ_wd = reg_wdata[(LOG2_INTVEC-1)+0:0];
 
-  assign icvec_fiv_we = addr_hit[12+65] & reg_we & !reg_error;
+  assign icvec_fiv_we = addr_hit[144] & reg_we & !reg_error;
   assign icvec_fiv_wd = reg_wdata[(LOG2_INTVEC-1)+4:4];
 
-  assign icvec_pmiv_we = addr_hit[12+65] & reg_we & !reg_error;
+  assign icvec_pmiv_we = addr_hit[144] & reg_we & !reg_error;
   assign icvec_pmiv_wd = reg_wdata[(LOG2_INTVEC-1)+8:8];
 
-  assign icvec_piv_we = addr_hit[12+65] & reg_we & !reg_error;
+  assign icvec_piv_we = addr_hit[144] & reg_we & !reg_error;
   assign icvec_piv_wd = reg_wdata[(LOG2_INTVEC-1)+12:12];
 
   // MSI Config Table
   for (genvar i = 0; i < N_INT_VEC; i++) begin
     
-    assign msi_addr_we[i] = addr_hit[78+(i*3)] & reg_we & !reg_error;
-    assign msi_addr_wd[i] = reg_wdata[55:2];
+    // msi_addr_x (low)
+    assign msi_addr_l_we[i] = addr_hit[146+i] & reg_we & !reg_error;
+    assign msi_addr_l_wd[i] = reg_wdata[31:2];
 
-    assign msi_data_we[i] = addr_hit[79+(i*3)] & reg_we & !reg_error;
+    // msi_addr_x (high)
+    assign msi_addr_h_we[i] = addr_hit[162+i] & reg_we & !reg_error;
+    assign msi_addr_h_wd[i] = reg_wdata[23:0];
+
+    // msi_data_x
+    assign msi_data_we[i] = addr_hit[178+i] & reg_we & !reg_error;
     assign msi_data_wd[i] = reg_wdata[31:0];
 
-    assign msi_vec_ctl_we[i] = addr_hit[80+(i*3)] & reg_we & !reg_error;
+    // msi_vec_ctl_x
+    assign msi_vec_ctl_we[i] = addr_hit[194+i] & reg_we & !reg_error;
     assign msi_vec_ctl_wd[i] = reg_wdata[0];
   end
 
   // Hardwire unused bits to zero
   for (genvar i = N_INT_VEC; i < 0; i++) begin
     
-    assign msi_addr_we[i] = 1'b0;
-    assign msi_addr_wd[i] = '0;
+    assign msi_addr_l_we[i] = 1'b0;
+    assign msi_addr_l_wd[i] = '0;
+
+    assign msi_addr_h_we[i] = 1'b0;
+    assign msi_addr_h_wd[i] = '0;
 
     assign msi_data_we[i] = 1'b0;
     assign msi_data_wd[i] = '0;
@@ -2279,31 +2545,28 @@ module iommu_regmap_wrapper #(
   // # Read data logic
   //------------------
   
-  logic   iohpmctr_hit_vector;
-  logic   iohpmevt_hit_vector;
-  assign  iohpmctr_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(15+N_IOHPMCTR-1):15]) : ('0);
-  assign  iohpmevt_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(46+N_IOHPMCTR-1):46]) : ('0);
+  logic   iohpmctr_l_hit_vector, iohpmctr_h_hit_vector;
+  logic   iohpmevt_l_hit_vector, iohpmevt_h_hit_vector;
+  assign  iohpmctr_l_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(20+N_IOHPMCTR-1):20])   : ('0);
+  assign  iohpmctr_h_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(51+N_IOHPMCTR-1):51])   : ('0);
+  assign  iohpmevt_l_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(82+N_IOHPMCTR-1):82])   : ('0);
+  assign  iohpmevt_h_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(113+N_IOHPMCTR-1):113]) : ('0);
 
-  logic [N_INT_VEC-1:0] msi_addr_hit_vector;
-  logic [N_INT_VEC-1:0] msi_data_hit_vector;
-  logic [N_INT_VEC-1:0] msi_vect_hit_vector;
+  logic msi_addr_l_hit_vector;
+  logic msi_addr_h_hit_vector;
+  logic msi_data_hit_vector;
+  logic msi_vect_hit_vector;
 
-  for (genvar i = 0; i < N_INT_VEC; i++) begin
-    assign msi_addr_hit_vector[i] = addr_hit[78+(i*3)];
-    assign msi_data_hit_vector[i] = addr_hit[79+(i*3)];
-    assign msi_vect_hit_vector[i] = addr_hit[80+(i*3)];
-  end
-
-  logic   msi_addr_hit;
-  logic   msi_data_hit;
-  logic   msi_vect_hit;
-  assign msi_addr_hit = |msi_addr_hit_vector;
-  assign msi_data_hit = |msi_data_hit_vector;
-  assign msi_vect_hit = |msi_vect_hit_vector;
+  assign msi_addr_l_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(146+N_INT_VEC-1):146]) : '0;
+  assign msi_addr_h_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(162+N_INT_VEC-1):162]) : '0;
+  assign msi_data_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(178+N_INT_VEC-1):178]) : '0;
+  assign msi_vect_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(194+N_INT_VEC-1):194]) : '0;
 
   always_comb begin
     reg_rdata_next = '0;
     unique case (1'b1)
+
+      // caps (low)
       addr_hit[0]: begin
         reg_rdata_next[7:0] = capabilities_version_qs;
         reg_rdata_next[8] = capabilities_sv32_qs;
@@ -2327,66 +2590,88 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[29:28] = capabilities_igs_qs;
         reg_rdata_next[30] = capabilities_hpm_qs;
         reg_rdata_next[31] = capabilities_dbg_qs;
-        reg_rdata_next[37:32] = capabilities_pas_qs;
-        reg_rdata_next[38] = capabilities_pd8_qs;
-        reg_rdata_next[39] = capabilities_pd17_qs;
-        reg_rdata_next[40] = capabilities_pd20_qs;
-        reg_rdata_next[55:41] = '0;
-        reg_rdata_next[63:56] = '0;
       end
 
+      // caps (high)
       addr_hit[1]: begin
+        reg_rdata_next[5:0] = capabilities_pas_qs;
+        reg_rdata_next[6] = capabilities_pd8_qs;
+        reg_rdata_next[7] = capabilities_pd17_qs;
+        reg_rdata_next[8] = capabilities_pd20_qs;
+        reg_rdata_next[31:9] = '0;
+      end
+
+      // fctl
+      addr_hit[2]: begin
         reg_rdata_next[0] = fctl_be_qs;
         reg_rdata_next[1] = fctl_wsi_qs;
         reg_rdata_next[2] = fctl_gxl_qs;
         reg_rdata_next[15:3] = '0;
         reg_rdata_next[31:16] = '0;
-        reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[2]: begin
+      // ddtp (low)
+      addr_hit[3]: begin
         reg_rdata_next[3:0] = ddtp_iommu_mode_qs;
         reg_rdata_next[4] = ddtp_busy_qs;
         reg_rdata_next[9:5] = '0;
-        reg_rdata_next[53:10] = ddtp_ppn_qs;
-        reg_rdata_next[63:54] = '0;
+        reg_rdata_next[31:10] = ddtp_ppn_l_qs;
       end
 
-      addr_hit[3]: begin
+      // ddtp (high)
+      addr_hit[4]: begin
+        reg_rdata_next[21:0] = ddtp_ppn_h_qs;
+        reg_rdata_next[31:22] = '0;
+      end
+
+      // cqb (low)
+      addr_hit[5]: begin
         reg_rdata_next[4:0] = cqb_log2sz_1_qs;
         reg_rdata_next[9:5] = '0;
-        reg_rdata_next[53:10] = cqb_ppn_qs;
-        reg_rdata_next[63:54] = '0;
+        reg_rdata_next[31:10] = cqb_ppn_l_qs;
       end
 
-      addr_hit[4]: begin
-        reg_rdata_next[31:0] = cqh_qs;
-        reg_rdata_next[63:32] = '0;
-      end
-
-      addr_hit[5]: begin
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:32] = cqt_qs;
-      end
-
+      // cqb (high)
       addr_hit[6]: begin
+        reg_rdata_next[21:0] = cqb_ppn_h_qs;
+        reg_rdata_next[31:22] = '0;
+      end
+
+      // cqh
+      addr_hit[7]: begin
+        reg_rdata_next[31:0] = cqh_qs;
+      end
+
+      // cqt
+      addr_hit[8]: begin
+        reg_rdata_next[31:0] = cqt_qs;
+      end
+
+      // fqb (low)
+      addr_hit[9]: begin
         reg_rdata_next[4:0] = fqb_log2sz_1_qs;
         reg_rdata_next[9:5] = '0;
-        reg_rdata_next[53:10] = fqb_ppn_qs;
-        reg_rdata_next[63:54] = '0;
+        reg_rdata_next[31:10] = fqb_ppn_l_qs;
       end
 
-      addr_hit[7]: begin
+      // fqb (high)
+      addr_hit[10]: begin
+        reg_rdata_next[21:0] = fqb_ppn_h_qs;
+        reg_rdata_next[31:22] = '0;
+      end
+
+      // fqh
+      addr_hit[11]: begin
         reg_rdata_next[31:0] = fqh_qs;
-        reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[8]: begin
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[63:32] = fqt_qs;
+      // fqt
+      addr_hit[12]: begin
+        reg_rdata_next[31:0] = fqt_qs;
       end
 
-      addr_hit[9]: begin
+      // cqcsr
+      addr_hit[13]: begin
         reg_rdata_next[0] = cqcsr_cqen_qs;
         reg_rdata_next[1] = cqcsr_cie_qs;
         reg_rdata_next[7:2] = '0;
@@ -2399,115 +2684,160 @@ module iommu_regmap_wrapper #(
         reg_rdata_next[17] = cqcsr_busy_qs;
         reg_rdata_next[27:18] = '0;
         reg_rdata_next[31:28] = '0;
-        reg_rdata_next[63:32] = '0;
       end
 
-      addr_hit[10]: begin
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[32] = fqcsr_fqen_qs;
-        reg_rdata_next[33] = fqcsr_fie_qs;
-        reg_rdata_next[39:34] = '0;
-        reg_rdata_next[40] = fqcsr_fqmf_qs;
-        reg_rdata_next[41] = fqcsr_fqof_qs;
-        reg_rdata_next[47:42] = '0;
-        reg_rdata_next[48] = fqcsr_fqon_qs;
-        reg_rdata_next[49] = fqcsr_busy_qs;
-        reg_rdata_next[59:50] = '0;
-        reg_rdata_next[63:60] = '0;
+      // fqcsr
+      addr_hit[14]: begin
+        reg_rdata_next[0] = fqcsr_fqen_qs;
+        reg_rdata_next[1] = fqcsr_fie_qs;
+        reg_rdata_next[7:2] = '0;
+        reg_rdata_next[8] = fqcsr_fqmf_qs;
+        reg_rdata_next[9] = fqcsr_fqof_qs;
+        reg_rdata_next[15:10] = '0;
+        reg_rdata_next[16] = fqcsr_fqon_qs;
+        reg_rdata_next[17] = fqcsr_busy_qs;
+        reg_rdata_next[27:18] = '0;
+        reg_rdata_next[31:28] = '0;
       end
 
-      addr_hit[11]: begin
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[32] = ipsr_cip_qs;
-        reg_rdata_next[33] = ipsr_fip_qs;
-        reg_rdata_next[34] = ipsr_pmip_qs;
-        reg_rdata_next[35] = ipsr_pip_qs;
-        reg_rdata_next[63:36] = '0;
+      // ipsr
+      addr_hit[15]: begin
+        reg_rdata_next[0] = ipsr_cip_qs;
+        reg_rdata_next[1] = ipsr_fip_qs;
+        reg_rdata_next[2] = ipsr_pmip_qs;
+        reg_rdata_next[3] = ipsr_pip_qs;
+        reg_rdata_next[31:4] = '0;
       end
+
       // iocountovf
-      addr_hit[12]: begin
+      addr_hit[16]: begin
         reg_rdata_next[0] = iohpmcycles_of_qs;
         for (int unsigned i = 1; i < (N_IOHPMCTR + 1); i++) begin
           reg_rdata_next[i] = iohpmevt_of_qs[i-1];
         end
-        reg_rdata_next[63:N_IOHPMCTR+1] = '0;
+        if (N_IOHPMCTR != 31) 
+          reg_rdata_next[31:N_IOHPMCTR+1] = '0;
       end
+
       // iocountinh
-      addr_hit[13]: begin
-        reg_rdata_next[31:0] = '0;
-        reg_rdata_next[32] = iocountinh_cy_qs;
-        for (int unsigned i = 33; i < (33 + N_IOHPMCTR); i++) begin
-          reg_rdata_next[i] = iocountinh_hpm_qs[i-33];
+      addr_hit[17]: begin
+        reg_rdata_next[0] = iocountinh_cy_qs;
+        for (int unsigned i = 1; i < (N_IOHPMCTR + 1); i++) begin
+          reg_rdata_next[i] = iocountinh_hpm_qs[i-1];
         end
         if (N_IOHPMCTR != 31) 
-          reg_rdata_next[63:N_IOHPMCTR+33] = '0;
+          reg_rdata_next[31:N_IOHPMCTR+1] = '0;
       end
-      // iohpmcycles
-      addr_hit[14]: begin
-        reg_rdata_next[62:0] = iohpmcycles_counter_qs;
-        reg_rdata_next[63] = iohpmcycles_of_qs;
-      end
-      // iohpmctr_n
-      (iohpmctr_hit_vector): begin
 
-        for (int unsigned i = 15; i < (15+N_IOHPMCTR); i++) begin
-          if (addr_hit[i])
-            reg_rdata_next[63:0] = iohpmctr_counter_qs[i-15];
+      // iohpmcycles (low)
+      addr_hit[18]: begin
+        reg_rdata_next[31:0] = iohpmcycles_counter_l_qs;
+      end
+
+      // iohpmcycles (high)
+      addr_hit[19]: begin
+        reg_rdata_next[30:0] = iohpmcycles_counter_h_qs;
+        reg_rdata_next[31] = iohpmcycles_of_qs;
+      end
+
+      // iohpmctr_n (low)
+      (iohpmctr_l_hit_vector): begin
+
+        for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+          if (addr_hit[i+20])
+            reg_rdata_next[31:0] = iohpmctr_counter_l_qs[i];
         end
       end
-      // iohpmevt_n
-      (iohpmevt_hit_vector): begin
 
-        for (int unsigned i = 46; i < (46+N_IOHPMCTR); i++) begin
-          if (addr_hit[i]) begin
-            reg_rdata_next[14:0]  = iohpmevt_eventid_qs[i-46];
-            reg_rdata_next[15]    = iohpmevt_dmask_qs[i-46];
-            reg_rdata_next[35:16] = iohpmevt_pid_pscid_qs[i-46];
-            reg_rdata_next[59:36] = iohpmevt_did_gscid_qs[i-46];
-            reg_rdata_next[60]    = iohpmevt_pv_pscv_qs[i-46];
-            reg_rdata_next[61]    = iohpmevt_dv_gscv_qs[i-46];
-            reg_rdata_next[62]    = iohpmevt_idt_qs[i-46];
-            reg_rdata_next[63]    = iohpmevt_of_qs[i-46];
+      // iohpmctr_n (high)
+      (iohpmctr_h_hit_vector): begin
+
+        for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+          if (addr_hit[i+51])
+            reg_rdata_next[31:0] = iohpmctr_counter_h_qs[i];
+        end
+      end
+
+      // iohpmevt_n (low)
+      (iohpmevt_l_hit_vector): begin
+
+        for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+          if (addr_hit[i+82]) begin
+            reg_rdata_next[14:0]  = iohpmevt_eventid_qs[i];
+            reg_rdata_next[15]    = iohpmevt_dmask_qs[i];
+            reg_rdata_next[31:16] = iohpmevt_pid_pscid_l_qs[i];
           end 
         end
       end
 
-      addr_hit[77]: begin
+      // iohpmevt_n (high)
+      (iohpmevt_h_hit_vector): begin
+
+        for (int unsigned i = 0; i < N_IOHPMCTR; i++) begin
+          if (addr_hit[i+113]) begin
+            reg_rdata_next[3:0]   = iohpmevt_pid_pscid_h_qs[i];
+            reg_rdata_next[27:4]  = iohpmevt_did_gscid_qs[i];
+            reg_rdata_next[28]    = iohpmevt_pv_pscv_qs[i];
+            reg_rdata_next[29]    = iohpmevt_dv_gscv_qs[i];
+            reg_rdata_next[30]    = iohpmevt_idt_qs[i];
+            reg_rdata_next[31]    = iohpmevt_of_qs[i];
+          end 
+        end
+      end
+
+      // icvec (low)
+      addr_hit[144]: begin
         reg_rdata_next[(LOG2_INTVEC-1)+0:0] = icvec_civ_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+4:4] = icvec_fiv_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+8:8] = icvec_pmiv_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+12:12] = icvec_piv_qs;
-        reg_rdata_next[63:16] = '0;
+        reg_rdata_next[31:16] = '0;
       end
 
-      (msi_addr_hit): begin
+      // icvec (high)
+      addr_hit[145]: begin
+        reg_rdata_next[31:0] = '0;
+      end
+
+      // msi_addr_x (low)
+      (msi_addr_l_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[78+(i*3)]) begin
+          if (addr_hit[i+146]) begin
             reg_rdata_next[1:0] = '0;
-            reg_rdata_next[55:2] = msi_addr_qs[i];
-            reg_rdata_next[63:56] = '0;
+            reg_rdata_next[31:2] = msi_addr_l_qs[i];
           end
         end
       end
 
-      (msi_data_hit): begin
+      // msi_addr_x (high)
+      (msi_addr_h_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[79+(i*3)]) begin
+          if (addr_hit[i+162]) begin
+            reg_rdata_next[23:0] = msi_addr_h_qs[i];
+            reg_rdata_next[31:24] = '0;
+          end
+        end
+      end
+
+      // msi_data_x
+      (msi_data_hit_vector): begin
+
+        for (int unsigned i = 0; i < N_INT_VEC; i++) begin
+          if (addr_hit[i+178]) begin
             reg_rdata_next[31:0] = msi_data_qs[i];
-            reg_rdata_next[63:32] = '0;
           end
         end
       end
 
-      (msi_vect_hit): begin
+      // msi_vec_ctl_x
+      (msi_vect_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[80+(i*3)]) begin
-            reg_rdata_next[32] = msi_vec_ctl_qs[i];
-            reg_rdata_next[31:0] = '0;
-            reg_rdata_next[63:33] = '0;
+          if (addr_hit[i+194]) begin
+            reg_rdata_next[0] = msi_vec_ctl_qs[i];
+            reg_rdata_next[31:1] = '0;
           end
         end
       end

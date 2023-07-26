@@ -417,7 +417,6 @@ module riscv_iommu #(
         .DATA_WIDTH     (DATA_WIDTH     ),
         .ID_WIDTH       (ID_SLV_WIDTH   ),
         .USER_WIDTH     (USER_WIDTH     ),
-        .DECOUPLE_W     (1              ), // Channel W is decoupled with registers
         .IGS            (IGS            ),
         .N_INT_VEC      (N_INT_VEC      ),
         .N_IOHPMCTR     (N_IOHPMCTR     ),

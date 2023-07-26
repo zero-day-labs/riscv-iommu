@@ -533,51 +533,69 @@ package iommu_reg_pkg;
   } iommu_hw2reg_t;
 
   // Register offsets
-  parameter logic [BlockAw-1:0] IOMMU_CAPABILITIES_OFFSET = 12'h 0;
-  parameter logic [BlockAw-1:0] IOMMU_FCTL_OFFSET         = 12'h 8;
-  parameter logic [BlockAw-1:0] IOMMU_DDTP_OFFSET         = 12'h 10;
-  parameter logic [BlockAw-1:0] IOMMU_CQB_OFFSET          = 12'h 18;
-  parameter logic [BlockAw-1:0] IOMMU_CQH_OFFSET          = 12'h 20;
-  parameter logic [BlockAw-1:0] IOMMU_CQT_OFFSET          = 12'h 24;
-  parameter logic [BlockAw-1:0] IOMMU_FQB_OFFSET          = 12'h 28;
-  parameter logic [BlockAw-1:0] IOMMU_FQH_OFFSET          = 12'h 30;
-  parameter logic [BlockAw-1:0] IOMMU_FQT_OFFSET          = 12'h 34;
-  parameter logic [BlockAw-1:0] IOMMU_CQCSR_OFFSET        = 12'h 48;
-  parameter logic [BlockAw-1:0] IOMMU_FQCSR_OFFSET        = 12'h 4c;
-  parameter logic [BlockAw-1:0] IOMMU_IPSR_OFFSET         = 12'h 54;
-  parameter logic [BlockAw-1:0] IOMMU_IOCNTOVF_OFFSET     = 12'h 58;
-  parameter logic [BlockAw-1:0] IOMMU_IOCNTINH_OFFSET     = 12'h 5c;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET  = 12'h 60;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET     = 12'h 68;
-  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET     = 12'h 160;
-  parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET        = 12'h 2f8;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_OFFSET     = 12'h 300;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_OFFSET     = 12'h 308;
-  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_OFFSET  = 12'h 30c;
+  parameter logic [BlockAw-1:0] IOMMU_CAPABILITIES_OFFSET_L = 12'h 0;
+  parameter logic [BlockAw-1:0] IOMMU_CAPABILITIES_OFFSET_H = 12'h 4;
+  parameter logic [BlockAw-1:0] IOMMU_FCTL_OFFSET           = 12'h 8;
+  parameter logic [BlockAw-1:0] IOMMU_DDTP_OFFSET_L         = 12'h 10;
+  parameter logic [BlockAw-1:0] IOMMU_DDTP_OFFSET_H         = 12'h 14;
+  parameter logic [BlockAw-1:0] IOMMU_CQB_OFFSET_L          = 12'h 18;
+  parameter logic [BlockAw-1:0] IOMMU_CQB_OFFSET_H          = 12'h 1c;
+  parameter logic [BlockAw-1:0] IOMMU_CQH_OFFSET            = 12'h 20;
+  parameter logic [BlockAw-1:0] IOMMU_CQT_OFFSET            = 12'h 24;
+  parameter logic [BlockAw-1:0] IOMMU_FQB_OFFSET_L          = 12'h 28;
+  parameter logic [BlockAw-1:0] IOMMU_FQB_OFFSET_H          = 12'h 2c;
+  parameter logic [BlockAw-1:0] IOMMU_FQH_OFFSET            = 12'h 30;
+  parameter logic [BlockAw-1:0] IOMMU_FQT_OFFSET            = 12'h 34;
+  parameter logic [BlockAw-1:0] IOMMU_CQCSR_OFFSET          = 12'h 48;
+  parameter logic [BlockAw-1:0] IOMMU_FQCSR_OFFSET          = 12'h 4c;
+  parameter logic [BlockAw-1:0] IOMMU_IPSR_OFFSET           = 12'h 54;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTOVF_OFFSET       = 12'h 58;
+  parameter logic [BlockAw-1:0] IOMMU_IOCNTINH_OFFSET       = 12'h 5c;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET_L  = 12'h 60;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCYCLES_OFFSET_H  = 12'h 64;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET_L     = 12'h 68;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET_H     = 12'h 6c;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET_L     = 12'h 160;
+  parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET_H     = 12'h 164;
+  parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET_L        = 12'h 2f8;
+  parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET_H        = 12'h 2fc;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_OFFSET_L     = 12'h 300;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_OFFSET_H     = 12'h 304;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_DATA_OFFSET       = 12'h 308;
+  parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_OFFSET    = 12'h 30c;
 
   // Register width information to check illegal writes
-  parameter logic [7:0] IOMMU_PERMIT [21] = '{
-    8'b 00111111, // IOMMU_CAPABILITIES
-    8'b 00000001, // IOMMU_FCTL
-    8'b 01111111, // IOMMU_DDTP
-    8'b 01111111, // IOMMU_CQB
-    8'b 00001111, // IOMMU_CQH
-    8'b 11110000, // IOMMU_CQT
-    8'b 01111111, // IOMMU_FQB
-    8'b 00001111, // IOMMU_FQH
-    8'b 11110000, // IOMMU_FQT
-    8'b 00000111, // IOMMU_CQCSR
-    8'b 01110000, // IOMMU_FQCSR
-    8'b 00010000, // IOMMU_IPSR
-    8'b 00001111, // IOMMU_IOCNTOVF
-    8'b 11110000, // IOMMU_IOCNTINH
-    8'b 11111111, // IOMMU_IOHPMCYCLES
-    8'b 11111111, // IOMMU_IOHPMCTR
-    8'b 11111111, // IOMMU_IOHPMEVT
-    8'b 00000011, // IOMMU_ICVEC
-    8'b 01111111, // IOMMU_MSI_ADDR
-    8'b 00001111, // IOMMU_MSI_DATA
-    8'b 00010000  // IOMMU_MSI_VEC_CTL
+  parameter logic [3:0] IOMMU_PERMIT [30] = '{
+    4'b 1111, // IOMMU_CAPABILITIES_L
+    4'b 0011, // IOMMU_CAPABILITIES_H
+    4'b 0001, // IOMMU_FCTL
+    4'b 1111, // IOMMU_DDTP_L
+    4'b 0111, // IOMMU_DDTP_H
+    4'b 1111, // IOMMU_CQB_L
+    4'b 0111, // IOMMU_CQB_H
+    4'b 1111, // IOMMU_CQH
+    4'b 1111, // IOMMU_CQT
+    4'b 1111, // IOMMU_FQB_L
+    4'b 0111, // IOMMU_FQB_H
+    4'b 1111, // IOMMU_FQH
+    4'b 1111, // IOMMU_FQT
+    4'b 0111, // IOMMU_CQCSR
+    4'b 0111, // IOMMU_FQCSR
+    4'b 0001, // IOMMU_IPSR
+    4'b 1111, // IOMMU_IOCNTOVF
+    4'b 1111, // IOMMU_IOCNTINH
+    4'b 1111, // IOMMU_IOHPMCYCLES_L
+    4'b 1111, // IOMMU_IOHPMCYCLES_H
+    4'b 1111, // IOMMU_IOHPMCTR_L
+    4'b 1111, // IOMMU_IOHPMCTR_H
+    4'b 1111, // IOMMU_IOHPMEVT_L
+    4'b 1111, // IOMMU_IOHPMEVT_H
+    4'b 0011, // IOMMU_ICVEC_L
+    4'b 0000, // IOMMU_ICVEC_H
+    4'b 1111, // IOMMU_MSI_ADDR_L
+    4'b 0111, // IOMMU_MSI_ADDR_H
+    4'b 1111, // IOMMU_MSI_DATA
+    4'b 0001  // IOMMU_MSI_VEC_CTL
   };
 
 endpackage
