@@ -31,6 +31,9 @@ module riscv_iommu #(
 
     // Include process_id
     parameter bit               InclPID             = 0,
+    // Include AXI4 address boundary check
+    parameter bit               InclBC              = 1,
+    
     // Interrupt Generation Support
     parameter rv_iommu::igs_t   IGS                 = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
@@ -248,9 +251,9 @@ module riscv_iommu #(
 
     assign axi_aux_req.aw.id                    = dev_tr_req_i.aw.id;
     assign axi_aux_req.aw.addr[riscv::PLEN-1:0] = (aw_request & trans_valid) ? (spaddr) : ('0);  // translated address
-    assign axi_aux_req.aw.len                   = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.len) : '0;
-    assign axi_aux_req.aw.size                  = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.size) : '0;
-    assign axi_aux_req.aw.burst                 = ((trans_valid | trans_error | bound_violation) & aw_request) ? (dev_tr_req_i.aw.burst) : '0;
+    assign axi_aux_req.aw.len                   = dev_tr_req_i.aw.len;
+    assign axi_aux_req.aw.size                  = dev_tr_req_i.aw.size;
+    assign axi_aux_req.aw.burst                 = dev_tr_req_i.aw.burst;
     assign axi_aux_req.aw.lock                  = dev_tr_req_i.aw.lock;
     assign axi_aux_req.aw.cache                 = dev_tr_req_i.aw.cache;
     assign axi_aux_req.aw.prot                  = dev_tr_req_i.aw.prot;
@@ -261,9 +264,7 @@ module riscv_iommu #(
 
     // W
     assign axi_aux_req.w            = dev_tr_req_i.w;
-    // assign axi_aux_req.w            = '0;
     assign axi_aux_req.w_valid      = dev_tr_req_i.w_valid;
-    // assign axi_aux_req.w_valid      = 1'b0;
 
     // B
     assign axi_aux_req.b_ready      = dev_tr_req_i.b_ready;
@@ -273,9 +274,9 @@ module riscv_iommu #(
 
     assign axi_aux_req.ar.id                    = dev_tr_req_i.ar.id;
     assign axi_aux_req.ar.addr[riscv::PLEN-1:0] = (ar_request & trans_valid) ? (spaddr) : ('0);  // translated address
-    assign axi_aux_req.ar.len                   = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.len) : '0;
-    assign axi_aux_req.ar.size                  = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.size) : '0;
-    assign axi_aux_req.ar.burst                 = ((trans_valid | trans_error | bound_violation) & ar_request) ? (dev_tr_req_i.ar.burst) : '0;
+    assign axi_aux_req.ar.len                   = dev_tr_req_i.ar.len;
+    assign axi_aux_req.ar.size                  = dev_tr_req_i.ar.size;
+    assign axi_aux_req.ar.burst                 = dev_tr_req_i.ar.burst;
     assign axi_aux_req.ar.lock                  = dev_tr_req_i.ar.lock;
     assign axi_aux_req.ar.cache                 = dev_tr_req_i.ar.cache;
     assign axi_aux_req.ar.prot                  = dev_tr_req_i.ar.prot;
@@ -473,7 +474,7 @@ module riscv_iommu #(
 
             .hpm_ip_o       (hw2reg.ipsr.pmip.d)    // HPM IP bit. WE driven by itself
         );
-    end
+    end : gen_hpm
 
     else begin : gen_hpm_disabled
 
@@ -482,7 +483,7 @@ module riscv_iommu #(
         assign hw2reg.iohpmctr      = '0;
         assign hw2reg.iohpmevt      = '0;
         assign hw2reg.ipsr.pmip.d   = '0;
-    end
+    end : gen_hpm_disabled
 
     //# Channel selection
     // Monitor incoming request and select parameters according to the source channel
@@ -529,82 +530,34 @@ module riscv_iommu #(
     // In order to send error response, we need to set the corresponding valid signal and select the error slave in the AXI Demux.
     // To do that, we may OR the translation error flag from the translation wrapper with another flag to indicate a 4kiB cross
     // and trigger the error response
-    always_comb begin : boundary_check
+    if (InclBC) begin : gen_axi4_bc
 
-        allow_request   = 1'b0;
-        bound_violation = 1'b0;
+        axi4_boundary_check i_axi4_boundary_check 
+        (
+            // AxVALID
+            .request_i          (ar_request | aw_request),
+            // AxADDR
+            .addr_i             ( iova                  ),
+            // AxBURST
+            .burst_type_i       ( burst_type            ),
+            // AxLEN
+            .burst_length_i     ( burst_length          ),
+            // AxSIZE
+            .n_bytes_i          ( n_bytes               ),
 
-        // Request received
-        if (ar_request || aw_request) begin
+            // To indicate valid requests or boundary violations
+            .allow_request_o    ( allow_request         ),
+            .bound_violation_o  ( bound_violation       )
+        );
+    end : gen_axi4_bc
 
-            // Consider burst type, N of beats and size of the beat (always 64 bits) to calculate number of bytes accessed:
-            case (burst_type)
+    // AXI4 boundaru checks may be performed outside the IOMMU IP.
+    // In this scenario, there's no need to include this logic.
+    else begin : gen_axi4_bc_disabled
 
-                // BURST_FIXED: The final address is Start Addr + 8 (ex: ARADDR + 8)
-                axi_pkg::BURST_FIXED: begin
-                    // May be optimized with bitwise AND
-                    if (((iova & 12'hfff) + (1'b1 << n_bytes)) < (1'b1 << 12)) begin
-                        allow_request   = 1'b1;     // Allow transaction
-                    end
-
-                    // Boundary violation
-                    else begin
-                        bound_violation = 1'b1;
-                    end
-                end
-
-                // BURST_WRAP: The final address is the Wrap Boundary (Lower address) + size of the transfer
-                axi_pkg::BURST_WRAP: begin
-                    // wrap_boundary = (start_address/(number_bytes*burst_length)) * (number_bytes*burst_length)
-                    // address_n = wrap_boundary + (number_bytes * burst_length)
-                    logic [riscv::PLEN-1:0] wrap_boundary;
-
-                    // by spec, N of transfers must be {2, 4, 8, 16}
-                    // So, ARLEN must be {1, 3, 7, 15}
-                    logic [2:0] log2_len;
-                    case (burst_length)
-                        8'd1: log2_len = 3'b001;
-                        8'd3: log2_len = 3'b010;
-                        8'd7: log2_len = 3'b011;
-                        8'd15: log2_len = 3'b100;
-                        default: log2_len = 3'b111;  // invalid
-                    endcase
-
-                    // The lowest address within a wrapping burst
-                    // Wrap_Boundary = (INT(Start_Address / (Burst_Length x Number_Bytes))) x (Burst_Length x Number_Bytes)
-                    wrap_boundary = (iova >> (log2_len + n_bytes)) << (log2_len + n_bytes);
-
-                    // Check if the highest address crosses a 4 kiB boundary (Highest Addr - Lower Addr >= 4kiB)
-                    // Highest addr = Wrap_Boundary + (Burst_Length x Number_Bytes)
-                    if (!(&log2_len) && 
-                         (((wrap_boundary & 12'hfff) + ((burst_length + 1) << n_bytes)) < (1'b1 << 12))) begin
-                        allow_request  = 1'b1;     // Allow transaction
-                    end
-                    
-                    // Boundary violation
-                    else begin
-                        bound_violation = 1'b1;
-                    end
-
-                end
-
-                // BURST_INCR: The final address is Start Addr + Burst_Length x Number_Bytes
-                axi_pkg::BURST_INCR: begin
-                    // check if burst is within 4K range
-                    if (((iova & 12'hfff) + ((burst_length + 1) << n_bytes)) < (1'b1 << 12)) begin
-                        allow_request  = 1'b1;     // Allow transaction
-                    end
-
-                    // Boundary violation
-                    else begin
-                        bound_violation = 1'b1;
-                    end
-                end
-
-                default:;
-            endcase
-        end
-    end
+        assign allow_request   = (ar_request | aw_request);
+        assign bound_violation = 1'b0;
+    end : gen_axi4_bc_disabled
 
     axi_demux #(
         .AxiIdWidth     (ID_WIDTH       ),
@@ -625,7 +578,7 @@ module riscv_iommu #(
         .SpillB         (1'b0           ),
         .SpillAr        (1'b0           ),
         .SpillR         (1'b0           )
-    ) axi_demux (
+    ) i_iommu_axi_demux (
         .clk_i          ( clk_i  ),
         .rst_ni         ( rst_ni ),
         .test_i         ( 1'b0   ),         // if 1, explicit error return for unmapped register access

@@ -486,7 +486,7 @@ module iommu_regmap_wrapper #(
   iommu_field #(
     .DATA_WIDTH      (1),
     .SwAccess(SwAccessRW),
-    .RESVAL  (1'h1)
+    .RESVAL  ((IGS == rv_iommu::MSI_ONLY) ? (1'h0) : (1'h1))
   ) u_fctl_wsi (
     .clk_i   (clk_i    ),
     .rst_ni  (rst_ni  ),
