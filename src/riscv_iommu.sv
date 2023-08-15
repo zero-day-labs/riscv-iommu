@@ -288,6 +288,7 @@ module riscv_iommu #(
     assign axi_aux_req.r_ready                  = dev_tr_req_i.r_ready;
 
     //# WSI Interrupt Generation
+    generate
     if ((IGS == rv_iommu::WSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_wsi_ig_support
         
         iommu_wsi_ig #(
@@ -306,12 +307,13 @@ module riscv_iommu #(
             // interrupt wires
             .wsi_wires_o    (wsi_wires_o        )
         );
-    end
+    end : gen_wsi_ig_support
 
     // Hardwire WSI wires to 0
     else begin : gen_wsi_support_disabled
         assign wsi_wires_o  = '0;
-    end
+    end : gen_wsi_support_disabled
+    endgenerate
 
     iommu_translation_wrapper #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES      ),
@@ -437,6 +439,7 @@ module riscv_iommu #(
     );
 
     //# Hardware Performance Monitor
+    generate
     if (N_IOHPMCTR > 0) begin : gen_hpm
 
         iommu_hpm #(
@@ -484,6 +487,7 @@ module riscv_iommu #(
         assign hw2reg.iohpmevt      = '0;
         assign hw2reg.ipsr.pmip.d   = '0;
     end : gen_hpm_disabled
+    endgenerate
 
     //# Channel selection
     // Monitor incoming request and select parameters according to the source channel
@@ -530,6 +534,7 @@ module riscv_iommu #(
     // In order to send error response, we need to set the corresponding valid signal and select the error slave in the AXI Demux.
     // To do that, we may OR the translation error flag from the translation wrapper with another flag to indicate a 4kiB cross
     // and trigger the error response
+    generate
     if (InclBC) begin : gen_axi4_bc
 
         axi4_boundary_check i_axi4_boundary_check 
@@ -558,6 +563,7 @@ module riscv_iommu #(
         assign allow_request   = (ar_request | aw_request);
         assign bound_violation = 1'b0;
     end : gen_axi4_bc_disabled
+    endgenerate
 
     axi_demux #(
         .AxiIdWidth     (ID_WIDTH       ),

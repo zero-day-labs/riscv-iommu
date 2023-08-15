@@ -380,6 +380,7 @@ module iommu_translation_wrapper #(
     );
 
     //# Process Directory Table Cache
+    generate
     if (InclPID) begin : gen_pid_support
         iommu_pdtc #(
             .PDTC_ENTRIES       (PDTC_ENTRIES)
@@ -409,10 +410,11 @@ module iommu_translation_wrapper #(
         );
     end
     // No PC support
-    else begin
+    else begin : gen_pid_support_disabled
         assign pdtc_lu_content  = '0;
         assign pdtc_lu_hit      = 1'b0;
-    end
+    end : gen_pid_support_disabled
+    endgenerate
 
 
     //# IOTLB: Address Translation Cache
@@ -927,10 +929,10 @@ module iommu_translation_wrapper #(
                         - (3): U-mode transaction and PTE has U=0;
                         - (4): S-mode transaction and PTE has U=1 and (SUM=0 or x=1).
                     */
-                    if  ((is_store && (!iotlb_lu_1S_content.w && en_1S)                                     ) ||    // (1)
-                         (is_rx && (!iotlb_lu_1S_content.x && en_1S)                                        ) ||    // (2)
-                         ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_1S_content.u && en_1S              ) ||    // (3)
-                         (is_s_priv && iotlb_lu_1S_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_1S_content.x) )       // (4)
+                    if  ((is_store && (!iotlb_lu_1S_content.w && en_1S)                                     ) ||        // (1)
+                         (is_rx && (!iotlb_lu_1S_content.x && en_1S)                                        ) ||        // (2)
+                         ((priv_lvl_i == riscv::PRIV_LVL_U) && !iotlb_lu_1S_content.u && en_1S              ) ||        // (3)
+                         (is_s_priv && iotlb_lu_1S_content.u && (!pdtc_lu_content.ta.sum || iotlb_lu_1S_content.x) )    // (4)
                         ) begin
                             if (is_store)   cause_code = rv_iommu::STORE_PAGE_FAULT;
                             else            cause_code = rv_iommu::LOAD_PAGE_FAULT;
@@ -999,7 +1001,7 @@ module iommu_translation_wrapper #(
             // (This condition and an IOTLB hit should be mutually exclusive)
             // Input address is bypassed
             if (is_bare_translation) begin
-                trans_valid_o       = 1'b1;
+                trans_valid_o     = 1'b1;
                 translated_addr_o = iova_i[riscv::PLEN-1:0];
             end
         end

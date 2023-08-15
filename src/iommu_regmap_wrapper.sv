@@ -1408,6 +1408,7 @@ module iommu_regmap_wrapper #(
 
   assign ipsr_pip_qs = 1'b0;
 
+  generate
   if (N_IOHPMCTR > 0) begin
 
     // R[iocountinh]: V(False)
@@ -1853,6 +1854,7 @@ module iommu_regmap_wrapper #(
     assign reg2hw.iohpmcycles.counter.q = '0;
     assign reg2hw.iohpmcycles.of.q      = '0;
   end
+  endgenerate
 
   // Hardwire unused wires to zero
   for (genvar i = N_IOHPMCTR; i < 31; i++) begin
@@ -1884,6 +1886,7 @@ module iommu_regmap_wrapper #(
 
   // R[icvec]: V(False)
 
+  generate
   if (LOG2_INTVEC > 0) begin : gen_icvec
     
     //   F[civ]: 3:0
@@ -2010,8 +2013,10 @@ module iommu_regmap_wrapper #(
     assign icvec_piv_qs = '0;
     assign reg2hw.icvec.piv.q = '0;
   end
+  endgenerate
   
   // Generate MSI Configuration Table if IOMMU includes MSI gen support
+  generate
   if ((IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_msi_cfg_tbl
 
     for (genvar i = 0; i < N_INT_VEC; i++) begin
@@ -2128,6 +2133,7 @@ module iommu_regmap_wrapper #(
       );
     end
   end
+  endgenerate
 
   // Hardwire unimplemented vectors to zero 
   for (genvar i = N_INT_VEC; i < 16; i++) begin
@@ -2393,6 +2399,7 @@ module iommu_regmap_wrapper #(
   assign ipsr_pip_wd = reg_wdata[3];
 
   // HPM
+  generate
   if (N_IOHPMCTR > 0) begin
     
     // iocntinh
@@ -2462,6 +2469,7 @@ module iommu_regmap_wrapper #(
     assign iohpmcycles_of_we = 1'b0;
     assign iohpmcycles_of_wd = '0;
   end
+  endgenerate
 
   // Hardwire unused wires to zero
   for (genvar i = N_IOHPMCTR; i < 31; i++) begin
@@ -2506,6 +2514,7 @@ module iommu_regmap_wrapper #(
   assign icvec_piv_wd = reg_wdata[(LOG2_INTVEC-1)+12:12];
 
   // MSI Config Table
+  generate
   for (genvar i = 0; i < N_INT_VEC; i++) begin
     
     // msi_addr_x (low)
@@ -2524,6 +2533,7 @@ module iommu_regmap_wrapper #(
     assign msi_vec_ctl_we[i] = addr_hit[194+i] & reg_we & !reg_error;
     assign msi_vec_ctl_wd[i] = reg_wdata[0];
   end
+  endgenerate
 
   // Hardwire unused bits to zero
   for (genvar i = N_INT_VEC; i < 0; i++) begin
