@@ -17,10 +17,12 @@
 //              This module is an adaptation of the CVA6 Sv39 MMU developed by 
 //              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB 
 //              developed by Bruno Sá.
+//              Includes MSI translation support.
+//              Includes support for CDW implicit translations when walking the PDT.
 
 /* verilator lint_off WIDTH */
 
-module iommu_ptw_sv39x4 (
+module iommu_ptw_sv39x4_msi_pc (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
     

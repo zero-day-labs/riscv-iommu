@@ -14,29 +14,30 @@
 // Date:    10/11/2022
 //
 // Description: RISC-V IOMMU Device Directory Table Cache (DDTC).
-//              Fully-associative cache to store Device Contexts in extended format.
+//              Fully-associative cache to store Device Contexts.
 
-module iommu_ddtc import ariane_pkg::*; #(
-    parameter int unsigned DDTC_ENTRIES = 4
+module iommu_ddtc #(
+    parameter int unsigned  DDTC_ENTRIES    = 4,
+    parameter type dc_t                     = logic
 )(
-    input  logic                    clk_i,            // Clock
-    input  logic                    rst_ni,           // Asynchronous reset active low
+    input  logic            clk_i,          // Clock
+    input  logic            rst_ni,         // Asynchronous reset active low
 
     // Flush signals
-    input  logic                        flush_i,        // IODIR.INVAL_DDT
-    input  logic                        flush_dv_i,     // device_id valid
-    input  logic [23:0]                 flush_did_i,    // device_id to be flushed
+    input  logic            flush_i,        // IODIR.INVAL_DDT
+    input  logic            flush_dv_i,     // device_id valid
+    input  logic [23:0]     flush_did_i,    // device_id to be flushed
 
     // Update signals
-    input  logic                        update_i,       // update flag
-    input  logic [23:0]                 up_did_i,       // device ID to be inserted
-    input rv_iommu::dc_ext_t            up_content_i,   // DC to be inserted
+    input  logic            update_i,       // update flag
+    input  logic [23:0]     up_did_i,       // device ID to be inserted
+    input  dc_t             up_content_i,   // DC to be inserted
 
     // Lookup signals
-    input  logic                        lookup_i,       // lookup flag
-    input  logic [23:0]                 lu_did_i,       // device_id to look for 
-    output rv_iommu::dc_ext_t           lu_content_o,   // DC
-    output logic                        lu_hit_o        // hit flag
+    input  logic            lookup_i,       // lookup flag
+    input  logic [23:0]     lu_did_i,       // device_id to look for 
+    output dc_t             lu_content_o,   // DC
+    output logic            lu_hit_o        // hit flag
 );
 
     //* Tags to identify DDTC entries
@@ -48,7 +49,7 @@ module iommu_ddtc import ariane_pkg::*; #(
 
     //* DDTC entries: Device Contexts
     struct packed {
-        rv_iommu::dc_ext_t dc;
+        dc_t dc;
     } [DDTC_ENTRIES-1:0] content_q, content_n;
 
     logic [DDTC_ENTRIES-1:0] lu_hit;     // to replacement logic

@@ -25,7 +25,14 @@ WARN_FLAGS += -Wno-CMPCONST
 WARN_FLAGS += -Wno-SYMRSVDWORD
 WARN_FLAGS += -Wno-LATCH
 
-INC = -I./packages -I./vendor -I./include -I./src
+INC += -I./packages
+INC += -I./vendor
+INC += -I./include
+INC += -I./src
+INC += -I./src/cdw
+INC += -I./src/ptw
+INC += -I./src/iotlb
+INC += -I./src/translation_wrapper
 
 all: lint
 

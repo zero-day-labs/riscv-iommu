@@ -31,6 +31,8 @@ module iommu_regmap_if #(
     /// AXI user width
     parameter int               USER_WIDTH  = 1,
 
+    // Include MSI translation support
+    parameter bit               InclMSITrans = 0,
     // Interrupt Generation Support
     parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
@@ -173,13 +175,14 @@ module iommu_regmap_if #(
 
     // Register map wrapper module
     iommu_regmap_wrapper #(
-        .ADDR_WIDTH (32         ),
-        .DATA_WIDTH (32         ),
-        .IGS        (IGS        ),
-        .N_INT_VEC  (N_INT_VEC  ),
-        .N_IOHPMCTR (N_IOHPMCTR ),
-        .reg_req_t  (reg_req_t  ),
-        .reg_rsp_t  (reg_rsp_t  )
+        .ADDR_WIDTH     (32          ),
+        .DATA_WIDTH     (32          ),
+        .InclMSITrans   (InclMSITrans),
+        .IGS            (IGS         ),
+        .N_INT_VEC      (N_INT_VEC   ),
+        .N_IOHPMCTR     (N_IOHPMCTR  ),
+        .reg_req_t      (reg_req_t   ),
+        .reg_rsp_t      (reg_rsp_t   )
     ) i_iommu_regmap_wrapper (
         .clk_i      (clk_i),
         .rst_ni     (rst_ni),

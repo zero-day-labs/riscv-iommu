@@ -30,16 +30,18 @@ module riscv_iommu #(
     parameter int unsigned  PDTC_ENTRIES        = 4,
 
     // Include process_id
-    parameter bit               InclPID             = 0,
+    parameter bit               InclPID         = 0,
+    // Include MSI translation support
+    parameter bit               InclMSITrans    = 0,
     // Include AXI4 address boundary check
-    parameter bit               InclBC              = 1,
+    parameter bit               InclBC          = 0,
     
     // Interrupt Generation Support
-    parameter rv_iommu::igs_t   IGS                 = rv_iommu::WSI_ONLY,
+    parameter rv_iommu::igs_t   IGS             = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
-    parameter int unsigned      N_INT_VEC           = 16,
+    parameter int unsigned      N_INT_VEC       = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned      N_IOHPMCTR          = 0,     // max 31
+    parameter int unsigned      N_IOHPMCTR      = 0,     // max 31
 
     /// AXI Bus Addr width.
     parameter int   ADDR_WIDTH      = -1,
@@ -315,14 +317,15 @@ module riscv_iommu #(
     end : gen_wsi_support_disabled
     endgenerate
 
-    iommu_translation_wrapper #(
+    iommu_wrapper #(
         .IOTLB_ENTRIES      (IOTLB_ENTRIES      ),
         .DDTC_ENTRIES       (DDTC_ENTRIES       ),
         .PDTC_ENTRIES       (PDTC_ENTRIES       ),
-        .N_INT_VEC          (N_INT_VEC          ),
         .InclPID            (InclPID            ),
+        .InclMSITrans       (InclMSITrans       ),
+        .N_INT_VEC          (N_INT_VEC          ),
         .IGS                (IGS                )
-    ) i_translation_wrapper (
+    ) i_iommu_wrapper (
         .clk_i          (clk_i  ),
         .rst_ni         (rst_ni ),
 
@@ -420,6 +423,7 @@ module riscv_iommu #(
         .DATA_WIDTH     (DATA_WIDTH     ),
         .ID_WIDTH       (ID_SLV_WIDTH   ),
         .USER_WIDTH     (USER_WIDTH     ),
+        .InclMSITrans   (InclMSITrans   ),
         .IGS            (IGS            ),
         .N_INT_VEC      (N_INT_VEC      ),
         .N_IOHPMCTR     (N_IOHPMCTR     ),

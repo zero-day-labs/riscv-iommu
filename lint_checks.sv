@@ -50,7 +50,8 @@ module lint_checks (
 		.DDTC_ENTRIES		( 16						),
 		.PDTC_ENTRIES		( 16						),
 
-		.InclPID            ( 1'b0						),
+		.InclPID            ( 1'b1						),
+		.InclMSITrans       ( 1'b1						),
 		.InclBC             ( 1'b1						),
 		.IGS         		( rv_iommu::BOTH			),
 		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),

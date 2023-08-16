@@ -15,11 +15,12 @@
 //
 // Description: IO Translation Lookaside Buffer (IOTLB) for RISC-V IOMMU.
 //              Compliant with the Sv39x4 virtual memory scheme, as defined
-//              in the RISC-V Privileged Specification 1.12
+//              in the RISC-V Privileged Specification 1.12.
 //              This module is an adaptation of the Sv39 TLB developed
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
+//              Supports caching of MSI translations
 
-module iommu_iotlb_sv39x4 import ariane_pkg::*; #(
+module iommu_iotlb_sv39x4_msi import ariane_pkg::*; #(
     parameter int unsigned IOTLB_ENTRIES = 4
 )(
     input  logic                    clk_i,            // Clock

@@ -28,6 +28,8 @@ module iommu_regmap_wrapper #(
   parameter int 			        ADDR_WIDTH = 32,
   parameter int 			        DATA_WIDTH = 32,
 
+  // Include MSI translation support
+  parameter bit               InclMSITrans = 0,
   // Interrupt Generation Support
   parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
   // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
@@ -391,9 +393,17 @@ module iommu_regmap_wrapper #(
   assign reg2hw.capabilities.amo_mrif.q = 1'h0;
   assign capabilities_amo_mrif_qs = 1'h0;
 
+  // TODO: Define triplet typedef for each MSI translation support (none, flat, mrif)
   //   F[msi_flat]: 22:22
-  assign reg2hw.capabilities.msi_flat.q = 1'h1;
-  assign capabilities_msi_flat_qs = 1'h1;
+  if (InclMSITrans) begin
+    assign reg2hw.capabilities.msi_flat.q = 1'h1;
+    assign capabilities_msi_flat_qs = 1'h1;
+  end
+
+  else begin
+    assign reg2hw.capabilities.msi_flat.q = 1'h0;
+    assign capabilities_msi_flat_qs = 1'h0;
+  end
 
 
   //   F[msi_mrif]: 23:23
