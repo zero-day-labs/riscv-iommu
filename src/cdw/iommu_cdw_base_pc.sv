@@ -265,13 +265,13 @@ module iommu_cdw_base_pc (
                     // load pptr according to ddtp.MODE
                     // 3LVL
                     if (ddtp_mode_i == 4'b0100)
-                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[23:15], 3'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, 1'b0, req_did_i[23:16], 3'b0};
                     // 2LVL
                     else if (ddtp_mode_i == 4'b0011)
-                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[14:6], 3'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[15:7], 3'b0};
                     // 1LVL
                     else if (ddtp_mode_i == 4'b0010)
-                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[5:0], 6'b0};
+                        cdw_pptr_n = {ddtp_ppn_i, req_did_i[6:0], 5'b0};
                 end
 
                 // check for PDTC misses              

@@ -614,13 +614,13 @@ module iommu_wrapper_sv39x4 #(
                 .mem_req_o          (ig_axi_req         )
             );
         end
-    endgenerate
 
     // Hardwire outputs to zero
     else begin
         assign  msi_write_error = 1'b0;
         assign  ig_axi_req      = '0;
     end
+    endgenerate
 
 
     //# Translation logic

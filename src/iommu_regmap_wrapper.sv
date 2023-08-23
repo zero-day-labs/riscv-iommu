@@ -60,7 +60,7 @@ module iommu_regmap_wrapper #(
   import iommu_reg_pkg::* ;
   import iommu_field_pkg::* ;
 
-  localparam logic [N_IOHPMCTR-1:0] IOCOUNTINH_RESVAL = '1;
+  localparam logic [((N_IOHPMCTR > 0) ? (N_IOHPMCTR-1) : (1))-1:0] IOCOUNTINH_RESVAL = '1;
 
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
@@ -2564,13 +2564,14 @@ module iommu_regmap_wrapper #(
   //------------------
   // # Read data logic
   //------------------
-  
+  /* verilator lint_off SELRANGE */
   logic   iohpmctr_l_hit_vector, iohpmctr_h_hit_vector;
   logic   iohpmevt_l_hit_vector, iohpmevt_h_hit_vector;
   assign  iohpmctr_l_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(20+N_IOHPMCTR-1):20])   : ('0);
   assign  iohpmctr_h_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(51+N_IOHPMCTR-1):51])   : ('0);
   assign  iohpmevt_l_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(82+N_IOHPMCTR-1):82])   : ('0);
   assign  iohpmevt_h_hit_vector = (N_IOHPMCTR > 0) ? (|addr_hit[(113+N_IOHPMCTR-1):113]) : ('0);
+  /* verilator lint_on SELRANGE */
 
   logic msi_addr_l_hit_vector;
   logic msi_addr_h_hit_vector;

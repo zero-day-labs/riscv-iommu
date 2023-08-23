@@ -47,15 +47,15 @@ module lint_checks (
 
 	riscv_iommu #(
 		.IOTLB_ENTRIES		( 16						),
-		.DDTC_ENTRIES		( 16						),
-		.PDTC_ENTRIES		( 16						),
+		.DDTC_ENTRIES		( 8							),
+		.PDTC_ENTRIES		( 8							),
 
 		.InclPID            ( 1'b1						),
 		.InclMSITrans       ( 1'b1						),
-		.InclBC             ( 1'b1						),
+		.InclBC             ( 1'b0						),
 		.IGS         		( rv_iommu::BOTH			),
 		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),
-		.N_IOHPMCTR			( 8							),
+		.N_IOHPMCTR			( 0							),
 
 		.ADDR_WIDTH			( 64						),
 		.DATA_WIDTH			( 64						),
