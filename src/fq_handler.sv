@@ -146,7 +146,7 @@ module fq_handler (
     fifo_v3 #(
         .FALL_THROUGH   (1),
         .DEPTH          (4),
-        .DATA_WIDTH     (rv_iommu::TTYP_LEN + rv_iommu::CAUSE_LEN + riscv::VLEN + riscv::SVX + 16 + 20 + 4)
+        .DATA_WIDTH     (rv_iommu::TTYP_LEN + rv_iommu::CAUSE_LEN + riscv::VLEN + riscv::SVX + 24 + 20 + 4)
     ) i_fifo_fq (
         .clk_i      ( clk_i           ),
         .rst_ni     ( rst_ni          ),
