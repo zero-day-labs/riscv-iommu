@@ -18,7 +18,7 @@
 
 
 `include "ariane_axi_soc_pkg.sv"
-`include "iommu_pkg.sv"
+`include "rv_iommu_pkg.sv"
 `include "typedef_global.svh"
 
 module lint_checks (
@@ -27,16 +27,16 @@ module lint_checks (
 	input  logic rst_ni,
 
 	// Translation Request Interface (Slave)
-	input  ariane_axi_soc::req_t    dev_tr_req_i,
-	output ariane_axi_soc::resp_t   dev_tr_resp_o,
+	input  ariane_axi_soc::req_mmu_t    dev_tr_req_i,
+	output ariane_axi_soc::resp_t   	dev_tr_resp_o,
 
 	// Translation Completion Interface (Master)
-	input  ariane_axi_soc::resp_t   dev_comp_resp_i,
-	output ariane_axi_soc::req_t   	dev_comp_req_o,
+	input  ariane_axi_soc::resp_t   	dev_comp_resp_i,
+	output ariane_axi_soc::req_t   		dev_comp_req_o,
 
-	// Implicit Memory Accesses Interface (Master)
-	input  ariane_axi_soc::resp_t   mem_resp_i,
-	output ariane_axi_soc::req_t    mem_req_o,
+	// Data Structures Interface (Master)
+	input  ariane_axi_soc::resp_t   	ds_resp_i,
+	output ariane_axi_soc::req_t    	ds_req_o,
 
 	// Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
 	input  ariane_axi_soc::req_slv_t    prog_req_i,
@@ -50,12 +50,13 @@ module lint_checks (
 		.DDTC_ENTRIES		( 8							),
 		.PDTC_ENTRIES		( 8							),
 
-		.InclPID            ( 1'b1						),
+		.InclPC             ( 1'b1						),
 		.InclMSITrans       ( 1'b1						),
-		.InclBC             ( 1'b0						),
+		.InclBC             ( 1'b1						),
+
 		.IGS         		( rv_iommu::BOTH			),
 		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),
-		.N_IOHPMCTR			( 0							),
+		.N_IOHPMCTR			( 16						),
 
 		.ADDR_WIDTH			( 64						),
 		.DATA_WIDTH			( 64						),
@@ -71,6 +72,7 @@ module lint_checks (
 		.axi_rsp_t			( ariane_axi_soc::resp_t	),
 		.axi_req_slv_t		( ariane_axi_soc::req_slv_t	),
 		.axi_rsp_slv_t		( ariane_axi_soc::resp_slv_t),
+		.axi_req_mmu_t		( ariane_axi_soc::req_mmu_t ),
 		.reg_req_t			( iommu_reg_req_t			),
 		.reg_rsp_t			( iommu_reg_rsp_t			)
 	) i_riscv_iommu (
@@ -87,8 +89,8 @@ module lint_checks (
 		.dev_comp_req_o		( dev_comp_req_o	),
 
 		// Implicit Memory Accesses Interface (Master)
-		.mem_resp_i			( mem_resp_i		),
-		.mem_req_o			( mem_req_o		    ),
+		.ds_resp_i			( ds_resp_i			),
+		.ds_req_o			( ds_req_o		    ),
 
 		// Programming Interface (Slave) (AXI4 Full -> AXI4-Lite -> Reg IF)
 		.prog_req_i			( prog_req_i		),

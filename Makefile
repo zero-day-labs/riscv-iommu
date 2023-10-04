@@ -28,11 +28,16 @@ WARN_FLAGS += -Wno-LATCH
 INC += -I./packages
 INC += -I./vendor
 INC += -I./include
-INC += -I./src
-INC += -I./src/cdw
-INC += -I./src/ptw
-INC += -I./src/iotlb
-INC += -I./src/translation_wrapper
+INC += -I./rtl
+INC += -I./rtl/translation_logic
+INC += -I./rtl/translation_logic/cdw
+INC += -I./rtl/translation_logic/ptw
+INC += -I./rtl/translation_logic/iotlb
+INC += -I./rtl/translation_logic/wrapper
+INC += -I./rtl/software_interface
+INC += -I./rtl/software_interface/regmap
+INC += -I./rtl/software_interface/wrapper
+INC += -I./rtl/ext_interfaces
 
 all: lint
 
