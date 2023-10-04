@@ -30,7 +30,7 @@ This work is licensed under the Apache-2.0 License and the Solderpad Hardware Li
 
 This repository contains the RTL implementation of an Input/Output Memory Management Unit (IOMMU), compliant with the [RISC-V IOMMU Specification](https://github.com/riscv-non-isa/riscv-iommu). An IOMMU performs permission checks, address translation and interrupt remapping on requests originated by DMA-capable IO devices.
 
-***This implementation is currently under development.***
+**Disclaimer**: *This implementation is currently under development.*
 
 A basic version of the IOMMU IP with mandatory features defined by the spec and virtualization support has been achieved and validated. However, it's still possible to find some minor bugs. The internal design of the IP is ilustrated in the diagram below. Advanced modules/features are presented in gray, and are not implemented yet.
 
@@ -50,8 +50,8 @@ All SystemVerilog header files required to build the IP are located in the *incl
 ### **Required SV packages *(packages)***
 All SystemVerilog packages required to build the IP are located in the *packages* folder.
 
-### **RTL source files *(src)***
-The *src* folder contains all SystemVerilog source files that make up the IP.
+### **RTL source files *(rtl)***
+The *rtl* folder contains all SystemVerilog source files that make up the IP.
 
 ### **Standalone components *(vendor)***
 The *vendor* folder holds SystemVerilog source files of all standalone RTL modules used in the IOMMU IP.
@@ -89,7 +89,9 @@ Four AXI4-Full interfaces are used by the IOMMU to operate:
 
 Slave interface used by RISC-V harts to program and monitor the memory-mapped registers of the IOMMU. These registers must be located within a naturally aligned 4-KiB region of physical address space.
 
-### **Memory Interface**
+![My Image](doc/ext_interfaces/reg_if.png)
+
+### **Data Structures Interface**
 
 Master interface used by modules that generate implicit memory accesses during the translation process. Arbitration logic is used to control access to this interface. The following table summarizes these modules and the data structures accessed by them. 
 
@@ -101,13 +103,13 @@ Master interface used by modules that generate implicit memory accesses during t
 | Fault Queue handler | Fault Queue |
 | Interrupt Generation (IGS) | IOMMU-generated MSIs |
 
-![My Image](doc/AXI/memory_if.png)
+![My Image](doc/ext_interfaces/mem_if.png)
 
 ### **Translation Request Interface**
 
 Slave interface to which DMA-capable devices connect to request address translations. A request is initiated by setting *AxVALID*. The input IO Virtual Address is taken from the AxADDR bus.
 
-![My Image](doc/AXI/tr_if.png)
+![My Image](doc/ext_interfaces/tr_comp_if.png)
 
 ### **Translation Completion Interface**
 
