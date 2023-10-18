@@ -1898,7 +1898,7 @@ module rv_iommu_regmap #(
   generate
   if (LOG2_INTVEC > 0) begin : gen_icvec
     
-    //   F[civ]: 3:0
+    //   F[civ]
     rv_iommu_field #(
       .DATA_WIDTH      (LOG2_INTVEC),
       .SwAccess(SwAccessRW),
@@ -1925,7 +1925,7 @@ module rv_iommu_regmap #(
     );
 
 
-    //   F[fiv]: 7:4
+    //   F[fiv]
     rv_iommu_field #(
       .DATA_WIDTH      (LOG2_INTVEC),
       .SwAccess(SwAccessRW),
@@ -1951,62 +1951,40 @@ module rv_iommu_regmap #(
       .qs     (icvec_fiv_qs)
     );
 
+    if (N_IOHPMCTR > 0) begin : gen_hpm
 
-    //   F[pmiv]: 11:8
-    rv_iommu_field #(
-      .DATA_WIDTH      (LOG2_INTVEC),
-      .SwAccess(SwAccessRW),
-      .RESVAL  ('0)
-    ) u_icvec_pmiv (
-      .clk_i   (clk_i    ),
-      .rst_ni  (rst_ni  ),
+      //   F[pmiv]
+      rv_iommu_field #(
+        .DATA_WIDTH      (LOG2_INTVEC),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_icvec_pmiv (
+        .clk_i   (clk_i    ),
+        .rst_ni  (rst_ni  ),
 
-      // from register interface
-      .we     (icvec_pmiv_we),
-      .wd     (icvec_pmiv_wd),
+        // from register interface
+        .we     (icvec_pmiv_we),
+        .wd     (icvec_pmiv_wd),
 
-      // from internal hardware
-      .de     ('0),
-      .d      ('0),
-      .ds     (),
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
 
-      // to internal hardware
-      .qe     (),
-      .q      (reg2hw.icvec.pmiv.q[(LOG2_INTVEC-1):0]),
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.icvec.pmiv.q[(LOG2_INTVEC-1):0]),
 
-      // to register interface (read)
-      .qs     (icvec_pmiv_qs)
-    );
+        // to register interface (read)
+        .qs     (icvec_pmiv_qs)
+      );
+    end : gen_hpm
 
+    else begin : gen_hpm_disabled
 
-    //   F[piv]: 15:12
-    // rv_iommu_field #(
-    //   .DATA_WIDTH      (LOG2_INTVEC),
-    //   .SwAccess(SwAccessRW),
-    //   .RESVAL  (4'h0)
-    // ) u_icvec_piv (
-    //   .clk_i   (clk_i    ),
-    //   .rst_ni  (rst_ni  ),
-
-    //   // from register interface
-    //   .we     (icvec_piv_we),
-    //   .wd     (icvec_piv_wd),
-
-    //   // from internal hardware
-    //   .de     (hw2reg.icvec.piv.de),
-    //   .ds     (),
-    //   .d      (hw2reg.icvec.piv.d ),
-
-    //   // to internal hardware
-    //   .qe     (),
-    //   .q      (reg2hw.icvec.piv.q ),
-
-    //   // to register interface (read)
-    //   .qs     (icvec_piv_qs)
-    // );
-
-    assign icvec_piv_qs = '0;
-    assign reg2hw.icvec.piv.q = '0;
+      assign icvec_pmiv_qs = '0;
+      assign reg2hw.icvec.pmiv.q = '0;
+    end
   end
 
   else begin : gen_icvec_disabled
@@ -2018,11 +1996,11 @@ module rv_iommu_regmap #(
 
     assign icvec_pmiv_qs = '0;
     assign reg2hw.icvec.pmiv.q = '0;
-
-    assign icvec_piv_qs = '0;
-    assign reg2hw.icvec.piv.q = '0;
   end
   endgenerate
+
+  assign icvec_piv_qs = '0;
+  assign reg2hw.icvec.piv.q = '0;
   
   // Generate MSI Configuration Table if IOMMU includes MSI gen support
   if ((IGS == rv_iommu::MSI_ONLY) || (IGS == rv_iommu::BOTH)) begin : gen_msi_cfg_tbl

@@ -22,7 +22,7 @@ module rv_iommu_wsi_ig #(
     parameter int unsigned N_INT_SRCS   = 3,
     
     // DO NOT MODIFY
-    parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
+    parameter int unsigned LOG2_INTVEC = (N_INT_VEC == 1) ? (1) : ($clog2(N_INT_VEC))
 ) (
     
     // fctl.wsi

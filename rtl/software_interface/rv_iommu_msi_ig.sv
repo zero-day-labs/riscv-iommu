@@ -38,7 +38,7 @@ module rv_iommu_msi_ig #(
     parameter type  axi_rsp_t       = logic,
 
     // DO NOT MODIFY
-    parameter int unsigned LOG2_INTVEC = $clog2(N_INT_VEC)
+    parameter int unsigned LOG2_INTVEC = (N_INT_VEC == 1) ? (1) : ($clog2(N_INT_VEC))
 ) (
     input  logic clk_i,
     input  logic rst_ni,

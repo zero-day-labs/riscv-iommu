@@ -384,11 +384,12 @@ module rv_iommu_cq_handler #(
                         flush_did_o = cmd_iodirinval.did;
 
                         // "A command is determined to be illegal if a reserved bit is set to 1"
-                        // "PID operand is reserved for IODIR.INVAL_PDT"
+                        // "The PID operand is reserved for IODIR.INVAL_DDT"
+                        // "The DV operand must be 1 for IODIR.INVAL_PDT"
                         if ((|cmd_iodirinval.reserved_1) || (|cmd_iodirinval.reserved_2)    || 
                             (|cmd_iodirinval.reserved_3) || (|cmd_iodirinval.reserved_4)    ||
-                            (cmd_iodirinval.func3 == rv_iommu::DDT && |cmd_iodirinval.pid) ||
-                            (cmd_iodirinval.func3 == rv_iommu::PDT && !cmd_iodirinval.dv)  ) begin
+                            (cmd_iodirinval.func3 == rv_iommu::DDT && |cmd_iodirinval.pid)  ||
+                            (cmd_iodirinval.func3 == rv_iommu::PDT && !cmd_iodirinval.dv)     ) begin
                             
                             cmd_ill_o   = 1'b1;
                             error_wen_o = 1'b1;

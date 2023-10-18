@@ -55,8 +55,8 @@ module rv_iommu_ds_if #(
 
     //# AR Channel (PTW, CDW, CQ)
     stream_arbiter #(
-        .DATA_T ( ariane_axi::ar_chan_t ),
-        .N_INP  ( 3                     )
+        .DATA_T ( ariane_axi_soc::ar_chan_t ),
+        .N_INP  ( 3                         )
     ) i_stream_arbiter_ar (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
@@ -70,8 +70,8 @@ module rv_iommu_ds_if #(
 
     //# AW Channel (CQ, FQ, MSI IG)
     stream_arbiter #(
-        .DATA_T ( ariane_axi::aw_chan_t ),
-        .N_INP  ( 3                     )
+        .DATA_T ( ariane_axi_soc::aw_chan_t ),
+        .N_INP  ( 3                         )
     ) i_stream_arbiter_aw (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
@@ -118,8 +118,8 @@ module rv_iommu_ds_if #(
 
     // For invalid AWIDs for which the request was accepted, or when AW FIFO is empty, CQ channel is selected
     stream_mux #(
-        .DATA_T ( ariane_axi::w_chan_t ),
-        .N_INP  ( 3                    )
+        .DATA_T ( ariane_axi_soc::w_chan_t ),
+        .N_INP  ( 3                        )
     ) i_stream_mux_w (
         .inp_data_i  ( {cq_req_i.w, fq_req_i.w, msi_ig_req_i.w} ),
         .inp_valid_i ( {cq_req_i.w_valid, fq_req_i.w_valid, msi_ig_req_i.w_valid} ),
