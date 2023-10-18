@@ -16,10 +16,12 @@
 // Description: Top module to instance riscv_iommu module, 
 //				defining parameters and types for lint checks.
 
-
+`include "include/assertions.svh"
 `include "ariane_axi_soc_pkg.sv"
-`include "rv_iommu_pkg.sv"
 `include "typedef_global.svh"
+`include "rv_iommu_pkg.sv"
+`include "rv_iommu_reg_pkg.sv"
+`include "rv_iommu_field_pkg.sv"
 
 module lint_checks (
 

@@ -17,13 +17,6 @@
 
 /* verilator lint_off WIDTH */
 
-`include "riscv_pkg.sv"
-`include "rv_iommu_pkg.sv"
-`include "axi_pkg.sv"
-`include "ariane_axi_pkg.sv"
-`include "ariane_axi_soc_pkg.sv"
-`include "rv_iommu_reg_pkg.sv"
-
 module riscv_iommu #(
     // Number of IOTLB entries
     parameter int unsigned  IOTLB_ENTRIES       = 4,

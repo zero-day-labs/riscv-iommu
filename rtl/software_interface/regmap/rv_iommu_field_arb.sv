@@ -17,8 +17,6 @@
 //
 // Disclaimer:  This file was generated using LowRISC `reggen` tool. Edit at your own risk.
 
-// `include "packages/rv_iommu_field_pkg.sv"
-
 module rv_iommu_field_arb
     import rv_iommu_field_pkg::*;
     #(

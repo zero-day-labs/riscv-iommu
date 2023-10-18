@@ -17,12 +17,6 @@
 //              Defines data structures and other register-related data.
 //              This module was developed using LowRISC `reggen` tool.
 
-
-`include "include/assertions.svh"
-`include "packages/rv_iommu_reg_pkg.sv"
-`include "packages/rv_iommu_field_pkg.sv"
-`include "register_interface/typedef.svh"
-
 module rv_iommu_regmap #(
   parameter int 			        ADDR_WIDTH = 32,
   parameter int 			        DATA_WIDTH = 32,
