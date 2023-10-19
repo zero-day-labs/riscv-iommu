@@ -90,10 +90,11 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
 
     // PTW states
     enum logic[2:0] {
-      IDLE,             // 000
-      MEM_ACCESS,       // 001
-      PTE_LOOKUP,       // 010
-      PROPAGATE_ERROR   // 011
+      IDLE,         // 000
+      MEM_ACCESS,   // 001
+      PROC_PTE,     // 010
+      PROC_MSI,     // 011
+      ERROR         // 100
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -387,309 +388,262 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
                 
                 // wait for AXI Bus to accept the request
                 if (mem_resp_i.ar_ready) begin
-                    state_n     = PTE_LOOKUP;
+                    state_n     = (msi_translation_q) ? (PROC_MSI) : (PROC_PTE);
                 end
             end
 
-            // Process the incoming memory data (hold in pte)
-            PTE_LOOKUP: begin
+            // Process normal PTEs
+            PROC_PTE: begin
                 // we wait for RVALID to start reading
                 if (mem_resp_i.r_valid) begin
 
                     mem_req_o.r_ready   = 1'b1;
+                        
+                    // We need to save global configuration for non-leaf PTEs marked as global
+                    if (pte.g && ptw_stage_q == STAGE_1)
+                        global_mapping_n = 1'b1;
 
-                    //# MSI address translation
-                    if (msi_translation_q) begin : msi_translation
+                    // Invalid PTE
+                    // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
+                    if (!pte.v || (!pte.r && pte.w)) begin
+                        pf_excep_n    = 1'b1;
+                        state_n         = ERROR;
+                    end
+
+                    //# Valid PTE
+                    else begin : valid_pte
                         state_n = IDLE;
 
-                        update_o = 1'b1;
+                        //# Leaf PTE
+                        if (pte.r || pte.x) begin : leaf_pte
+                            case (ptw_stage_q)
+                                
+                                // Result of S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
+                                STAGE_1: begin
 
-                        // MSI Translation faults: No priorities/order is defined by the spec.
-                        // We stick to the translation process specified in section 2.3.
+                                    //# FINAL GPA
+                                    final_gpa = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};
 
-                        // "If msipte.V == 0, then stop and report "MSI PTE not valid" (cause = 262)"
-                        // This implementation only supports standard MSI PTE formats (msi_pte.c = 0)
-                        if (!msi_pte.v || msi_pte.c) begin
-                            update_o = 1'b0;
-                            cause_n = rv_iommu::MSI_PTE_INVALID;
-                            state_n = PROPAGATE_ERROR;
-                        end
+                                    // update according to the size of the page
+                                    if (main_lvl_q == LVL2)
+                                        final_gpa[20:0] = iova_q[20:0];
+                                    if (main_lvl_q == LVL1)
+                                        final_gpa[29:0] = iova_q[29:0];
 
-                        // "If any bits or encoding that are reserved for future standard use are set within msipte," 
-                        // "stop and report "MSI PTE misconfigured" (cause = 263)."
-                        if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2)) begin
-                            update_o = 1'b0;
-                            cause_n = rv_iommu::MSI_PTE_MISCONFIGURED;
-                            state_n = PROPAGATE_ERROR;
-                        end
+                                    // Save leaf first-stage PTE to update in IOTLB
+                                    leaf_1Spte_n = pte;
 
-                        // "If the transaction is an Untranslated or Translated read-for-execute"
-                        // "then stop and report Instruction access fault (cause = 1)."
-                        if (is_rx_i) begin
-                            update_o = 1'b0;
-                            cause_n = rv_iommu::INSTR_ACCESS_FAULT;
-                            state_n = PROPAGATE_ERROR;
-                        end
+                                    // If second-stage translation is enabled
+                                    if (en_2S_i) begin
+                                        state_n = MEM_ACCESS;
+                                        
+                                        // Save first-stage level where leaf PTE was found
+                                        s1_lvl_n = main_lvl_q;
 
-                        // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
-                        if (msi_pte.m != rv_iommu::WRITE_THROUGH) begin
-                            update_o = 1'b0;
-                            cause_n = rv_iommu::TRANS_TYPE_DISALLOWED;
-                            state_n = PROPAGATE_ERROR;
-                        end
+                                        // save FINAL GPA
+                                        gpaddr_n = final_gpa;
 
-                        // MSI translation successful
-                    end : msi_translation
+                                        // Proceed with final second-stage translation
+                                        ptw_stage_n = STAGE_2_FINAL;
 
-                    //# Normal address translation
-                    else begin : normal_translation
+                                        // pptr for final S2-L1
+                                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], final_gpa[riscv::SVX-1:30], 3'b0};
+                                        main_lvl_n = LVL1;
+                                    end
+
+                                    // GPA is an IMSIC address (even if Stage 2 is disabled)
+                                    if (gpaddr_is_imsic_addr) begin
+                                        state_n = MEM_ACCESS;
+                                        ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {rv_iommu::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
+                                        msi_translation_n = 1'b1;
+                                        main_lvl_n = LVL3;
+                                        s1_lvl_n = LVL3;
+                                    end
+                                end
+
+                                // result of any S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages,
+                                // but the last
+                                STAGE_2_INTERMED: begin
+                                    state_n = MEM_ACCESS;
+                                    ptw_stage_n = STAGE_1;
+
+                                    // Restore first-stage walk level
+                                    main_lvl_n = s1_lvl_q;
+
+                                    gpa_x = {pte.ppn[riscv::GPPNW-1:0], gpa_x_q[11:0]};
+
+                                    // Consider case of superpages
+                                    if (main_lvl_q == LVL2)
+                                        gpa_x[20:0] = gpa_x_q[20:0];
+                                    if (main_lvl_q == LVL1)
+                                        gpa_x[29:0] = gpa_x_q[29:0];
+
+                                    // pptr for S1-L1, S1-L2 or S1-L3
+                                    ptw_pptr_n = gpa_x;
+                                end
+                                default:;
+                            endcase
+
+                            //# Valid translation found (either 1G, 2M or 4K entry): Update IOTLB
+                            // IOTLB is updated only if PTE checks are passed, 
+                            // so that these checks do not need to be performed again on an IOTLB hit
+
+                            // Do not update IOTLB for CDW implicit accesses
+                            // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
+                            // MSI translation process is invoked
+                            if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_imsic_addr)) begin
+                                    if (!cdw_implicit_access_q) update_o = 1'b1;
+                                    else                        cdw_done_o = 1'b1;
+                            end
+
+                            // "(1): If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
+                            // "     Stop and raise a page-fault exception corresponding to the original access type."
+                            // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
+                            // "     a page-fault exception is raised."
+                            // "(3): For G-stage address translation, all memory accesses are considered to be user-level accesses," 
+                            // "     as though executed in U-mode."
+                            if ((main_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
+                                (main_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
+                                (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
+                                (ptw_stage_q != STAGE_1 && !pte.u              )) begin
+                                
+                                pf_excep_n        = 1'b1;
+                                state_n             = ERROR;
+                                ptw_stage_n         = ptw_stage_q;
+                                update_o            = 1'b0;
+                                cdw_done_o          = 1'b0;
+                            end
+                        end : leaf_pte
                         
-                        // We need to save global configuration for non-leaf PTEs marked as global
-                        if (pte.g && ptw_stage_q == STAGE_1)
-                            global_mapping_n = 1'b1;
+                        //# non-leaf PTE
+                        else begin : non_leaf_pte
+                            if (main_lvl_q == LVL1) begin
 
-                        // Invalid PTE
-                        // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
-                        if (!pte.v || (!pte.r && pte.w)) begin
-                            pf_excep_n    = 1'b1;
-                            state_n         = PROPAGATE_ERROR;
-                        end
-
-                        //# Valid PTE
-                        else begin : valid_pte
-                            state_n = IDLE;
-
-                            //# Leaf PTE
-                            if (pte.r || pte.x) begin : leaf_pte
+                                main_lvl_n = LVL2;
                                 case (ptw_stage_q)
-                                    
-                                    // Result of S1-L1 for 1G superpages, S1-L2 for 2M superpages and S1-L3 for 4k pages
+
+                                    // Result of S1-L1
                                     STAGE_1: begin
 
-                                        //# FINAL GPA
-                                        final_gpa = {pte.ppn[riscv::GPPNW-1:0], iova_q[11:0]};
-
-                                        // update according to the size of the page
-                                        if (main_lvl_q == LVL2)
-                                            final_gpa[20:0] = iova_q[20:0];
-                                        if (main_lvl_q == LVL1)
-                                            final_gpa[29:0] = iova_q[29:0];
-
-                                        // Save leaf first-stage PTE to update in IOTLB
-                                        leaf_1Spte_n = pte;
-
-                                        // If second-stage translation is enabled
+                                        // Second-stage enabled: Construct GPA_2
                                         if (en_2S_i) begin
-                                            state_n = MEM_ACCESS;
-                                            
-                                            // Save first-stage level where leaf PTE was found
-                                            s1_lvl_n = main_lvl_q;
+                                            ptw_stage_n = STAGE_2_INTERMED;
+                                            s1_lvl_n = LVL2;    // save first-stage level
 
-                                            // save FINAL GPA
-                                            gpaddr_n = final_gpa;
+                                            //# GPA_2
+                                            gpa_x = {pte.ppn, iova_q[29:21], 3'b0};
+                                            gpa_x_n = gpa_x;
 
-                                            // Proceed with final second-stage translation
-                                            ptw_stage_n = STAGE_2_FINAL;
-
-                                            // pptr for final S2-L1
-                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], final_gpa[riscv::SVX-1:30], 3'b0};
+                                            // pptr for second S2-L1
+                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
+                                            // restart second-stage walk level
                                             main_lvl_n = LVL1;
-                                        end
-
-                                        // GPA is an IMSIC address (even if Stage 2 is disabled)
-                                        if (gpaddr_is_imsic_addr) begin
-                                            state_n = MEM_ACCESS;
-                                            ptw_pptr_n = {msiptp_ppn_i, 12'b0} | {rv_iommu::extract_imsic_num(pte.ppn[riscv::GPPNW-1:0], msi_addr_mask_i), 4'b0};
-                                            msi_translation_n = 1'b1;
-                                            main_lvl_n = LVL3;
-                                            s1_lvl_n = LVL3;
+                                        end 
+                                        
+                                        // Second-stage disabled
+                                        else begin
+                                            // pptr for S1-L2
+                                            ptw_pptr_n = {pte.ppn, iova_q[29:21], 3'b0};
                                         end
                                     end
 
-                                    // result of any S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages,
-                                    // but the last
+                                    // Result of any S2-L1 but the last
                                     STAGE_2_INTERMED: begin
-                                        state_n = MEM_ACCESS;
-                                        ptw_stage_n = STAGE_1;
+                                            // pptr for any S2-L2 but the last
+                                            ptw_pptr_n = {pte.ppn, gpa_x_q[29:21], 3'b0};
+                                    end
 
-                                        // Restore first-stage walk level
-                                        main_lvl_n = s1_lvl_q;
-
-                                        gpa_x = {pte.ppn[riscv::GPPNW-1:0], gpa_x_q[11:0]};
-
-                                        // Consider case of superpages
-                                        if (main_lvl_q == LVL2)
-                                            gpa_x[20:0] = gpa_x_q[20:0];
-                                        if (main_lvl_q == LVL1)
-                                            gpa_x[29:0] = gpa_x_q[29:0];
-
-                                        // pptr for S1-L1, S1-L2 or S1-L3
-                                        ptw_pptr_n = gpa_x;
+                                    // Result of last S2-L1
+                                    STAGE_2_FINAL: begin
+                                            // pptr for last S2-L2
+                                            ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
                                     end
                                     default:;
                                 endcase
+                            end
 
-                                //# Valid translation found (either 1G, 2M or 4K entry): Update IOTLB
-                                // IOTLB is updated only if PTE checks are passed, 
-                                // so that these checks do not need to be performed again on an IOTLB hit
+                            if (main_lvl_q == LVL2) begin
+                                
+                                main_lvl_n  = LVL3;
+                                unique case (ptw_stage_q)
 
-                                // Do not update IOTLB for CDW implicit accesses
-                                // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
-                                // MSI translation process is invoked
-                                if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_imsic_addr)) begin
-                                        if (!cdw_implicit_access_q) update_o = 1'b1;
-                                        else                        cdw_done_o = 1'b1;
-                                end
+                                    // Result of S1-L2
+                                    STAGE_1: begin
 
-                                // "(1): If i > 0 and pte.vpn[i − 1 : 0] != 0, this is a misaligned superpage."
-                                // "     Stop and raise a page-fault exception corresponding to the original access type."
-                                // "(2): When a virtual page is accessed and the A bit is clear, or is written and the D bit is clear,"
-                                // "     a page-fault exception is raised."
-                                // "(3): For G-stage address translation, all memory accesses are considered to be user-level accesses," 
-                                // "     as though executed in U-mode."
-                                if ((main_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
-                                    (main_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
-                                    (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
-                                    (ptw_stage_q != STAGE_1 && !pte.u              )) begin
-                                    
-                                    pf_excep_n        = 1'b1;
-                                    state_n             = PROPAGATE_ERROR;
-                                    ptw_stage_n         = ptw_stage_q;
-                                    update_o            = 1'b0;
-                                    cdw_done_o          = 1'b0;
-                                end
-                            end : leaf_pte
-                            
-                            //# non-leaf PTE
-                            else begin : non_leaf_pte
-                                if (main_lvl_q == LVL1) begin
+                                        // Second-stage enabled: Construct GPA_3
+                                        if (en_2S_i) begin
+                                            ptw_stage_n = STAGE_2_INTERMED;
+                                            s1_lvl_n = LVL3;
 
-                                    main_lvl_n = LVL2;
-                                    case (ptw_stage_q)
+                                            //# GPA_3
+                                            gpa_x = {pte.ppn, iova_q[20:12], 3'b0};
+                                            gpa_x_n = gpa_x;
 
-                                        // Result of S1-L1
-                                        STAGE_1: begin
-
-                                            // Second-stage enabled: Construct GPA_2
-                                            if (en_2S_i) begin
-                                                ptw_stage_n = STAGE_2_INTERMED;
-                                                s1_lvl_n = LVL2;    // save first-stage level
-
-                                                //# GPA_2
-                                                gpa_x = {pte.ppn, iova_q[29:21], 3'b0};
-                                                gpa_x_n = gpa_x;
-
-                                                // pptr for second S2-L1
-                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
-                                                // restart second-stage walk level
-                                                main_lvl_n = LVL1;
-                                            end 
-                                            
-                                            // Second-stage disabled
-                                            else begin
-                                                // pptr for S1-L2
-                                                ptw_pptr_n = {pte.ppn, iova_q[29:21], 3'b0};
-                                            end
+                                            // pptr for third S2-L1
+                                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
+                                            // restart second-stage walk level
+                                            main_lvl_n = LVL1;
+                                        end 
+                                        
+                                        // Second-stage disabled
+                                        else begin
+                                            // pptr for S1-L3
+                                            ptw_pptr_n = {pte.ppn, iova_q[20:12], 3'b0};
                                         end
+                                    end
 
-                                        // Result of any S2-L1 but the last
-                                        STAGE_2_INTERMED: begin
-                                                // pptr for any S2-L2 but the last
-                                                ptw_pptr_n = {pte.ppn, gpa_x_q[29:21], 3'b0};
-                                        end
+                                    // Result S2-L2 but the last
+                                    STAGE_2_INTERMED: begin
+                                            // pptr for any S2-L3 but the last
+                                            ptw_pptr_n = {pte.ppn, gpa_x_q[20:12], 3'b0};
+                                    end
 
-                                        // Result of last S2-L1
-                                        STAGE_2_FINAL: begin
-                                                // pptr for last S2-L2
-                                                ptw_pptr_n = {pte.ppn, gpaddr_q[29:21], 3'b0};
-                                        end
-                                        default:;
-                                    endcase
-                                end
+                                    // Result of last S2-L2
+                                    STAGE_2_FINAL: begin
+                                            // pptr for last S2-L3
+                                            ptw_pptr_n = {pte.ppn, gpaddr_q[20:12], 3'b0};
+                                    end
+                                    default:;
+                                endcase
+                            end
 
-                                if (main_lvl_q == LVL2) begin
-                                    
-                                    main_lvl_n  = LVL3;
-                                    unique case (ptw_stage_q)
+                            state_n = MEM_ACCESS;
 
-                                        // Result of S1-L2
-                                        STAGE_1: begin
+                            // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
+                            // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
+                            if(pte.a || pte.d || pte.u) begin
+                                pf_excep_n  = 1'b1;
+                                state_n     = ERROR;
+                                ptw_stage_n = ptw_stage_q;
+                            end
 
-                                            // Second-stage enabled: Construct GPA_3
-                                            if (en_2S_i) begin
-                                                ptw_stage_n = STAGE_2_INTERMED;
-                                                s1_lvl_n = LVL3;
+                            //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
+                            //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
+                            if (main_lvl_q == LVL3) begin
+                                pf_excep_n  = 1'b1;
+                                state_n     = ERROR;
+                                ptw_stage_n = ptw_stage_q;
+                            end
+                        end : non_leaf_pte
+                    end : valid_pte
 
-                                                //# GPA_3
-                                                gpa_x = {pte.ppn, iova_q[20:12], 3'b0};
-                                                gpa_x_n = gpa_x;
+                    // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
+                    if ((|pte.reserved) != 1'b0) begin
+                        pf_excep_n    = 1'b1;
+                        state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
+                        ptw_stage_n     = ptw_stage_q;
+                        update_o        = 1'b0;
+                        cdw_done_o      = 1'b0;
+                    end
 
-                                                // pptr for third S2-L1
-                                                ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
-                                                // restart second-stage walk level
-                                                main_lvl_n = LVL1;
-                                            end 
-                                            
-                                            // Second-stage disabled
-                                            else begin
-                                                // pptr for S1-L3
-                                                ptw_pptr_n = {pte.ppn, iova_q[20:12], 3'b0};
-                                            end
-                                        end
-
-                                        // Result S2-L2 but the last
-                                        STAGE_2_INTERMED: begin
-                                                // pptr for any S2-L3 but the last
-                                                ptw_pptr_n = {pte.ppn, gpa_x_q[20:12], 3'b0};
-                                        end
-
-                                        // Result of last S2-L2
-                                        STAGE_2_FINAL: begin
-                                                // pptr for last S2-L3
-                                                ptw_pptr_n = {pte.ppn, gpaddr_q[20:12], 3'b0};
-                                        end
-                                        default:;
-                                    endcase
-                                end
-
-                                state_n = MEM_ACCESS;
-
-                                // "For non-leaf PTEs, the D, A, and U bits are reserved for future standard use."
-                                // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
-                                if(pte.a || pte.d || pte.u) begin
-                                    pf_excep_n  = 1'b1;
-                                    state_n     = PROPAGATE_ERROR;
-                                    ptw_stage_n = ptw_stage_q;
-                                end
-
-                                //  "Otherwise, this PTE is a pointer to the next level of the page table. Let i = i − 1."
-                                //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
-                                if (main_lvl_q == LVL3) begin
-                                    pf_excep_n  = 1'b1;
-                                    state_n     = PROPAGATE_ERROR;
-                                    ptw_stage_n = ptw_stage_q;
-                                end
-                            end : non_leaf_pte
-                        end : valid_pte
-
-                        // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
-                        if ((|pte.reserved) != 1'b0) begin
-                            pf_excep_n    = 1'b1;
-                            state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_n     = ptw_stage_q;
-                            update_o        = 1'b0;
-                            cdw_done_o      = 1'b0;
-                        end
-
-                        // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
-                        if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                            pf_excep_n    = 1'b1;
-                            state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
-                            ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
-                            update_o        = 1'b0;
-                            cdw_done_o      = 1'b0;
-                        end
-                    end : normal_translation
+                    // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
+                    if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
+                        pf_excep_n    = 1'b1;
+                        state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
+                        ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
+                        update_o        = 1'b0;
+                        cdw_done_o      = 1'b0;
+                    end
                     
                     /*
                         # Note about IOPMP faults for PTW accesses:
@@ -702,7 +656,7 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
                     // Check for AXI errors
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
                         cause_n = rv_iommu::PT_DATA_CORRUPTION;
-                        state_n = PROPAGATE_ERROR;
+                        state_n = ERROR;
 
                         update_o = 1'b0;
                         cdw_done_o  = 1'b0;
@@ -710,9 +664,68 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
                 end
             end
 
+            // Process MSI PTEs
+            PROC_MSI: begin
+
+                // we wait for RVALID to start reading
+                if (mem_resp_i.r_valid) begin
+
+                    mem_req_o.r_ready   = 1'b1;
+                
+                    state_n = IDLE;
+
+                    update_o = 1'b1;
+
+                    // MSI Translation faults: No priorities/order is defined by the spec.
+                    // We stick to the translation process specified in section 2.3.
+
+                    // "If msipte.V == 0, then stop and report "MSI PTE not valid" (cause = 262)"
+                    // This implementation only supports standard MSI PTE formats (msi_pte.c = 0)
+                    if (!msi_pte.v || msi_pte.c) begin
+                        update_o = 1'b0;
+                        cause_n = rv_iommu::MSI_PTE_INVALID;
+                        state_n = ERROR;
+                    end
+
+                    // "If any bits or encoding that are reserved for future standard use are set within msipte," 
+                    // "stop and report "MSI PTE misconfigured" (cause = 263)."
+                    if ((|msi_pte.reserved_1) || (|msi_pte.reserved_2)) begin
+                        update_o = 1'b0;
+                        cause_n = rv_iommu::MSI_PTE_MISCONFIGURED;
+                        state_n = ERROR;
+                    end
+
+                    // "If the transaction is an Untranslated or Translated read-for-execute"
+                    // "then stop and report Instruction access fault (cause = 1)."
+                    if (is_rx_i) begin
+                        update_o = 1'b0;
+                        cause_n = rv_iommu::INSTR_ACCESS_FAULT;
+                        state_n = ERROR;
+                    end
+
+                    // TODO: For now, only write-through mode for MSI translation is supported. Further on, implement MRIF mode.
+                    if (msi_pte.m != rv_iommu::WRITE_THROUGH) begin
+                        update_o = 1'b0;
+                        cause_n = rv_iommu::TRANS_TYPE_DISALLOWED;
+                        state_n = ERROR;
+                    end
+
+                    // Check for AXI errors
+                    if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
+                        cause_n = rv_iommu::PT_DATA_CORRUPTION;
+                        state_n = ERROR;
+
+                        update_o = 1'b0;
+                        cdw_done_o  = 1'b0;
+                    end
+
+                // MSI translation successful
+                end
+            end
+
             // Propagate error to IOMMU
             // We do need to propagate the bad GPA
-            PROPAGATE_ERROR: begin
+            ERROR: begin
                 state_n     = IDLE;
                 ptw_error_o = 1'b1;
 

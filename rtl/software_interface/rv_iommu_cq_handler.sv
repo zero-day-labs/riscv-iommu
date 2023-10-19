@@ -87,9 +87,9 @@ module rv_iommu_cq_handler #(
     enum logic [2:0] {
         IDLE,           // 000
         FETCH,          // 001
-        WRITE,          // 010
-        REGISTER,       // 011
-        DECODE,         // 100
+        REGISTER,       // 010
+        DECODE,         // 011
+        WRITE,          // 100
         ERROR           // 101
     }   state_q, state_n;
 
@@ -112,7 +112,7 @@ module rv_iommu_cq_handler #(
     assign busy_o = (cq_en_i != cq_en_q);
 
     /* 
-        INFO: When the cqon bit reads 0, the IOMMU guarantees: 
+        INFO: When the cqon bit reads 0, the IOMMU guarantees:
               (i)  That no implicit memory accesses to the command queue are in-flight;
               (ii) The command-queue will not generate new implicit loads to the queue memory.
     */

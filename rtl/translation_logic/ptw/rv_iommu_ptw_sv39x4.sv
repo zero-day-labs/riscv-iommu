@@ -80,8 +80,8 @@ module rv_iommu_ptw_sv39x4 #(
     enum logic[2:0] {
       IDLE,             // 000
       MEM_ACCESS,       // 001
-      PTE_LOOKUP,       // 010
-      PROPAGATE_ERROR   // 011
+      PROC_PTE,       // 010
+      ERROR   // 011
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -323,12 +323,12 @@ module rv_iommu_ptw_sv39x4 #(
                 
                 // wait for AXI Bus to accept the request
                 if (mem_resp_i.ar_ready) begin
-                    state_n     = PTE_LOOKUP;
+                    state_n     = PROC_PTE;
                 end
             end
 
             // Process the incoming memory data (hold in pte)
-            PTE_LOOKUP: begin
+            PROC_PTE: begin
                 // we wait for RVALID to start reading
                 if (mem_resp_i.r_valid) begin
 
@@ -344,7 +344,7 @@ module rv_iommu_ptw_sv39x4 #(
                     // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
                     if (!pte.v || (!pte.r && pte.w)) begin
                         pf_excep_n    = 1'b1;
-                        state_n         = PROPAGATE_ERROR;
+                        state_n         = ERROR;
                     end
 
                     //# Valid PTE
@@ -432,7 +432,7 @@ module rv_iommu_ptw_sv39x4 #(
                                 (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                 
                                 pf_excep_n        = 1'b1;
-                                state_n             = PROPAGATE_ERROR;
+                                state_n             = ERROR;
                                 ptw_stage_n         = ptw_stage_q;
                                 update_o            = 1'b0;
                             end
@@ -536,7 +536,7 @@ module rv_iommu_ptw_sv39x4 #(
                             // "Until their use is defined by a standard extension, they MUST be cleared by software for forward compatibility."
                             if(pte.a || pte.d || pte.u) begin
                                 pf_excep_n  = 1'b1;
-                                state_n     = PROPAGATE_ERROR;
+                                state_n     = ERROR;
                                 ptw_stage_n = ptw_stage_q;
                             end
 
@@ -544,7 +544,7 @@ module rv_iommu_ptw_sv39x4 #(
                             //  "If i < 0, stop and raise a page-fault exception corresponding to the original access type."
                             if (main_lvl_q == LVL3) begin
                                 pf_excep_n  = 1'b1;
-                                state_n     = PROPAGATE_ERROR;
+                                state_n     = ERROR;
                                 ptw_stage_n = ptw_stage_q;
                             end
                         end : non_leaf_pte
@@ -553,7 +553,7 @@ module rv_iommu_ptw_sv39x4 #(
                     // Bits [63:54] are reserved for standard use and must be cleared by SW if the corresponding extension is not implemented
                     if ((|pte.reserved) != 1'b0) begin
                         pf_excep_n    = 1'b1;
-                        state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                        state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
                         ptw_stage_n     = ptw_stage_q;
                         update_o        = 1'b0;
                     end
@@ -561,7 +561,7 @@ module rv_iommu_ptw_sv39x4 #(
                     // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                     if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
                         pf_excep_n    = 1'b1;
-                        state_n         = PROPAGATE_ERROR;  // GPPN bits [44:29] MUST be all zero
+                        state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
                         ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
                         update_o        = 1'b0;
                     end
@@ -577,7 +577,7 @@ module rv_iommu_ptw_sv39x4 #(
                     // Check for AXI errors
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
                         cause_n = rv_iommu::PT_DATA_CORRUPTION;
-                        state_n = PROPAGATE_ERROR;
+                        state_n = ERROR;
 
                         update_o = 1'b0;
                     end
@@ -586,7 +586,7 @@ module rv_iommu_ptw_sv39x4 #(
 
             // Propagate error to IOMMU
             // We do need to propagate the bad GPA
-            PROPAGATE_ERROR: begin
+            ERROR: begin
                 state_n     = IDLE;
                 ptw_error_o = 1'b1;
 
