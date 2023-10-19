@@ -25,7 +25,8 @@ WARN_FLAGS += -Wno-CMPCONST
 WARN_FLAGS += -Wno-SYMRSVDWORD
 WARN_FLAGS += -Wno-LATCH
 
-INC += -I./packages
+INC += -I./packages/dependencies
+INC += -I./packages/rv_iommu
 INC += -I./vendor
 INC += -I./include
 INC += -I./rtl
