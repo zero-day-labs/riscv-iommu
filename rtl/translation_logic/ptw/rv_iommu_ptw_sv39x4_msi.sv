@@ -695,7 +695,6 @@ module rv_iommu_ptw_sv39x4_msi #(
                         state_n = ERROR;
 
                         update_o = 1'b0;
-                        cdw_done_o  = 1'b0;
                     end
 
                 // MSI translation successful
