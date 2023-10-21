@@ -13,10 +13,10 @@
 - [License](#license)
 - [About this Project](#about-this-project)
 - [Repository Structure](#repository-structure)
-- [Features](#features)
-- [Parameters](#parameters)
-- [Interfaces](#interfaces)
-- [Usage](#usage)
+- [IOMMU Features](#iommu-features)
+- [Module Parameters](#module-parameters)
+- [IP Interfaces](#ip-interfaces)
+- [IP Usage](#ip-usage)
 - [Validation](#validation)
 - [Tools and versions](#tools-and-versions)
 - [Roadmap and Contributions](#roadmap-and-contributions)
@@ -31,7 +31,7 @@ This work is licensed under the Apache-2.0 License and the Solderpad Hardware Li
 
 This repository contains the RTL implementation of an Input/Output Memory Management Unit (IOMMU), compliant with the [RISC-V IOMMU Specification](https://github.com/riscv-non-isa/riscv-iommu). An IOMMU performs permission checks, address translation and interrupt remapping on requests originated by DMA-capable devices.
 
-**Disclaimer**: *This implementation is currently under development.*
+:warning: **Disclaimer**: *This implementation is currently under development.*
 
 A baseline version of the IOMMU IP with mandatory features defined by the spec and virtualization support has been achieved and functionally validated. However, it's still possible to find some minor bugs. The microarchitecture of the IP is illustrated in the diagram below.
 
@@ -66,10 +66,10 @@ The *vendor* folder holds SystemVerilog source files of all standalone RTL modul
 > Note: The *lint_checks.sv* file instantiates the **riscv_iommu** module to perform lint checks using *verilator*. Run **make** to perform these checks. Some *verilator* warnings are disabled in the Makefile.
 
 
-## **Features**
+## **IOMMU Features**
 
-Our implementation does **not** include any of the PCIe features defined by the spec, and supports only little-endian memory accesses.
-The following table lists all architectural features supported by this implementation, and those that will be included in the advanced version.
+Our implementation does <ins>**not**</ins> include any of the PCIe features defined by the spec, and supports only little-endian memory accesses.
+The following table lists all architectural features supported by this implementation, and those that may be included in further versions.
 
 | Feature | Notes | Status |
 | ------------- | ------------- | ------------- |
@@ -79,13 +79,14 @@ The following table lists all architectural features supported by this implement
 | Two-stage Address Translation | Sv39/Sv39x4. Includes support for 1GiB and 2MiB superpages | Implemented |
 | Command Queue and Fault/Event Queue | No support for ATS commands | Implemented |
 | MSI Translation | Basic-translate mode only | Implemented |
-| WSI and MSI IOMMU interrupt generation support | WSI generation is selected by default in the ***fctl*** register | Implemented |
-| Memory-mapped register interface | PCIe and debug registers not included | Implemented |
+| WSI and MSI IOMMU Interrupt Generation Support | WSI generation is selected by default in the ***fctl*** register | Implemented |
+| Memory-mapped Register Interface | PCIe and debug registers not included | Implemented |
 | Hardware Performance Monitor | | Implemented |
 | Memory-Resident Interrupt Files (MRIF) support | | NOT Implemented |
 | Debug Register Interface | | NOT Implemented |
+| PCI Express Features (ATS, PRI, returning GPAs in ATS translation, etc.) | | NOT Implemented |
 
-## **Parameters**
+## **Module Parameters**
 
 In order to create an adaptable and customizable IOMMU IP, we define a set of design parameters, as detailed in the Table below. The purpose of these parameters is to control the incorporation of some optional features, and configure microarchitectural properties of internal IOMMU structures.
 
@@ -93,15 +94,15 @@ It is worth noting that, although process context support is categorized as a ma
 
 | Parameter | Function | Possible values |
 | ------------- | ------------- | ------------- |
-|InclPC | Include Process Context support | 0, 1 |
-|IOTLB_ENTRIES, DDTC_ENTRIES, PDTC_ENTRIES | Define number of entries for all IOATCs | [1 - N] |
-| InclMSITrans | Include support for MSI translation in the address translation process | 0, 1 |
-| IGS | Define supported mechanisms for IOMMU interrupt generation | WSI, MSI, WSI & MSI |
-| N_INT_VEC | Define number of interrupt vectors used by the IOMMU | [1 - 16] |
-| N_IOHPMCTR | Define number of event counters in the HPM | [0 - 31] |
-InclBC | Include 4-kiB boundary check logic for AXI4 transactions | 0, 1| 
+|***InclPC*** | Include Process Context support | 0, 1 |
+|***IOTLB_ENTRIES***, ***DDTC_ENTRIES***, ***PDTC_ENTRIES*** | Define number of entries for all IOATCs | [1 - N] |
+| ***InclMSITrans*** | Include support for MSI translation in the address translation process | 0, 1 |
+| ***IGS*** | Define supported mechanisms for IOMMU interrupt generation | WSI, MSI, WSI & MSI |
+| ***N_INT_VEC*** | Define number of interrupt vectors used by the IOMMU | [1 - 16] |
+| ***N_IOHPMCTR*** | Define number of event counters in the HPM | [0 - 31] |
+***InclBC*** | Include 4-kiB boundary check logic for AXI4 transactions | 0, 1| 
 
-## **Interfaces**
+## **IP Interfaces**
 
 Four AXI interfaces are used by the IOMMU to operate:
 
@@ -127,7 +128,7 @@ Master interface used by modules that generate implicit memory accesses during t
 
 ### **Translation Request Interface**
 
-Slave interface to which DMA-capable devices connect to request address translations. A request is initiated by setting *AxVALID*. The input IO Virtual Address is read from the AxADDR bus.
+Slave interface to which DMA-capable devices connect to request address translations. A request is initiated by setting *AxVALID*, and the input IO Virtual Address is read from the AxADDR bus. Translation requests are processed individually, i.e., subsequent requests are stalled until the current one is finished.
 
 ![My Image](doc/ext_interfaces/tr_comp_if.png)
 
@@ -142,7 +143,7 @@ On an error, the AXI demux connects the translation request IF to a [PULP AXI Er
 The IOMMU may be configured to generate interrupts as WSIs to request service from software. For this purpose, a set of external wires is driven by the WSI interrupt generation support module, and should be connected to a Platform-Level Interrupt Controller (e.g. PLIC/APLIC). The number of interrupt wires is defined by the N_INT_VEC parameter.
 
 
-## **Usage**
+## **IP Usage**
 
 The top module of the IOMMU IP, **riscv_iommu** is located in the `riscv_iommu.sv` file. All module parameters are specified when instantiating the module.
 
@@ -155,7 +156,7 @@ The top module of the IOMMU IP, **riscv_iommu** is located in the `riscv_iommu.s
 | AxMMUSSIDV | The transaction includes a valid *process_id* |
 
 ### **Integration into a CVA6-based SoC**
-This IOMMU IP was integrated into a [CVA6-based SoC](https://github.com/zero-day-labs/cva6/tree/feat/iommu) with support for the RISC-V hypervisor extension, along with some instances of the [PULP iDMA](https://github.com/pulp-platform/iDMA) module to issue memory transfers.
+The IOMMU IP was integrated into a [CVA6-based SoC](https://github.com/zero-day-labs/cva6/tree/feat/iommu) with support for the RISC-V hypervisor extension, along with some instances of the [PULP iDMA](https://github.com/pulp-platform/iDMA) module to issue memory transfers.
 
 The diagram below shows the target SoC after the integration of the IOMMU IP (and required DMA modules). To connect multiple DMA devices to the translation request port of the IOMMU, we developed a DMA arbiter with a single master interface.
 
@@ -163,7 +164,7 @@ The diagram below shows the target SoC after the integration of the IOMMU IP (an
 
 ## **Validation**
 
-The IOMMU IP was functionally validated within the CVA6-based SoC, using a baremetal framework with tests to validate the IOMMU architectural features included. The validation process consisted in first performing multiple iterations using the simulated version of the SoC, and finally executing the test framework in the physical FPGA platform (*Genesys2 board*).
+The IOMMU IP was functionally validated within the CVA6-based SoC, using a baremetal framework with tests to validate the IOMMU architectural features included. The validation process consisted in first performing multiple iterations using the simulated version of the SoC, and finally running the test framework in the physical FPGA platform (*Genesys2 board*).
 
 Additionally, we provide a makefile in the root of this repository to perform lint checks using [verilator](https://github.com/verilator/verilator).
 
@@ -189,5 +190,5 @@ Additionally, we provide a makefile in the root of this repository to perform li
 As for the next steps, we plan to add support for the architectural features not included into this version, mentioned in the [features](#features) section. Contribution to this project is accepted in many ways:
 
 - Improving the current design. Increasing efficiency, modularity, scalability, etc;
-- Identifying errors or bugs in the implementation, through the integration and use of the IP in different systems;
-- Adding support for the features identified in [features](#features), or any other features included in the RISC-V IOMMU specification and not included in this design (e.g., PCIe features).
+- Identifying errors or bugs in the implementation, by means of formal verification, or through the integration of the IP in other systems;
+- Adding support for architectural features included in the RISC-V IOMMU specification, and not included in this design.
