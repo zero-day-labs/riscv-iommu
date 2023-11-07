@@ -81,7 +81,7 @@ The following table lists all architectural features supported by this implement
 | MSI Translation | Basic-translate mode only | Implemented |
 | WSI and MSI IOMMU Interrupt Generation Support | WSI generation is selected by default in the ***fctl*** register | Implemented |
 | Memory-mapped Register Interface | PCIe and debug registers not included | Implemented |
-| Hardware Performance Monitor | | Implemented |
+| Hardware Performance Monitor | Up to 31 programmable event counters | Implemented |
 | Memory-Resident Interrupt Files (MRIF) support | | NOT Implemented |
 | Debug Register Interface | | NOT Implemented |
 | PCI Express Features (ATS, PRI, returning GPAs in ATS translation, etc.) | | NOT Implemented |
