@@ -490,7 +490,6 @@ module riscv_iommu #(
         burst_length    = '0;
         n_bytes         = '0;
 
-        // TODO: include AXI IOMMU signals
         // AR request received (this way we are giving priority to read transactions)
         if (dev_tr_req_i.ar_valid) begin
 
