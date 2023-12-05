@@ -12,6 +12,7 @@
 //
 // Author: Manuel Rodríguez <manuel.cederog@gmail.com>
 // Date: 15/08/2023
+// Acknowledges: SSRC - Technology Innovation Institute (TII)
 //
 // Description: AXI4 Boundary Checker module for RISC-V IOMMU: 
 //              Checks whether an AXI transaction crosses a 4-kiB address boundary, 

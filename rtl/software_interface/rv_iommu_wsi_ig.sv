@@ -11,9 +11,10 @@
 // See the License for the specific language governing permissions and limitations under the License.
 //
 // Author: Manuel Rodríguez <manuel.cederog@gmail.com>
-//    Date: 10/03/2023
+// Date: 10/03/2023
+// Acknowledges: SSRC - Technology Innovation Institute (TII)
 //
-//    Description: RISC-V IOMMU WSI Interrupt Generation Module.
+// Description: RISC-V IOMMU WSI Interrupt Generation Module.
 
 module rv_iommu_wsi_ig #(
     // Number of supported interrupt vectors
