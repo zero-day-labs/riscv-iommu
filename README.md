@@ -143,7 +143,7 @@ On an error, the AXI demux connects the translation request IF to a [PULP AXI Er
 The IOMMU may be configured to generate interrupts as WSIs to request service from software. For this purpose, a set of external wires is driven by the WSI interrupt generation support module, and should be connected to a Platform-Level Interrupt Controller (e.g. PLIC/APLIC). The number of interrupt wires is defined by the N_INT_VEC parameter.
 
 
-## **IP Usage**
+## **IP Integration and Validation**
 
 The top module of the IOMMU IP is located in [rtl/riscv_iommu.sv](./rtl/riscv_iommu.sv). All module parameters are specified when instantiating this module.
 
