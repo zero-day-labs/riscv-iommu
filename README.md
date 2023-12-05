@@ -150,7 +150,7 @@ The top module of the IOMMU IP is located in [rtl/riscv_iommu.sv](./rtl/riscv_io
 ### **Integration into a CVA6-based SoC**
 We integrated the IOMMU IP into a [CVA6-based SoC](https://github.com/zero-day-labs/cva6/tree/feat/iommu) with support for the RISC-V hypervisor extension v1.0, along with a configurable number of instances of the [PULP iDMA](https://github.com/pulp-platform/iDMA) module to issue memory transfers.
 
-The diagram below shows the target SoC after the integration of the IOMMU IP (and required DMA modules). To connect multiple DMA devices to the translation request port of the IOMMU, we developed a DMA arbiter with a single master interface.
+The diagram below shows the target SoC after the integration of the IOMMU IP (and required iDMA instances). To connect multiple DMA devices to the translation request port of the IOMMU, we developed a DMA arbiter with a single master interface.
 
 ![My Image](doc/soc.png)
 
@@ -167,9 +167,12 @@ Additionally, we provide a makefile in the root of this repository to perform li
 
 ## Demo
 
-We have developed a functional demo to illustrate the operation and advantages of the RISC-V IOMMU within a virtualized software stack based on Bao hypervisor. The demo is carried out in a Genesys2 FPGA board, and we use the CVA6-based SoC described above with one DMA device and the RISC-V IOMMU IP integrated.
+We have developed a functional demo to illustrate the operation and advantages of the RISC-V IOMMU within two system-level setups:
 
-You can find the source code and instructions to run the demo [here](https://github.com/zero-day-labs/riscv-iommu-demo).
+- Linux with the RISC-V IOMMU driver developed by the RISC-V IOMMU Task Group.
+- Bao hypervisor running a baremetal application.
+
+The demo is carried out in a Genesys2 FPGA board, and we use the CVA6-based SoC described above with one DMA device and the RISC-V IOMMU IP integrated. You can find the source code and instructions to run the demo [here](https://github.com/zero-day-labs/riscv-iommu-demo).
 
 ## **Tools and versions**
 
