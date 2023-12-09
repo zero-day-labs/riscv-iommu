@@ -10,25 +10,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 //
-// Author: Manuel Rodríguez <manuel.cederog@gmail.com>
-// Date: 16/01/2023
+// Author:  Manuel Rodríguez <manuel.cederog@gmail.com>
+// Date:    07/12/2023
 //
 // Description: RISC-V IOMMU MSI Page Table Walker.
-//              TODO: description
+//              Fetches and validates MSI PTEs in FLAT mode or MRIF mode.
+//              For MSI PTEs in flat mode, it updates the IOTLB.
+//              For MSI PTEs in MRIF mode, it updates the MRIF cache.
 //
 
 /*
-    -   This module integrates MSI FLAT logic and MSI MRIF logic in a decoupled manner: Two FSMs (combinational logic blocks).
+    -   This module integrates MSI FLAT logic and MSI MRIF logic in a decoupled manner. Two FSMs:
+            MSI-FLAT and MSI-MRIF, each with one combinational logic block and one sequential logic block.
     -   The first FSM (MSI-FLAT) fetches and validates the first 64 bits of MSI PTEs.
-            If the MSI PTE is in FLAT mode, the FSM updates the IOTLB with the fetched PTE, 
-            signals the external translation logic, and goes back to IDLE. 
+            If the MSI PTE is in FLAT mode, the FSM updates the IOTLB with the fetched PTE and goes back to IDLE. 
             The second beat of the AXI transfer is ignored (RREADY must remain set one cycle)
-    -   If the MSI PTE is in MRIF mode, the MSI-FLAT FSM sets a signal to trigger the second FSM (MSI-MRIF).
-            When triggered, the MSI-MRIF FSM validates the 128 bits of the MSI PTE, the address of the access and the data to be written (interrupt identity).
-            As the data only is provided after the AXI request, once we know that the PTE is in MRIF mode, a signal must be set to accept the request and receive the 32 bits of data
-            Some of these checks do not raise translation faults when failed. 
-            We could set a signal to tell the external translation logic to discard the fault.
-
+    -   If the MSI PTE is in MRIF mode, the MSI-FLAT FSM sets a signal to trigger the MSI-MRIF FSM.
+            When triggered, the MSI-MRIF FSM validates the 128 bits of the MSI PTE and the address of the access.
+            Some of the PT checks do not raise translation faults when failed. The transaction is simply discarded.
+            If all checks are OK, the FSM updates the MRIF cache.
 */
 
 module rv_iommu_msiptw #(
@@ -275,7 +275,7 @@ module rv_iommu_msiptw #(
 
                                 // MRIF support included
                                 if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin
-                                    // trigger MRIF handler
+                                    // trigger MSI-MRIF FSM
                                     init_msi_mrif       = 1'b1;
                                     flat_wait_rlast_n   = 1'b0;
                                     flat_state_n        = IDLE;
