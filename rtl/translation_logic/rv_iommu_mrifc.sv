@@ -10,24 +10,23 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 //
-// Author: Manuel Rodríguez <manuel.cederog@gmail.com>
+// Author:  Manuel Rodríguez <manuel.cederog@gmail.com>
 // Date:    09/12/2023
 //
 // Description: RISC-V IOMMU Memory-Resident Interrupt File Cache (MRIFC).
-//              Fully-associative cache to store MSI PTEs in MRIF mode.
+//              Fully-associative cache to store MSI PTEs in MRIF mode and the first-stage PTEs that map GVA to them.
 
 /*
     -   The RISC-V IOMMU specification defines that MSI translation must be done even if second-stage is Bare.
-        This means that all GPAs processed by the IOMMU must undergo the MSI address check, without regard to the state of both translation stages
+        This means that all GPAs processed by the IOMMU must undergo the MSI address check, without regard to the state of second-state translation
 
     -   When second-stage is not Bare, MSI PTEs are configured by a hypervisor for devices associated with guests.
 
     -   MSI translation in configurations with second-stage in Bare mode are likely used with devices associated with the host OS or
-        in non-vistualized systems.
+        in non-virtualized systems.
 
-    -   As these MSI PTEs belong to different owners, the MRIFC must provide mechanisms to isolate entries with different second-stage configuration.
-
-    -   Entries must be tagged with the second-stage configuration, so hits only occur when this configuration matches.
+    -   If first-stage translation is enabled, this cache stores all first-stage PTEs that map to GPAs of guest MRIFs.
+        Thus, the IOTINVAL.VMA and IOTINVAL.GVMA commands also affect this cache, and entries are tagged with IOVA, GSCID and PSCID.
 */
 
 module rv_iommu_mrifc #(
@@ -37,42 +36,63 @@ module rv_iommu_mrifc #(
     input  logic            rst_ni,         // Asynchronous reset active low
 
     // Flush signals
-    input  logic                    flush_guest_i,  // Flush guest OSes entries
-    input  logic                    flush_host_i,   // Flush entries associated to host OSes or non-v
-    input  logic                    flush_av_i,     // Filter using GPA
-    input  logic                    flush_gv_i,     // Filter using GSCID
-    input  logic [riscv::GPPNW-1:0] flush_gppn_i,   // GPPN to be flushed
-    input  logic [15:0]             flush_gscid_i,  // GSCID to be flushed
+    // Flush signals
+    input  logic                    flush_vma_i,      // IOTINVAL.VMA
+    input  logic                    flush_gvma_i,     // IOTINVAL.GVMA
+    input  logic                    flush_av_i,       // ADDR tag filtering
+    input  logic                    flush_gv_i,       // GSCID tag filtering
+    input  logic                    flush_pscv_i,     // PSCID tag filtering
+    input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN/GPPN to be flushed
+    input  logic [15:0]             flush_gscid_i,    // GSCID to be flushed
+    input  logic [19:0]             flush_pscid_i,    // PSCID to be flushed
 
     // Update signals
-    input  logic                    update_i,       // Update flag
-    input  logic [riscv::GPPNW-1:0] up_gppn_i,      // GPPN tag
-    input  logic [15:0]             up_gscid_i,     // GSCID tag
+    input  logic                    update_i,
+    input  logic                    up_1S_2M_i,
+    input  logic                    up_1S_1G_i,
+    input  logic [riscv::GPPNW-1:0] up_vpn_i,
+    input  logic [19:0]             up_pscid_i,
+    input  logic [15:0]             up_gscid_i,
+    input riscv::pte_t              up_1S_content_i,
     input  rv_iommu::mrifc_entry_t  up_content_i,   // MSI PTE contents
 
     // Lookup signals
-    input  logic                    lookup_i,       // Lookup flag
-    input  logic                    lu_en_2S_i,     // Second-stage translation enabled
-    input  logic [riscv::GPPNW-1:0] lu_gppn_i,      // GPPN tag
-    input  logic [15:0]             lu_gscid_i,     // GSCID tag
-    output logic                    lu_hit_o,       // Hit flag
-    output rv_iommu::mrifc_entry_t  lu_content_o    // Lookup contents
+    input  logic                    lookup_i,           // lookup flag
+    input  logic [riscv::VLEN-1:0]  lu_iova_i,          // IOVA to look for 
+    input  logic [19:0]             lu_pscid_i,         // PSCID to look for
+    input  logic [15:0]             lu_gscid_i,         // GSCID to look for
+    input  logic                    en_1S_i,            // first-stage enabled
+    input  logic                    en_2S_i,            // second-stage enabled
+    output logic                    lu_hit_o,           // hit flag
+    output riscv::pte_t             lu_1S_content_o,    // first-stage PTE
+    output rv_iommu::mrifc_entry_t  lu_content_o        // MSI PTE
 );
 
     // Tags
     struct packed {
-        logic [riscv::GPPNW-1:0]    gppn;   // GPPN 
-        logic [15:0]                gscid;  // GSCID
-        logic                       en_2S;  // Second-stage translation enabled
-        logic                       valid;  // valid entry
+        logic [10:0]    vpn2;       // 3-level VPN (VPN[2] is the segment extended by two bits in Sv39x4)
+        logic [8:0]     vpn1;
+        logic [8:0]     vpn0;
+        logic [19:0]    pscid;      // process address space identifier
+        logic [15:0]    gscid;      // virtual machine identifier
+        logic           is_1S_2M;   // first-stage 2MiB superpage: VPN[0] makes part of the offset
+        logic           is_1S_1G;   // first-stage 1GiB superpage: VPN[0,1] makes part of the offset
+        logic           en_1S;      // first-stage translation enable
+        logic           en_2S;      // second-stage translation enable
+        logic           valid;      // valid bit
     } [MRIFC_ENTRIES-1:0] tags_q, tags_n;
 
     // MRIFC entries: MSI PTEs in MRIF mode
     struct packed {
-        logic [10:0]    nid;
-        logic [44-1:0]  nppn;
-        logic [47-1:0]  addr;
+        riscv::pte_t            pte_1S;     // first-stage data
+        rv_iommu::mrifc_entry_t msi_pte;    // MSI PTE in MRIF mode
     } [MRIFC_ENTRIES-1:0] content_q, content_n;
+
+    logic [8:0] vpn0, vpn1;
+    logic [10:0] vpn2;
+    logic [MRIFC_ENTRIES-1:0] match_gscid;
+    logic [MRIFC_ENTRIES-1:0] match_pscid;
+    logic [MRIFC_ENTRIES-1:0] match_stage;
 
     // Replacement logic
     logic [MRIFC_ENTRIES-1:0] lu_hit;       // to replacement logic
@@ -83,28 +103,51 @@ module rv_iommu_mrifc #(
     //---------
     always_comb begin : lookup
 
-        // default assignment
-        lu_hit         = '{default: 0};
-        lu_hit_o       = 1'b0;
-        lu_content_o   = '{default: 0};
+        // Default Assignments
+        // Wires
+        vpn0 = lu_iova_i[20:12];
+        vpn1 = lu_iova_i[29:21];
+        vpn2 = lu_iova_i[40:30];
+
+        match_pscid     = '{default: 0};
+        match_gscid     = '{default: 0};
+        match_stage     = '{default: 0};
+        lu_hit          = '{default: 0};
+
+        // Output signals
+        lu_hit_o            = 1'b0;
+        lu_1S_content_o     = '{default: 0};
+        lu_msi_content_o    = '{default: 0};
 
         // To guarantee that hit signal is only set when we want to access the cache
         if (lookup_i) begin
 
             for (int unsigned i = 0; i < MRIFC_ENTRIES; i++) begin
                 
-                // Entry match
-                if ((tags_q[i].valid                                                ) &&    // valid
-                    (tags_q[i].gppn == lu_gppn_i                                    ) &&    // GPA match
-                    ((tags_q[i].gscid == lu_gscid_i && lu_en_2S_i) || !lu_en_2S_i   ) &&    // GSCID match
-                    (tags_q[i].en_2S == lu_en_2S_i                                  )       // Stage match
-                    ) begin
+                // PSCID check is skipped for lookups with first-stage disabled
+                // If first-stage is enabled, only PSCID matches and global entries match
+                match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte_1S.g) && en_1S_i) || !en_1S_i;
+
+                // GSCID check is skipped for lookups with second-stage disabled
+                // If second-stage is active, only GSCID matches will indicate entry match
+                match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
+
+                // Check enabled stages
+                match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
                 
-                    lu_content_o.addr   = content_q[i].addr;
-                    lu_content_o.nppn   = content_q[i].nppn;
-                    lu_content_o.nid    = content_q[i].nid;
-                    lu_hit_o            = 1'b1;
-                    lu_hit[i]           = 1'b1;
+                // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
+                if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == tags_q[i].vpn2)) begin
+                    
+                    // 1G match | 2M match | 4k match
+                    if ((tags_q[i].is_1S_1G && tags_q[i].en_1S) || 
+                        ((vpn1 == tags_q[i].vpn1) && 
+                            ((tags_q[i].is_1S_2M && tags_q[i].en_1S) || vpn0 == tags_q[i].vpn0))) begin
+                        
+                        lu_1S_content_o     = content_q[i].pte_1S;
+                        lu_msi_content_o    = content_q[i].msi_pte;
+                        lu_hit_o            = 1'b1;
+                        lu_hit[i]           = 1'b1;
+                    end
                 end
             end
         end
@@ -113,96 +156,187 @@ module rv_iommu_mrifc #(
     // ------------------
     //# Update and Flush
     // ------------------
+
+    logic  [MRIFC_ENTRIES-1:0] gvaddr_vpn0_match;
+    logic  [MRIFC_ENTRIES-1:0] gvaddr_vpn1_match;
+    logic  [MRIFC_ENTRIES-1:0] gvaddr_vpn2_match;
+    logic  [MRIFC_ENTRIES-1:0] gvaddr_2M_match;
+    logic  [MRIFC_ENTRIES-1:0] gvaddr_1G_match;
+    logic  [MRIFC_ENTRIES-1:0] gpaddr_gppn0_match;
+    logic  [MRIFC_ENTRIES-1:0] gpaddr_gppn1_match;
+    logic  [MRIFC_ENTRIES-1:0] gpaddr_gppn2_match;
+    /*
+        !NOTE: 
+        For IOTINVAL.GVMA commands, any entry whose GVA maps to a GPA that matches 
+        the given address in the ADDR field, and also matches the GSCID field, must be invalidated.
+        This requires tagging entries with the GPA, which is hardware costly. A common implementation
+        invalidates all entries that match the GSCID field.
+
+        This implementation assumes the HW cost and performs the IOTINVAL.GVMA completely.
+    */
+    logic  [MRIFC_ENTRIES-1:0] [(riscv::GPPNW-1):0] gppn;
+
     always_comb begin : update_flush
-        tags_n      = tags_q;
-        content_n   = content_q;
+
+        tags_n    = tags_q;
+        content_n = content_q;
 
         for (int unsigned i = 0; i < MRIFC_ENTRIES; i++) begin
+
+            // check if given GVA (39-bits) matches VPN tag
+            gvaddr_vpn0_match[i] = (flush_vpn_i[8:0] == tags_q[i].vpn0);
+            gvaddr_vpn1_match[i] = (flush_vpn_i[17:9] == tags_q[i].vpn1);
+            gvaddr_vpn2_match[i] = (flush_vpn_i[26:18] == tags_q[i].vpn2[8:0]);
+
+            // first-stage superpage cases
+            gvaddr_2M_match[i] = (gvaddr_vpn2_match[i] && gvaddr_vpn1_match[i] && tags_q[i].is_1S_2M);
+            gvaddr_1G_match[i] = (gvaddr_vpn2_match[i] && tags_q[i].is_1S_1G);
+
+            // construct GPA's PPN according to first-stage pte data
+            gppn[i] = make_gppn(tags_q[i].en_1S, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte_1S);
             
+            // check if given GPA matches with any tag
+            gpaddr_gppn0_match[i] = (flush_vpn_i[8:0] == gppn[i][8:0]);
+            gpaddr_gppn1_match[i] = (flush_vpn_i[17:9] == gppn[i][17:9]);
+            gpaddr_gppn2_match[i] = (flush_vpn_i[28:18] == gppn[i][28:18]);
+            
+            //# IOTINVAL.VMA:
+            // Ensures that all previous stores made to the first-stage PTs by the harts are observed by the IOMMU 
+            // before any subsequent implicit read from the IOMMU.
+            // According to the value of GV, AV and PSCV, different entries are selected to be invalidated:
             /*
-                # MRIFC.INVAL_GUEST
-                Invalidate MSI PTEs associated with guest OSes (second-stage enabled).
-                When AV is set, only entries matching the input GPA will be invalidated.
-                When GV is set, only entries matching the input GSCID will be invalidated.
-                When any of these flags is set, all entries are invalidated.
+                |GV|AV|PSCV|
+
+                |0 |0 |0   |    Invalidate all entries for all host address spaces (G-stage translation disabled), including those with G=1 
+                                NOTE: Host address space entries are those with G-stage translation disabled. Some devices may be retained by the hypervisor or host OS
+                |0 |0 |1   |    Invalidate all entries for the host address space identified by PSCID, except for those with G=1
+                |0 |1 |0   |    Invalidate all entries identified by the IOVA in ADDR field, for all host address spaces, including those with G=1
+                |0 |1 |1   |    Invalidate all entries identified by the IOVA in ADDR field, for the host address space identified by PSCID, except for those with G=1 //? Should it be only one entry?
+                |1 |0 |0   |    Invalidate all entries for all address spaces associated to the VM identified by GSCID, including those with G=1
+                |1 |0 |1   |    Invalidate all entries for the address space identified by PSCID, in the VM identified by GSCID, except for those with G=1
+                |1 |1 |0   |    Invalidate all entries corresponding to the IOVA in ADDR field, associated to the VM identified by GSCID, including those with G=1
+                |1 |1 |1   |    Invalidate all entries corresponding to the IOVA in ADDR field, for the VM address space identified by GSCID and PSCID.
             */
-            if (flush_guest_i) begin
-                
-                unique case ({flush_gv_i, flush_av_i})
-
-                    // Invalidate all entries associated with guest OSes
-                    2'b00: begin
-                        if (tags_q[i].en_2S) begin
-                            tags_n[i].valid = 1'b0;
-                        end
-                    end 
-
-                    // GPA filter
-                    2'b01: begin
-                        if (tags_q[i].en_2S && tags_q[i].gppn == flush_gppn_i) begin
+            if(flush_vma_i) begin
+                unique case ({flush_gv_i, flush_av_i, flush_pscv_i})
+                    3'b000: begin
+                        // all host address space entries are flushed
+                        if(!tags_q[i].en_2S && tags_q[i].en_1S) begin
                             tags_n[i].valid = 1'b0;
                         end
                     end
-                    
-                    // GSCID filter
-                    2'b10: begin
-                        if (tags_q[i].en_2S && tags_q[i].gscid == flush_gscid_i) begin
+                    3'b001: begin
+                        // 2S disabled, 1S enabled, PSCID match, exclude global entries
+                        if((!tags_q[i].en_2S && tags_q[i].en_1S) && (tags_q[i].pscid == flush_pscid_i) && !content_q[i].pte_1S.g) begin
                             tags_n[i].valid = 1'b0;
                         end
-                    end 
-                    
-                    // GPA and GSCID filter
-                    2'b11: begin
-                        if (tags_q[i].en_2S && tags_q[i].gppn == flush_gppn_i && tags_q[i].gscid == flush_gscid_i) begin
+                    end
+                    3'b010: begin
+                        // 2S disabled, 1S enabled, GVA match, include global entries
+                        if((!tags_q[i].en_2S && tags_q[i].en_1S) && 
+                            ((gvaddr_vpn2_match[i] && gvaddr_vpn1_match[i] && gvaddr_vpn0_match[i]) ||
+                              gvaddr_2M_match[i] || gvaddr_1G_match[i])) begin
+                                tags_n[i].valid = 1'b0;
+                            end
+                    end
+                    3'b011: begin
+                        // 2S disabled, 1S enabled, GVA match, PSCID match, exclude global entries
+                        if((!tags_q[i].en_2S && tags_q[i].en_1S) && 
+                            ((gvaddr_vpn2_match[i] && gvaddr_vpn1_match[i] && gvaddr_vpn0_match[i]) ||
+                              gvaddr_2M_match[i] || gvaddr_1G_match[i]) &&
+                              tags_q[i].pscid == flush_pscid_i && !content_q[i].pte_1S.g) begin
+                                tags_n[i].valid = 1'b0;
+                            end
+                    end
+                    3'b100: begin
+                        // 2S enabled, 1S enabled, GSCID match, include global mappings
+                        if((tags_q[i].en_2S && tags_q[i].en_1S) && (tags_q[i].gscid == flush_gscid_i)) begin
                             tags_n[i].valid = 1'b0;
                         end
-                    end 
-                    
-                    default: 
+                    end
+                    3'b101: begin
+                        // 2S enabled, 1S enabled, GSCID and PSCID match, exclude global mappings
+                        if( (tags_q[i].en_2S && tags_q[i].en_1S) && 
+                            (tags_q[i].gscid == flush_gscid_i && tags_q[i].pscid == flush_pscid_i) &&
+                             !content_q[i].pte_1S.g) begin
+                                tags_n[i].valid = 1'b0;
+                            end
+                    end
+                    3'b110: begin
+                        // 2S enabled, 1S enabled, GSCID and IOVA (39-bit GVA in this case) match, include global mappings
+                        if( (tags_q[i].en_2S && tags_q[i].en_1S) && 
+                            ((gvaddr_vpn2_match[i] && gvaddr_vpn1_match[i] && gvaddr_vpn0_match[i]) ||
+                              gvaddr_2M_match[i] || gvaddr_1G_match[i]) &&
+                              tags_q[i].gscid == flush_gscid_i) begin
+                                tags_n[i].valid = 1'b0;
+                            end
+                    end
+                    3'b111: begin
+                        // 2S enabled, 1S enabled, GSCID, PSCID and IOVA (39-bit GVA in this case) match, exclude global mappings
+                        if( (tags_q[i].en_2S && tags_q[i].en_1S) && 
+                            ((gvaddr_vpn2_match[i] && gvaddr_vpn1_match[i] && gvaddr_vpn0_match[i]) ||
+                              gvaddr_2M_match[i] || gvaddr_1G_match[i]) &&
+                             (tags_q[i].gscid == flush_gscid_i && tags_q[i].pscid == flush_pscid_i) &&
+                             !content_q[i].pte_1S.g) begin
+                                tags_n[i].valid = 1'b0;
+                            end
+                    end
                 endcase
             end
 
+            //# IOTINVAL.GVMA:
+            // Ensures that all previous stores made to the MSI PTs by the harts 
+            // are observed by the IOMMU before all subsequent implicit reads from the IOMMU.
+            //
+            // 1S entries whose GPA matches the ADDR field and GSCID field must be invalidated by these operations
+            // According to the value of GV and AV, different entries are selected to be invalidated:
             /*
-                # MRIFC.INVAL_HOST
-                Invalidate MSI PTEs associated with the host OS or within a non-virtualized OS (second-stage disabled).
-                When AV is set, only entries matching the input GPA will be invalidated.
-                It does not makes sense to specify GSCID for entries associated with a Host OS or a non-virtualized OS.
-                When AV is not set, all entries are invalidated.
-            */
-            else if (flush_host_i) begin
-                
-                // GPA filter
-                if (flush_av_i) begin
-                    if (!tags_q[i].en_2S && tags_q[i].gppn == flush_gppn_i) begin
-                        tags_n[i].valid = 1'b0;
-                    end
-                end
+                |GV|AV|
 
-                // Invalidate all entries associated to a host OS or non-v OS
-                else begin
-                    
-                    if (!tags_q[i].en_2S) begin
+                |0 |d |     Invalidate second-stage entries for all VM address spaces
+                |1 |0 |     Invalidate second-stage entries for all VM address spaces identified by GSCID
+                |1 |1 |     Invalidate second-stage entries corresponding to the IOVA (GPA) in the ADDR field, for all VM address spaces identified by GSCID.
+            */
+            else if(flush_gvma_i) begin
+                unique casez ({flush_gv_i, flush_av_i})
+                    2'b0?: begin
+                        // Invalidate all entries
                         tags_n[i].valid = 1'b0;
                     end
-                end
+                    2'b10: begin
+                        // GSCID match
+                        if(tags_q[i].gscid == flush_gscid_i) begin
+                            tags_n[i].valid = 1'b0;
+                        end
+                    end
+                    2'b11: begin
+                        // GSCID match, IOVA (41-bit GPA) match
+                        if(tags_q[i].gscid == flush_gscid_i && 
+                           (gpaddr_gppn2_match[i] && gpaddr_gppn1_match[i] && gpaddr_gppn0_match[i])) begin
+                            tags_n[i].valid = 1'b0;
+                        end
+                    end
+                endcase
             end
 
-            // Entry replacement
-            // only valid entries should be cached
+            // normal replacement
             else if (update_i && replace_en[i]) begin
-                
                 // update tags
                 tags_n[i] = '{
-                    gppn:   up_gppn_i,
-                    gscid:  up_gscid_i,
-                    en_2S:  lu_en_2S_i,
-                    valid:  1'b1
+                    pscid:      up_pscid_i,
+                    gscid:      up_gscid_i,
+                    vpn2:       up_vpn_i[28:18],
+                    vpn1:       up_vpn_i[17:9],
+                    vpn0:       up_vpn_i[8:0],
+                    en_1S:      en_1S_i,
+                    en_2S:      en_2S_i,
+                    is_1S_1G:   up_1S_1G_i,
+                    is_1S_2M:   up_1S_2M_i,
+                    valid:      1'b1
                 };
-
-                // update device context
-                content_n[i].addr   = up_content_i.addr;
-                content_n[i].nppn   = up_content_i.nppn;
-                content_n[i].nid    = up_content_i.nid;
+                // and content as well
+                content_n[i].pte_1S = up_1S_content_i;
+                content_n[i].pte_2S = up_2S_content_i;
             end
         end
     end
