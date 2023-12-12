@@ -1,4 +1,4 @@
-// Copyright © 2023 University of Minho
+// Copyright © 2023 Manuel Rodríguez & Zero-Day Labs, Lda.
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 
 // Licensed under the Solderpad Hardware License v 2.1 (the “License”); 
@@ -9,13 +9,12 @@
 // any work distributed under the License is distributed on an “AS IS” BASIS, 
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
-
-/*
-    Author: Manuel Rodríguez, University of Minho <manuel.cederog@gmail.com>
-    Date:    10/11/2022
-
-    Description: RISC-V IOMMU SV package.
-*/
+//
+// Author:  Manuel Rodríguez <manuel.cederog@gmail.com>
+// Date:    10/11/2022
+//
+// Description: RISC-V IOMMU SV package.
+//
 
 `ifndef RV_IOMMU_PKG
 `define RV_IOMMU_PKG
@@ -171,37 +170,52 @@ package rv_iommu;
     //#  MSI Address Translation
     //--------------------------
 
+    typedef enum logic[1:0] {
+      MSI_DISABLED,
+      MSI_FLAT_ONLY,
+      MSI_FLAT_MRIF
+    } msi_trans_t;
+
     typedef enum logic [1:0] {
         RSV_1           = 2'b00,
         MRIF            = 2'b01,
         RSV_2           = 2'b10,
-        WRITE_THROUGH   = 2'b11
+        FLAT            = 2'b11
     } msi_pte_mode_e;
 
     // MSI PTE (Write-through mode)
     typedef struct packed {
         logic           c;
-        logic [8:0]     reserved_2;
+        logic [8:0]     __rsv_2;
         logic [44-1:0]  ppn;
-        logic [6:0]     reserved_1;
+        logic [6:0]     __rsv_1;
         msi_pte_mode_e  m;
         logic           v;
-    } msi_wt_pte_t;
+    } msi_pte_flat_t;
 
     // MSI PTE (MRIF mode)
     typedef struct packed {
-        logic [2:0]     reserved_4;
+        logic [2:0]     __rsv_4;
         logic           nid_10;
-        logic [5:0]     reserved_3;
+        logic [5:0]     __rsv_3;
         logic [44-1:0]  nppn;
         logic [9:0]     nid_9_0;
+    } msi_pte_notice_t;
+
+    typedef struct packed {
         logic           c;
-        logic [8:0]     reserved_2;
-        logic [47-1:0]  ppn;
-        logic [3:0]     reserved_1;
+        logic [8:0]     __rsv_2;
+        logic [47-1:0]  addr;
+        logic [3:0]     __rsv_1;
         msi_pte_mode_e  m;
         logic           v;
-    } msi_mrif_pte_t;
+    } msi_pte_mrif_t;
+
+    typedef struct packed {
+        logic [10:0]    nid;
+        logic [44-1:0]  nppn;
+        logic [47-1:0]  addr;
+    } mrifc_entry_t;
 
     //----------------------
     //#  IOMMU Command Queue
@@ -434,14 +448,14 @@ package rv_iommu;
 
     // Extract Interrupt File number from GPA
     // The resulting IF number is used to index the corresponding MSI PTE in memory.
-    function logic [(MSI_MASK_LEN-1):0] extract_imsic_num(input logic [(MSI_MASK_LEN-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
-        logic [(MSI_MASK_LEN-1):0] masked_gpaddr, imsic_num;
+    function logic [(MSI_MASK_LEN-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
+        logic [(riscv::GPPNW-1):0] masked_gpaddr, imsic_num;
         int unsigned i;
 
-        masked_gpaddr = gpaddr & mask;
+        masked_gpaddr = gpaddr & mask[(riscv::GPPNW-1):0];
         imsic_num = '0;
         i = 0;
-        for (int unsigned k = 0 ; k < MSI_MASK_LEN; k++) begin
+        for (int unsigned k = 0 ; k < riscv::GPPNW; k++) begin
             if (mask[k]) begin
                 imsic_num[i] = masked_gpaddr[k];
                 i++;

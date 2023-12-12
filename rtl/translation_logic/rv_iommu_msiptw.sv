@@ -23,7 +23,8 @@
     -   This module integrates MSI FLAT logic and MSI MRIF logic in a decoupled manner. Two FSMs:
             MSI-FLAT and MSI-MRIF, each with one combinational logic block and one sequential logic block.
     -   The first FSM (MSI-FLAT) fetches and validates the first 64 bits of MSI PTEs.
-            If the MSI PTE is in FLAT mode, the FSM updates the IOTLB with the fetched PTE and goes back to IDLE. 
+            If the MSI PTE is in FLAT mode, the FSM updates the IOTLB with the fetched PTE and the first-stage 
+            data provided by the PTW, if is the case. The it goes back to IDLE. 
             The second beat of the AXI transfer is ignored (RREADY must remain set one cycle)
     -   If the MSI PTE is in MRIF mode, the MSI-FLAT FSM sets a signal to trigger the MSI-MRIF FSM.
             When triggered, the MSI-MRIF FSM validates the 128 bits of the MSI PTE and the address of the access.
@@ -48,30 +49,41 @@ module rv_iommu_msiptw #(
     input  axi_rsp_t    mem_resp_i,
     output axi_req_t    mem_req_o,
 
-    // IOVA to be translated
-    input  logic [riscv::VLEN-1:0]  req_addr_i,
+    // Trigger MSI translation
+    input  logic init_msi_trans_i,
+    // Abort access (discard without fault)
+    output logic abort_o,
+
+    input  logic [(riscv::GPPNW-1):0]   vpn_i,
+    input  logic [19:0]                 pscid_i,
+    input  logic [15:0]                 gscid_i,
+    input  logic                        1S_2M_i,
+    input  logic                        1S_1G_i,
+    input  riscv::pte_t                 gpte_i,
+
     // The translation is read-for-execute
-    input  logic                    is_rx_i,
+    input  logic                        is_rx_i,
 
     // MSI PT base PPN
     input  logic [(riscv::PPNW-1):0]            msiptp_ppn_i,
     // MSI address mask
     input  logic [(rv_iommu::MSI_MASK_LEN-1):0] msi_addr_mask_i,
 
-    // IOTLB update wires
-    output logic                        flat_update_o,
-    output logic [(riscv::PPNW-1):0]    up_flat_ppn_o,
+    // Generic update ports
+    output logic [(riscv::GPPNW-1):0]   vpn_o,
+    output logic [19:0]                 pscid_o,
+    output logic [15:0]                 gscid_o,
+    output logic                        1S_2M_o,
+    output logic                        1S_1G_o,
+    output riscv::pte_t                 1S_content_o,
 
-    // MRIF update wires
-    output logic        mrif_update_o,
-    output logic [46:0] up_mrif_addr_o,
-    output logic [10:0] up_notice_nid_o,
-    output logic [43:0] up_notice_ppn_o,
+    // IOTLB update ports
+    output logic                        iotlb_update_o,
+    output rv_iommu::msi_pte_flat_t     iotlb_msi_content_o,
 
-    // Trigger MSI translation
-    input  logic init_msi_flat_i,
-    // Abort access (discard without fault)
-    output logic abort_o,
+    // MRIFC update ports
+    output logic                        mrifc_update_o,
+    output rv_iommu::mrifc_entry_t      mrifc_msi_content_o,
 
     // Error signaling
     output logic                                error_o,
@@ -105,7 +117,26 @@ module rv_iommu_msiptw #(
     // Trigger MRIF-MSI FSM
     logic init_msi_mrif;
 
-    // MSI-MRIF signals and assignments
+    // Registers to propagate first-stage data
+    logic [(riscv::GPPNW-1):0]   vpn_q,     vpn_n;
+    logic [19:0]                 pscid_q,   pscid_n;
+    logic [15:0]                 gscid_q,   gscid_n;
+    logic                        1S_2M_q,   1S_2M_n;
+    logic                        1S_1G_q,   1S_1G_n;
+    riscv::pte_t                 gpte_q,    gpte_n;
+
+    // Generic update ports
+    assign vpn_o          = vpn_q;
+    assign pscid_o        = pscid_q;
+    assign gscid_o        = gscid_q;
+    assign 1S_2M_o        = 1S_2M_q;
+    assign 1S_1G_o        = 1S_1G_q;
+    assign 1S_content_o   = gpte_q;
+
+    // IOTLB update ports
+    assign iotlb_msi_content_o  = msi_pte_flat;
+
+    //# MSI-MRIF signals and assignments
     generate
 
     // MRIF support enabled
@@ -134,14 +165,21 @@ module rv_iommu_msiptw #(
         // Destination MRIF address register
         logic [46:0] mrif_addr_q, mrif_addr_n;
 
+        // MRIFC update ports
+        assign mrifc_msi_content_o.addr = mrif_addr_q;
+        assign mrifc_msi_content_o.nid  = {msi_pte_notice.nid_10, msi_pte_notice.nid_9_0};
+        assign mrifc_msi_content_o.nppn = msi_pte_notice.nppn;
+
         assign error_o = (flat_state_q == FLAT_ERROR) | (mrif_state_q == MRIF_ERROR);
         assign cause_o = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ((mrif_state_q == MRIF_ERROR) ? (mrif_cause_q) : ('0));
     end : gen_mrif_support
 
     // MRIF support disabled
     else begin : gen_mrif_support_disabled
-        assign error_o = (flat_state_q == FLAT_ERROR);
-        assign cause_o = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ('0);
+
+        assign mrifc_msi_content_o  = '0;
+        assign error_o              = (flat_state_q == FLAT_ERROR);
+        assign cause_o              = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ('0);
     end : gen_mrif_support_disabled
     endgenerate
 
@@ -199,14 +237,19 @@ module rv_iommu_msiptw #(
         // R
         mem_req_o.r_ready   = 1'b1;
 
-        flat_update_o       = 1'b0;
-        up_flat_ppn_o       = msi_pte_flat.ppn;
+        iotlb_update_o      = 1'b0;
 
         // Next values
         pptr_n              = pptr_q;
         flat_state_n        = flat_state_q;
         flat_wait_rlast_n   = flat_wait_rlast_q;
         flat_cause_n        = flat_cause_q;
+        vpn_n               = vpn_q;
+        pscid_n             = pscid_q;
+        gscid_n             = gscid_q;
+        1S_2M_n             = 1S_2M_q;
+        1S_1G_n             = 1S_1G_q;
+        gpte_n              = gpte_q;
 
         case (flat_state_q)
 
@@ -217,15 +260,28 @@ module rv_iommu_msiptw #(
                 flat_wait_rlast_n   = 1'b0;
                 
                 // Translation logic requested MSI translation
-                if (init_msi_flat_i) begin
-                    pptr_n          = {msiptp_ppn_i, 12'b0} | (rv_iommu::extract_imsic_num(req_addr_i[(riscv::VLEN-1):12], msi_addr_mask_i) << 4);
-                    flat_state_n    = MEM_ACCESS;
+                if (init_msi_trans_i) begin
 
                     // "If the transaction is an Untranslated or Translated read-for-execute"
                     // "then stop and report Instruction access fault (cause = 1)."
                     if (is_rx_i) begin
                         flat_cause_n = rv_iommu::INSTR_ACCESS_FAULT;
                         flat_state_n = FLAT_ERROR;
+                    end
+
+                    // Set pptr and propagate first-stage data
+                    else begin
+                        
+                        pptr_n          = {msiptp_ppn_i, 12'b0} | (rv_iommu::extract_imsic_num(msi_vpn_i, msi_addr_mask_i) << 4);
+
+                        vpn_n           = vpn_i;
+                        pscid_n         = pscid_i;
+                        gscid_n         = gscid_i;
+                        1S_2M_n         = 1S_2M_i;
+                        1S_1G_n         = 1S_1G_i;
+                        gpte_n          = gpte_i;
+
+                        flat_state_n    = MEM_ACCESS;
                     end
                 end
             end
@@ -300,7 +356,7 @@ module rv_iommu_msiptw #(
 
                                 // Update IOTLB and go to IDLE
                                 else begin
-                                    flat_update_o       = 1'b1;
+                                    iotlb_update_o      = 1'b1;
                                     flat_wait_rlast_n   = 1'b0;   
                                     flat_state_n        = IDLE;
                                 end
@@ -339,10 +395,7 @@ module rv_iommu_msiptw #(
             // Wires
 
             // Output values
-            mrif_update_o       = 1'b0;
-            up_mrif_addr_o      = mrif_addr_q;
-            up_notice_nid_o     = {msi_pte_notice.nid_10, msi_pte_notice.nid_9_0};
-            up_notice_ppn_o     = msi_pte_notice.nppn;
+            mrifc_update_o      = 1'b0;
             abort_o             = 1'b0;
 
             // Next values
@@ -398,7 +451,7 @@ module rv_iommu_msiptw #(
 
                         // Everything OK, update MRIF cache
                         else begin
-                            mrif_update_o       = 1'b1;
+                            mrifc_update_o       = 1'b1;
                             mrif_state_n        = MRIF_PTE;
                         end
                     end
@@ -418,7 +471,7 @@ module rv_iommu_msiptw #(
             if ((((mrif_state_q == NOTICE_PTE) && init_msi_mrif) | (mrif_state_q == NOTICE_PTE) ) && 
                 (mem_resp_i.r_valid) && (mem_resp_i.r.resp != axi_pkg::RESP_OKAY                )) begin
 
-                mrif_update_o       = 1'b0;
+                mrifc_update_o      = 1'b0;
                 mrif_wait_rlast_n   = ~mem_resp_i.r.last;
                 mrif_cause_n        = rv_iommu::MSI_PT_DATA_CORRUPTION;
                 mrif_state_n        = MRIF_ERROR;
@@ -429,11 +482,8 @@ module rv_iommu_msiptw #(
     // MRIF support disabled
     else begin : gen_mrif_support_disabled
 
-        mrif_update_o       = 1'b0;
-        up_mrif_addr_o      = '0;
-        up_notice_nid_o     = '0;
-        up_notice_ppn_o     = '0;
-        abort_o             = 1'b0;
+        mrifc_update_o  = 1'b0;
+        abort_o         = 1'b0;
     end : gen_mrif_support_disabled
     endgenerate
 
@@ -463,6 +513,13 @@ module rv_iommu_msiptw #(
                 mrif_wait_rlast_q   <= 1'b0;
                 mrif_cause_q        <= '0;
                 mrif_addr_q         <= '0;
+                vpn_q               <= '0;
+                pscid_q             <= '0;
+                gscid_q             <= '0;
+                1S_2M_q             <= 1'b0;
+                1S_1G_q             <= 1'b0;
+                gpte_q              <= '0;
+                
             end 
             
             else begin
@@ -470,6 +527,12 @@ module rv_iommu_msiptw #(
                 mrif_wait_rlast_q   <= mrif_wait_rlast_n;
                 mrif_cause_q        <= mrif_cause_n;
                 mrif_addr_q         <= mrif_addr_n;
+                vpn_q               <= vpn_n;
+                pscid_q             <= pscid_n;
+                gscid_q             <= gscid_n;
+                1S_2M_q             <= 1S_2M_n;
+                1S_1G_q             <= 1S_1G_n;
+                gpte_q              <= gpte_n;
             end
         end : mrif_seq
     end : gen_mrif_support

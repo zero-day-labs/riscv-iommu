@@ -53,8 +53,8 @@ module rv_iommu_mrifc #(
     input  logic [riscv::GPPNW-1:0] up_vpn_i,
     input  logic [19:0]             up_pscid_i,
     input  logic [15:0]             up_gscid_i,
-    input riscv::pte_t              up_1S_content_i,
-    input  rv_iommu::mrifc_entry_t  up_content_i,   // MSI PTE contents
+    input  riscv::pte_t             up_1S_content_i,
+    input  rv_iommu::mrifc_entry_t  up_msi_content_i,   // MSI PTE contents
 
     // Lookup signals
     input  logic                    lookup_i,           // lookup flag

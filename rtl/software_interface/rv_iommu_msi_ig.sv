@@ -118,7 +118,7 @@ module rv_iommu_msi_ig #(
         // W
         mem_req_o.w.data        = msi_data_x_i[intv_q];
         /* verilator lint_on WIDTH */
-        mem_req_o.w.strb        = '1;
+        mem_req_o.w.strb        = 8'b0000_1111;
         mem_req_o.w.last        = 1'b0;
         mem_req_o.w.user        = '0;
 
