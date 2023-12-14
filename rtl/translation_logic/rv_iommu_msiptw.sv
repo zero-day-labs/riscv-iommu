@@ -52,13 +52,13 @@ module rv_iommu_msiptw #(
     // Trigger MSI translation
     input  logic init_msi_trans_i,
     // Abort access (discard without fault)
-    output logic abort_o,
+    output logic ignore_o,
 
     input  logic [(riscv::GPPNW-1):0]   vpn_i,
     input  logic [19:0]                 pscid_i,
     input  logic [15:0]                 gscid_i,
-    input  logic                        1S_2M_i,
-    input  logic                        1S_1G_i,
+    input  logic                        is_1S_2M_i,
+    input  logic                        is_1S_1G_i,
     input  riscv::pte_t                 gpte_i,
 
     // The translation is read-for-execute
@@ -73,9 +73,9 @@ module rv_iommu_msiptw #(
     output logic [(riscv::GPPNW-1):0]   vpn_o,
     output logic [19:0]                 pscid_o,
     output logic [15:0]                 gscid_o,
-    output logic                        1S_2M_o,
-    output logic                        1S_1G_o,
-    output riscv::pte_t                 1S_content_o,
+    output logic                        is_1S_2M_o,
+    output logic                        is_1S_1G_o,
+    output riscv::pte_t                 content_1S_o,
 
     // IOTLB update ports
     output logic                        iotlb_update_o,
@@ -396,7 +396,7 @@ module rv_iommu_msiptw #(
 
             // Output values
             mrifc_update_o      = 1'b0;
-            abort_o             = 1'b0;
+            ignore_o             = 1'b0;
 
             // Next values
             mrif_state_n        = mrif_state_q;
@@ -425,7 +425,7 @@ module rv_iommu_msiptw #(
                         // Check bits [11:0] of the access address (this implementation does not support BE accesses)
                         else if ((|req_addr_i[11:0])) begin
                             // this check does not generate faults, the transfer is discarded
-                            abort_o         = 1'b1;
+                            ignore_o         = 1'b1;
                             mrif_state_n    = MRIF_PTE;
                         end
 
@@ -483,7 +483,7 @@ module rv_iommu_msiptw #(
     else begin : gen_mrif_support_disabled
 
         mrifc_update_o  = 1'b0;
-        abort_o         = 1'b0;
+        ignore_o         = 1'b0;
     end : gen_mrif_support_disabled
     endgenerate
 

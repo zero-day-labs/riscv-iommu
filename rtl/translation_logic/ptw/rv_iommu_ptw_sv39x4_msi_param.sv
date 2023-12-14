@@ -22,7 +22,7 @@
 
 /* verilator lint_off WIDTH */
 
-module rv_iommu_ptw_sv39x4_msi_pc #(
+module rv_iommu_ptw_sv39x4_pc #(
 
     // MSI translation support
     parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
@@ -35,6 +35,9 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
+    // Trigger PTW
+    input  logic                    init_ptw_i,
+
     // Error signaling
     output logic                                ptw_active_o,           // Set when PTW is walking memory
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
@@ -86,9 +89,6 @@ module rv_iommu_ptw_sv39x4_msi_pc #(
     input  logic [(riscv::GPPNW-1):0]   pdt_gppn_i,
     output logic                        cdw_done_o,
     output logic                        flush_cdw_o,
-
-    // from IOTLB, to monitor misses
-    input  logic                    init_ptw_i,
 
     // from DC/PC
     input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
