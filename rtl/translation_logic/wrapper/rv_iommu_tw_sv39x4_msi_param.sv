@@ -59,11 +59,6 @@
             need to lookup any cache.
 */
 
-// TODO: Mechanism to accept the AXI request on MRIF transactions to retrieve the MSI data and finish the AXI request.
-// TODO: Mechanism to abort transactions without fault (can be related to the previous)
-// TODO: Integration logic.
-// Error handling logic
-
 module rv_iommu_tw_sv39x4_pc #(
 
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -76,7 +71,10 @@ module rv_iommu_tw_sv39x4_pc #(
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
     /// AXI Full response struct type
-    parameter type  axi_rsp_t       = logic
+    parameter type  axi_rsp_t       = logic,
+
+    // DC type (DO NOT OVERWRITE)
+    parameter type dc_t = (MSITrans == rv_iommu::MSI_DISABLED) ? (rv_iommu::dc_base_t) : (rv_iommu::dc_ext_t)
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
@@ -97,11 +95,17 @@ module rv_iommu_tw_sv39x4_pc #(
 
     // AXI ports directed to Data Structures Interface
     // CDW
-    input  axi_rsp_t   cdw_axi_resp_i,
+    input  axi_rsp_t    cdw_axi_resp_i,
     output axi_req_t    cdw_axi_req_o,
     // PTW
-    input  axi_rsp_t   ptw_axi_resp_i,
+    input  axi_rsp_t    ptw_axi_resp_i,
     output axi_req_t    ptw_axi_req_o,
+    // MSI PTW
+    input  axi_rsp_t    msiptw_axi_resp_i,
+    output axi_req_t    msiptw_axi_req_o,
+    // MRIF handler
+    input  axi_rsp_t    mrif_handler_axi_resp_i,
+    output axi_req_t    mrif_handler_axi_req_o,
 
     // From Regmap
     input  rv_iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities_i,
@@ -151,17 +155,6 @@ module rv_iommu_tw_sv39x4_pc #(
     input  logic        msi_data_valid_i,   // MSI data sent by DMA available
     input  logic [31:0] msi_data_i          // MSI data
 );
-
-    // Bare translation signaled by PTW
-    logic is_bare_translation;
-
-    // PTW error
-    logic ptw_error;
-    logic [(rv_iommu::CAUSE_LEN-1):0]  ptw_cause_code;
-
-    // CDW error
-    logic cdw_error;
-    logic [(rv_iommu::CAUSE_LEN-1):0]  cdw_cause_code;
 
     // Address translation parameters
     logic en_1S, en_2S;
@@ -224,12 +217,21 @@ module rv_iommu_tw_sv39x4_pc #(
     // Set for faults occurred before DDTC lookup
     logic   report_always;
 
-    // Error/fault signaling according to the spec
-    logic   trans_error;
-    assign  trans_error_o = trans_error;  // The requesting device needs to know if an error occurred
-
-    logic [(rv_iommu::CAUSE_LEN-1):0]  cause_code;  // Fault code as defined by IOMMU and Priv Spec
-    assign cause_code_o = cause_code;
+    // Translation error signaling according to the spec
+    logic   wrap_error;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  wrap_cause_code;  // Fault code as defined by IOMMU and Priv Spec
+    // CDW error
+    logic cdw_error;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  cdw_cause_code;
+    // PTW error
+    logic ptw_error;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  ptw_cause_code;
+    // CDW error
+    logic msiptw_error;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  msiptw_cause_code;
+    // PTW error
+    logic mrif_handler_error;
+    logic [(rv_iommu::CAUSE_LEN-1):0]  mrif_handler_cause_code;
 
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
@@ -253,12 +255,12 @@ module rv_iommu_tw_sv39x4_pc #(
     // IOATC wires
     // DDTC
     logic                       ddtc_access;
-    rv_iommu::dc_ext_t          ddtc_lu_content;
+    rv_iommu::dc_t          ddtc_lu_content;
     logic                       ddtc_lu_hit;
 
     logic                       ddtc_update;
     logic [23:0]                ddtc_up_did;
-    rv_iommu::dc_ext_t          ddtc_up_content;
+    rv_iommu::dc_t          ddtc_up_content;
 
     // PDTC
     logic                       pdtc_access;
@@ -341,7 +343,7 @@ module rv_iommu_tw_sv39x4_pc #(
     logic                       msi_1S_1G;
     riscv::pte_t                msi_gpte;
 
-    // TODO: MSI condition
+    // MSI address check
     // TODO: Include transfer size (must be 32-bit)
     // Input IOVA (GPA) is the address of a virtual IF
     logic   iova_is_msi;
@@ -362,10 +364,18 @@ module rv_iommu_tw_sv39x4_pc #(
     logic   init_msi_trans;
     assign  init_msi_trans = gpaddr_is_msi | (iova_is_msi & iotlb_access & ~(iotlb_lu_hit | mrifc_lu_hit));
 
+    // Bare translation: Both stages are Bare and the address is not an MSI address
+    logic   bare_translation;
+    assign  bare_translation = first_stage_is_bare & second_stage_is_bare & ~iova_is_msi;
+
+    // Resume and ignore the current translation (used for MRIF processing)
+    logic   msiptw_ignore, mrif_handler_ignore;
+    assign  ignore_request_o = (msiptw_ignore | mrif_handler_ignore);
+
     //# Device Directory Table Cache
     rv_iommu_ddtc #(
         .DDTC_ENTRIES       (DDTC_ENTRIES),
-        .dc_t               (rv_iommu::dc_ext_t)
+        .dc_t               (dc_t        )
     ) i_rv_iommu_ddtc (
         .clk_i              (clk_i          ),  // Clock
         .rst_ni             (rst_ni         ),  // Asynchronous reset active low
@@ -461,10 +471,6 @@ module rv_iommu_tw_sv39x4_pc #(
     );
 
     //# Page Table Walker
-    // TODO: Add external logic to trigger the PTW excluding MSI cases. PTW receives single bit
-    // TODO: I've also removed the bare_translation signal.
-    // It does not make sense to enter the PTW when no stages are enabled as the MSI translation logic is outside.
-    // This means that I must check whether the address is MSI in two cases: 1S disabled and 2S enabled, both stages disabled
     rv_iommu_ptw_sv39x4_msi_pc #(
         .axi_req_t          (axi_req_t ),
         .axi_rsp_t          (axi_rsp_t ),
@@ -550,24 +556,24 @@ module rv_iommu_tw_sv39x4_pc #(
             .rst_ni (rst_ni),   // Asynchronous reset active low
 
             // Memory interface
-            .mem_resp_i         (),
-            .mem_req_o          (),
+            .mem_resp_i         (msiptw_axi_resp_i  ),
+            .mem_req_o          (msiptw_axi_req_o   ),
 
            // Trigger MSI translation
-            .init_msi_trans_i   (init_msi_trans),
+            .init_msi_trans_i   (init_msi_trans     ),
 
             // Ignore access (abort without faults)
-            .ignore_o           (ignore_request_o),
+            .ignore_o           (msiptw_ignore      ),
 
-            .vpn_i              (msi_vpn    ),
-            .pscid_i            (msi_pscid  ),
-            .gscid_i            (msi_gscid  ),
-            .is_1S_2M_i         (msi_1S_2M  ),
-            .is_1S_1G_i         (msi_1S_1G  ),
-            .gpte_i             (msi_gpte   ),
+            .vpn_i              (msi_vpn            ),
+            .pscid_i            (msi_pscid          ),
+            .gscid_i            (msi_gscid          ),
+            .is_1S_2M_i         (msi_1S_2M          ),
+            .is_1S_1G_i         (msi_1S_1G          ),
+            .gpte_i             (msi_gpte           ),
 
             // The translation is read-for-execute
-            .is_rx_i            (),
+            .is_rx_i            (is_rx              ),
 
             // MSI PT base PPN
             .msiptp_ppn_i       (ddtc_lu_content.msiptp.ppn),
@@ -576,24 +582,24 @@ module rv_iommu_tw_sv39x4_pc #(
             .msi_addr_mask_i    (ddtc_lu_content.msi_addr_mask.mask),
 
             // Generic update ports
-            .vpn_o              (msi_up_1S_2M       ),
-            .pscid_o            (msi_up_1S_1G       ),
-            .gscid_o            (msi_up_vpn         ),
-            .is_1S_2M_o         (msi_up_pscid       ),
-            .is_1S_1G_o         (msi_up_gscid       ),
-            .content_1S_o       (msi_up_1S_content  ),
+            .vpn_o              (msi_up_vpn         ),
+            .pscid_o            (msi_up_pscid       ),
+            .gscid_o            (msi_up_gscid       ),
+            .is_1S_2M_o         (msi_up_1S_2M       ),
+            .is_1S_1G_o         (msi_up_1S_1G       ),
+            .content_1S_o       (msi_up_1S_content  ),            
 
             // IOTLB update ports
-            .iotlb_update_o     (msi_update),
-            .iotlb_msi_content_o(msi_up_content),
+            .iotlb_update_o     (msi_update         ),
+            .iotlb_msi_content_o(msi_up_content     ),
 
             // MRIFC update ports
-            .mrifc_update_o     (mrifc_update),
-            .mrifc_msi_content_o(mrifc_up_msi_content),
+            .mrifc_update_o     (mrifc_update           ),
+            .mrifc_msi_content_o(mrifc_up_msi_content   ),
 
             // Error signaling
-            .error_o            (),
-            .cause_o            ()
+            .error_o            (msiptw_error       ),
+            .cause_o            (msiptw_cause_code  )
         );
     end : gen_msi_support
 
@@ -615,17 +621,17 @@ module rv_iommu_tw_sv39x4_pc #(
             .axi_req_t          (axi_req_t ),
             .axi_rsp_t          (axi_rsp_t )
         ) i_rv_iommu_mrif_handler (
-            .clk_i  (clk_i),                  // Clock
-            .rst_ni (rst_ni),                 // Asynchronous reset active low
+            .clk_i  (clk_i),    // Clock
+            .rst_ni (rst_ni),   // Asynchronous reset active low
 
             // Memory interface
-            .mem_resp_i     (),
-            .mem_req_o      (),
+            .mem_resp_i     (mrif_handler_axi_resp_i),
+            .mem_req_o      (mrif_handler_axi_req_o),
 
             // Init MRIF processing. MSI data and MRIF cache data are valid.
             .init_mrif_i    (msi_data_valid_i),
             // Abort access (discard without fault)
-            .ignore_o       (ignore_request_o),
+            .ignore_o       (mrif_handler_ignore),
 
             // Interrupt identity (MSI data)
             .int_id_i       (msi_data_i),
@@ -636,8 +642,8 @@ module rv_iommu_tw_sv39x4_pc #(
             .notice_ppn_i   (mrifc_lu_msi_content.nppn),
 
             // Error signaling
-            .error_o        (),
-            .cause_o        ()
+            .error_o        (mrif_handler_error),
+            .cause_o        (mrif_handler_cause_code)
         );
 
         // MRIF Cache
@@ -997,22 +1003,34 @@ module rv_iommu_tw_sv39x4_pc #(
                 */
             end
 
-            // No stage is enabled and input address does not correspond to a MSI address
-            // (This condition and an IOTLB hit should be mutually exclusive)
+            // Both stages are Bare and the input address does not correspond to a MSI address
             // Input address is bypassed
-            if (is_bare_translation) begin
-                trans_valid_o     = 1'b1;
-                spaddr_o = iova_i[riscv::PLEN-1:0];
+            if (iotlb_access && bare_translation) begin
+                trans_valid_o   = 1'b1;
+                spaddr_o        = iova_i[riscv::PLEN-1:0];
             end
         end
+    end
 
-        //# Check for errors
-        // If we had to walk memory is because we had a miss. As we had an exception,
-        // the corresponding cache/TLB was not updated, and translation was never set to valid
-        if (ptw_error || cdw_error || msi_write_error_i) begin
-            cause_code    = (cdw_error) ? cdw_cause_code : ptw_cause_code;
-            trans_error   = 1'b1;
-        end
+    //# Error routing
+    always_comb begin : error_routing
+
+        cause_code_o    = '0;
+        trans_error_o   = ((wrap_error)         |
+                           (cdw_error)          |
+                           (ptw_error)          |
+                           (msiptw_error)       |
+                           (mrif_handler_error) |
+                           (msi_write_error_i));
+
+        unique case (1'b1)
+            wrap_trans_error:   cause_code_o = wrap_cause_code;
+            cdw_error:          cause_code_o = cdw_cause_code;
+            ptw_error:          cause_code_o = ptw_cause_code;
+            msiptw_error:       cause_code_o = msiptw_cause_code;
+            mrif_handler_error: cause_code_o = mrif_handler_cause_code;
+            msi_write_error_i:  cause_code_o = rv_iommu::MSI_ST_ACCESS_FAULT;
+        endcase
     end
 
 endmodule

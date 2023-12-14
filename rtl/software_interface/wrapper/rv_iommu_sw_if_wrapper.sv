@@ -348,7 +348,7 @@ module rv_iommu_sw_if_wrapper #(
         // Event data
         .event_valid_i          (report_fault_i     ),  // a fault/event has occurred
         .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),                            // transaction type
-        .cause_code_i           ((msi_write_error) ? (rv_iommu::MSI_ST_ACCESS_FAULT) : (cause_code_i)),   // Fault code as defined by IOMMU and Priv Spec
+        .cause_code_i           (cause_code_i),         // Fault code as defined by IOMMU and Priv Spec
         .iova_i                 ((msi_write_error) ? (msi_ig_axi_req_o.aw.addr[55:2]) : (iova_i)),            // to report if transaction has an IOVA
         .gpaddr_i               (bad_gpaddr_i       ),  // to report bits [63:2] of the GPA in case of a Guest Page Fault
         .did_i                  (did_i              ),  // device_id associated with the transaction
