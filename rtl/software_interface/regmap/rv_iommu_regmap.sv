@@ -21,14 +21,14 @@ module rv_iommu_regmap #(
   parameter int 			        ADDR_WIDTH = 32,
   parameter int 			        DATA_WIDTH = 32,
 
-  // Include MSI translation support
-  parameter bit               InclMSITrans = 0,
+  // MSI translation support
+  parameter rv_iommu::msi_trans_t MSITrans = rv_iommu::MSI_DISABLED,
   // Interrupt Generation Support
-  parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
+  parameter rv_iommu::igs_t       IGS = rv_iommu::WSI_ONLY,
   // Number of Interrupt Vectors supported (1, 2, 4, 8, 16)
-  parameter int unsigned      N_INT_VEC = 16,
+  parameter int unsigned          N_INT_VEC = 16,
   // Number of Performance monitoring event counters (set to zero to disable HPM)
-  parameter int unsigned      N_IOHPMCTR = 0, // max 31
+  parameter int unsigned          N_IOHPMCTR = 0, // max 31
 
   parameter type 			        reg_req_t = logic,
   parameter type 			        reg_rsp_t = logic,
@@ -386,24 +386,33 @@ module rv_iommu_regmap #(
   assign reg2hw.capabilities.amo_mrif.q = 1'h0;
   assign capabilities_amo_mrif_qs = 1'h0;
 
-  // TODO: Define triplet typedef for each MSI translation support (none, flat, mrif)
   //   F[msi_flat]: 22:22
-  if (InclMSITrans) begin
-    assign reg2hw.capabilities.msi_flat.q = 1'h1;
-    assign capabilities_msi_flat_qs = 1'h1;
-  end
+  generate
+    if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
+      assign reg2hw.capabilities.msi_flat.q = 1'h1;
+      assign capabilities_msi_flat_qs = 1'h1;
+    end : gen_msi_support
 
-  else begin
-    assign reg2hw.capabilities.msi_flat.q = 1'h0;
-    assign capabilities_msi_flat_qs = 1'h0;
-  end
+    else begin : gen_msi_support_disabled
+      assign reg2hw.capabilities.msi_flat.q = 1'h0;
+      assign capabilities_msi_flat_qs = 1'h0;
+    end : gen_msi_support_disabled
+  endgenerate
 
 
   //   F[msi_mrif]: 23:23
-  assign reg2hw.capabilities.msi_mrif.q = 1'h0;
-  assign capabilities_msi_mrif_qs = 1'h0;
+  generate
+    if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
+      assign reg2hw.capabilities.msi_mrif.q = 1'h1;
+      assign capabilities_msi_mrif_qs = 1'h1;
+    end : gen_mrif_support
 
-
+    else begin : gen_mrif_support_disabled
+      assign reg2hw.capabilities.msi_mrif.q = 1'h0;
+      assign capabilities_msi_mrif_qs = 1'h0;
+    end : gen_mrif_support_disabled
+  endgenerate
+  
   //   F[amo_hwad]: 24:24
   assign reg2hw.capabilities.amo_hwad.q = 1'h0;
   assign capabilities_amo_hwad_qs = 1'h0;

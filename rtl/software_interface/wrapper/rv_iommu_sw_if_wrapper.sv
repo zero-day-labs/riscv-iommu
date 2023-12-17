@@ -19,14 +19,14 @@
 
 module rv_iommu_sw_if_wrapper #(
 
-    // Include MSI translation support
-    parameter bit               InclMSITrans = 0,
+    // MSI translation support
+    parameter rv_iommu::msi_trans_t MSITrans = rv_iommu::MSI_DISABLED,
     // Interrupt Generation Support
-    parameter rv_iommu::igs_t   IGS = rv_iommu::WSI_ONLY,
+    parameter rv_iommu::igs_t       IGS = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
-    parameter int unsigned      N_INT_VEC = 16,
+    parameter int unsigned          N_INT_VEC = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned      N_IOHPMCTR = 0, // max 31
+    parameter int unsigned          N_IOHPMCTR = 0, // max 31
 
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
@@ -49,13 +49,13 @@ module rv_iommu_sw_if_wrapper #(
 
     // AXI ports directed to Data Structures Interface
     // CQ
-    input  axi_rsp_t   cq_axi_resp_i,
+    input  axi_rsp_t    cq_axi_resp_i,
     output axi_req_t    cq_axi_req_o,
     // FQ
-    input  axi_rsp_t   fq_axi_resp_i,
+    input  axi_rsp_t    fq_axi_resp_i,
     output axi_req_t    fq_axi_req_o,
     // MSI IG
-    input  axi_rsp_t   msi_ig_axi_resp_i,
+    input  axi_rsp_t    msi_ig_axi_resp_i,
     output axi_req_t    msi_ig_axi_req_o,
 
     // Register values required by translation logic
@@ -230,14 +230,14 @@ module rv_iommu_sw_if_wrapper #(
 
     //# Register map module
     rv_iommu_regmap #(
-        .ADDR_WIDTH     (32          ),
-        .DATA_WIDTH     (32          ),
-        .InclMSITrans   (InclMSITrans),
-        .IGS            (IGS         ),
-        .N_INT_VEC      (N_INT_VEC   ),
-        .N_IOHPMCTR     (N_IOHPMCTR  ),
-        .reg_req_t      (reg_req_t   ),
-        .reg_rsp_t      (reg_rsp_t   )
+        .ADDR_WIDTH     (32         ),
+        .DATA_WIDTH     (32         ),
+        .MSITrans       (MSITrans   ),
+        .IGS            (IGS        ),
+        .N_INT_VEC      (N_INT_VEC  ),
+        .N_IOHPMCTR     (N_IOHPMCTR ),
+        .reg_req_t      (reg_req_t  ),
+        .reg_rsp_t      (reg_rsp_t  )
     ) i_rv_iommu_regmap (
         .clk_i      (clk_i),
         .rst_ni     (rst_ni),

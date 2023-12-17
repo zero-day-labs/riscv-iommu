@@ -26,7 +26,7 @@ module rv_iommu_translation_wrapper #(
     parameter int unsigned  PDTC_ENTRIES        = 4,
 
     // Include Process Context support
-    parameter bit               InclPC         = 0,
+    parameter bit               InclPC          = 0,
     // MSI translation support
     parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
 
@@ -55,10 +55,10 @@ module rv_iommu_translation_wrapper #(
 
     // AXI ports directed to Data Structures Interface
     // CDW
-    input  axi_rsp_t   cdw_axi_resp_i,
+    input  axi_rsp_t    cdw_axi_resp_i,
     output axi_req_t    cdw_axi_req_o,
     // PTW
-    input  axi_rsp_t   ptw_axi_resp_i,
+    input  axi_rsp_t    ptw_axi_resp_i,
     output axi_req_t    ptw_axi_req_o,
     // MSI PTW
     input  axi_rsp_t    msiptw_axi_resp_i,
@@ -75,7 +75,6 @@ module rv_iommu_translation_wrapper #(
     // Request status and output data
     output logic                        trans_valid_o,      // Translation completed
     output logic [riscv::PLEN-1:0]      spaddr_o,           // Translated address
-    output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
     // Error
     output logic                                trans_error_o,      // Translation error
     output logic                                report_fault_o,     // The fault must be reported through the FQ

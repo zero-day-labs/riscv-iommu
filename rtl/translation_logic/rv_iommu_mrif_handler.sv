@@ -108,7 +108,7 @@ module rv_iommu_mrif_handler #(
         // Output signals
         // AXI signals
         // AW
-        mem_req_o.aw.id                     = 4'b0011;                 // TODO: Check ID
+        mem_req_o.aw.id                     = 4'b0011;
         mem_req_o.aw.addr[riscv::PLEN-1:0]  = pptr_q;                  // Variable: MRIF and notice MSI
         mem_req_o.aw.len                    = 8'b0;                    // One beat
         mem_req_o.aw.size                   = 3'b011;                  // Variable: 64 bits for MRIF IP DW, 32 bits for notice MSI
@@ -135,7 +135,7 @@ module rv_iommu_mrif_handler #(
         mem_req_o.b_ready    = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0001;              // TODO: Check ID
+        mem_req_o.ar.id                     = 4'b0100;
         mem_req_o.ar.addr[riscv::PLEN-1:0]  = pptr_q;               // Physical address to access
         mem_req_o.ar.len                    = 8'b1;                 // Two beats
         mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat

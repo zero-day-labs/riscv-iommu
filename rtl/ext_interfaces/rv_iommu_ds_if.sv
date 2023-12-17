@@ -30,54 +30,62 @@ module rv_iommu_ds_if #(
 
     /*--------------------------------------------*/
     
-    // From PTW
+    // PTW
     output axi_rsp_t    ptw_resp_o,
     input  axi_req_t    ptw_req_i,
 
-    // From CDW
+    // CDW
     output axi_rsp_t    cdw_resp_o,
     input  axi_req_t    cdw_req_i,
 
-    // From CQ
+    // MSI PTW
+    output axi_rsp_t    msiptw_resp_o,
+    input  axi_req_t    msiptw_req_i,
+
+    // MRIF handler
+    output axi_rsp_t    mrif_handler_resp_o,
+    input  axi_req_t    mrif_handler_req_i,
+
+    // CQ
     output axi_rsp_t    cq_resp_o,
     input  axi_req_t    cq_req_i,
 
-    // From FQ
+    // FQ
     output axi_rsp_t    fq_resp_o,
     input  axi_req_t    fq_req_i,
 
-    // From MSI IG
+    // MSI IG
     output axi_rsp_t    msi_ig_resp_o,
     input  axi_req_t    msi_ig_req_i
 );
 
     logic[1:0] w_select, w_select_fifo;
 
-    //# AR Channel (PTW, CDW, CQ)
+    //# AR Channel (PTW, CDW, CQ, MSIPTW, MRIF handler)
     stream_arbiter #(
         .DATA_T ( ariane_axi_soc::ar_chan_t ),
-        .N_INP  ( 3                         )
+        .N_INP  ( 5                         )
     ) i_stream_arbiter_ar (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
-        .inp_data_i     ( {ptw_req_i.ar, cdw_req_i.ar, cq_req_i.ar} ),
-        .inp_valid_i    ( {ptw_req_i.ar_valid, cdw_req_i.ar_valid, cq_req_i.ar_valid} ),
-        .inp_ready_o    ( {ptw_resp_o.ar_ready, cdw_resp_o.ar_ready, cq_resp_o.ar_ready} ),
+        .inp_data_i     ( {ptw_req_i.ar, cdw_req_i.ar, cq_req_i.ar, msiptw_req_i.ar, mrif_handler_req_i.ar} ),
+        .inp_valid_i    ( {ptw_req_i.ar_valid, cdw_req_i.ar_valid, cq_req_i.ar_valid, msiptw_req_i.ar_valid, mrif_handler_req_i.ar_valid} ),
+        .inp_ready_o    ( {ptw_resp_o.ar_ready, cdw_resp_o.ar_ready, cq_resp_o.ar_ready, msiptw_resp_o.ar_ready, mrif_handler_resp_o.ar_ready} ),
         .oup_data_o     ( ds_req_o.ar        ),
         .oup_valid_o    ( ds_req_o.ar_valid  ),
         .oup_ready_i    ( ds_resp_i.ar_ready )
     );
 
-    //# AW Channel (CQ, FQ, MSI IG)
+    //# AW Channel (CQ, FQ, MSI IG, MRIF handler)
     stream_arbiter #(
         .DATA_T ( ariane_axi_soc::aw_chan_t ),
-        .N_INP  ( 3                         )
+        .N_INP  ( 4                         )
     ) i_stream_arbiter_aw (
         .clk_i          (clk_i),
         .rst_ni         (rst_ni),
-        .inp_data_i     ( {cq_req_i.aw, fq_req_i.aw, msi_ig_req_i.aw} ),
-        .inp_valid_i    ( {cq_req_i.aw_valid, fq_req_i.aw_valid, msi_ig_req_i.aw_valid} ),
-        .inp_ready_o    ( {cq_resp_o.aw_ready, fq_resp_o.aw_ready, msi_ig_resp_o.aw_ready} ),
+        .inp_data_i     ( {cq_req_i.aw, fq_req_i.aw, msi_ig_req_i.aw, mrif_handler_req_i.aw} ),
+        .inp_valid_i    ( {cq_req_i.aw_valid, fq_req_i.aw_valid, msi_ig_req_i.aw_valid, mrif_handler_req_i.aw_valid} ),
+        .inp_ready_o    ( {cq_resp_o.aw_ready, fq_resp_o.aw_ready, msi_ig_resp_o.aw_ready, mrif_handler_resp_o.aw_ready} ),
         .oup_data_o     ( ds_req_o.aw        ),
         .oup_valid_o    ( ds_req_o.aw_valid  ),
         .oup_ready_i    ( ds_resp_i.aw_ready )
@@ -88,10 +96,10 @@ module rv_iommu_ds_if #(
     always_comb begin
         w_select = '0;
         unique case (ds_req_o.aw.id)   // Selected AWID
-            4'b0000:                            w_select = 2'd2; // MSI IG
+            4'b0000:                            w_select = 2'd0; // CQ
             4'b0001:                            w_select = 2'd1; // FQ
-            4'b0010:                            w_select = 2'd0; // CQ
-            default:                            w_select = 2'd0; // none
+            4'b0010:                            w_select = 2'd2; // MSI IG
+            4'b0011:                            w_select = 2'd3; // MRIF Handler
         endcase
     end
 
@@ -101,7 +109,7 @@ module rv_iommu_ds_if #(
     fifo_v3 #(
       .DATA_WIDTH   ( 2    ),
       // we can have a maximum of 2 oustanding transactions as each port is blocking
-      .DEPTH        ( 3    )
+      .DEPTH        ( 2    )
     ) i_fifo_w_channel (
       .clk_i      ( clk_i           ),
       .rst_ni     ( rst_ni          ),
@@ -119,11 +127,11 @@ module rv_iommu_ds_if #(
     // For invalid AWIDs for which the request was accepted, or when AW FIFO is empty, CQ channel is selected
     stream_mux #(
         .DATA_T ( ariane_axi_soc::w_chan_t ),
-        .N_INP  ( 3                        )
+        .N_INP  ( 4                        )
     ) i_stream_mux_w (
-        .inp_data_i  ( {cq_req_i.w, fq_req_i.w, msi_ig_req_i.w} ),
-        .inp_valid_i ( {cq_req_i.w_valid, fq_req_i.w_valid, msi_ig_req_i.w_valid} ),
-        .inp_ready_o ( {cq_resp_o.w_ready, fq_resp_o.w_ready, msi_ig_resp_o.w_ready} ),
+        .inp_data_i  ( {mrif_handler_req_i.w, msi_ig_req_i.w, fq_req_i.w, cq_req_i.w} ),
+        .inp_valid_i ( {mrif_handler_req_i.w_valid, msi_ig_req_i.w_valid, fq_req_i.w_valid, cq_req_i.w_valid} ),
+        .inp_ready_o ( {mrif_handler_resp_o.w_ready, msi_ig_resp_o.w_ready, fq_resp_o.w_ready, cq_resp_o.w_ready} ),
         .inp_sel_i   ( w_select_fifo        ),
         .oup_data_o  ( ds_req_o.w          ),
         .oup_valid_o ( ds_req_o.w_valid    ),
@@ -134,59 +142,67 @@ module rv_iommu_ds_if #(
     // 0000         -> PTW
     // 0001         -> CDW
     // 0010         -> CQ
-    //# R Channel: We only demux RVALID/RREADY signals
-    assign ptw_resp_o.r = ds_resp_i.r;
-    assign cdw_resp_o.r = ds_resp_i.r;
-    assign cq_resp_o.r  = ds_resp_i.r;
+    // 0011         -> MSIPTW
+    // 0100         -> MRIF Handler
 
-    logic [1:0] r_select;
+    //# R Channel: We only demux RVALID/RREADY signals
+    assign ptw_resp_o.r             = ds_resp_i.r;
+    assign cdw_resp_o.r             = ds_resp_i.r;
+    assign cq_resp_o.r              = ds_resp_i.r;
+    assign msiptw_resp_o.r          = ds_resp_i.r;
+    assign mrif_handler_resp_o.r    = ds_resp_i.r;
+
+    logic [2:0] r_select;
 
     // Demux RVALID/RREADY signals
     always_comb begin
         r_select = 0;
         unique case (ds_resp_i.r.id)
-            4'b0000:                        r_select = 2; // PTW
-            4'b0001:                        r_select = 1; // CDW
-            4'b0010:                        r_select = 0; // CQ
+            4'b0000:                        r_select = 0;   // PTW
+            4'b0001:                        r_select = 1;   // CDW
+            4'b0010:                        r_select = 2;   // CQ
+            4'b0011:                        r_select = 3;   // MSIPTW
+            4'b0100:                        r_select = 4;   // MRIF Handler
             default:                        r_select = 0;
         endcase
     end
 
     stream_demux #(
-        .N_OUP ( 3 )
+        .N_OUP ( 5 )
     ) i_stream_demux_r (
         .inp_valid_i ( ds_resp_i.r_valid ),
         .inp_ready_o ( ds_req_o.r_ready  ),
         .oup_sel_i   ( r_select           ),
-        .oup_valid_o ( {ptw_resp_o.r_valid, cdw_resp_o.r_valid, cq_resp_o.r_valid} ),
-        .oup_ready_i ( {ptw_req_i.r_ready, cdw_req_i.r_ready, cq_req_i.r_ready} )
+        .oup_valid_o ( {mrif_handler_resp_o.r_valid, msiptw_resp_o.r_valid, cq_resp_o.r_valid, cdw_resp_o.r_valid, ptw_resp_o.r_valid} ),
+        .oup_ready_i ( {mrif_handler_req_i.r_ready, msiptw_req_i.r_ready, cq_req_i.r_ready, cdw_req_i.r_ready, ptw_req_i.r_ready} )
     );
 
     //# B Channel: We only demux BVALID/BREADY signals
     logic [1:0] b_select;
 
-    assign cq_resp_o.b = ds_resp_i.b;
-    assign fq_resp_o.b = ds_resp_i.b;
-    assign msi_ig_resp_o.b = ds_resp_i.b;
+    assign cq_resp_o.b              = ds_resp_i.b;
+    assign fq_resp_o.b              = ds_resp_i.b;
+    assign msi_ig_resp_o.b          = ds_resp_i.b;
+    assign mrif_handler_resp_o.b    = ds_resp_i.b;
 
     always_comb begin
         b_select = 0;
         unique case (ds_resp_i.b.id)
-            4'b0000:                        b_select = 2; // MSI IG
-            4'b0001:                        b_select = 1; // FQ
-            4'b0010:                        b_select = 0; // CQ
-            default:                        b_select = 0;
+            4'b0000:                        b_select = 0;   // CQ
+            4'b0001:                        b_select = 1;   // FQ
+            4'b0010:                        b_select = 2;   // MSI IG
+            4'b0011:                        b_select = 3;   // MRIF Handler
         endcase
     end
 
     stream_demux #(
-        .N_OUP ( 3 )
+        .N_OUP ( 4 )
     ) i_stream_demux_b (
         .inp_valid_i ( ds_resp_i.b_valid ),
         .inp_ready_o ( ds_req_o.b_ready  ),
         .oup_sel_i   ( b_select           ),
-        .oup_valid_o ( {cq_resp_o.b_valid, fq_resp_o.b_valid, msi_ig_resp_o.b_valid} ),
-        .oup_ready_i ( {cq_req_i.b_ready,  fq_req_i.b_ready, msi_ig_req_i.b_ready} )
+        .oup_valid_o ( {mrif_handler_resp_o.b_valid, msi_ig_resp_o.b_valid, fq_resp_o.b_valid, cq_resp_o.b_valid} ),
+        .oup_ready_i ( {mrif_handler_req_i.b_ready, msi_ig_req_i.b_ready, fq_req_i.b_ready, cq_req_i.b_ready} )
     );
     
 endmodule

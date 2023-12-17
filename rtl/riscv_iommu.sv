@@ -147,6 +147,9 @@ module riscv_iommu #(
     // We must wait for the FQ to write a record for a given error before letting the error slave respond to a subsequent request
     logic is_fq_fifo_full;
 
+    logic   is_32_bit;
+    assign  is_32_bit = (dev_tr_req_i.aw.size == 3'b10);
+
     // IOATC flush wires
     logic                       flush_ddtc;
     logic                       flush_dv;
@@ -179,6 +182,12 @@ module riscv_iommu #(
     // CDW
     axi_rsp_t   cdw_axi_resp;
     axi_req_t   cdw_axi_req;
+    // MSI PTW
+    axi_rsp_t    msiptw_axi_resp,
+    axi_req_t    msiptw_axi_req,
+    // MRIF handler
+    axi_rsp_t    mrif_handler_axi_resp,
+    axi_req_t    mrif_handler_axi_req,
     // CQ
     axi_rsp_t   cq_axi_resp;
     axi_req_t   cq_axi_req;
@@ -290,6 +299,14 @@ module riscv_iommu #(
         .cdw_resp_o     (cdw_axi_resp),
         .cdw_req_i      (cdw_axi_req),
 
+        // MSI PTW
+        .msiptw_resp_o  (msiptw_axi_resp),
+        .msiptw_req_i   (msiptw_axi_req),
+
+        // MRIF handler
+        .mrif_handler_resp_o    (mrif_handler_axi_resp),
+        .mrif_handler_req_i     (mrif_handler_axi_req),
+
         // From SW Interface wrapper
         // CQ
         .cq_resp_o      (cq_axi_resp),
@@ -330,14 +347,21 @@ module riscv_iommu #(
         
         .trans_type_i   (trans_type ),  // Transaction type
         .priv_lvl_i     (priv_lvl   ),  // Priviledge level (S/U)
+        .is_32_bit_i    (is_32_bit  ),  // Transaction size is 32 bits
 
         // AXI ports directed to Data Structures Interface
         // CDW
-        .cdw_axi_resp_i (cdw_axi_resp   ),
-        .cdw_axi_req_o  (cdw_axi_req    ),
+        .cdw_axi_resp_i         (cdw_axi_resp   ),
+        .cdw_axi_req_o          (cdw_axi_req    ),
         // PTW
-        .ptw_axi_resp_i (ptw_axi_resp   ),
-        .ptw_axi_req_o  (ptw_axi_req    ),
+        .ptw_axi_resp_i         (ptw_axi_resp   ),
+        .ptw_axi_req_o          (ptw_axi_req    ),
+        // MSI PTW
+        .msiptw_axi_resp_i      (msiptw_axi_resp),
+        .msiptw_axi_req_o       (msiptw_axi_req ),
+        // MRIF handler
+        .mrif_handler_axi_resp_i(mrif_handler_axi_resp  ),
+        .mrif_handler_axi_req_o (mrif_handler_axi_req   ),
 
         // From Regmap
         .capabilities_i (capabilities   ),
