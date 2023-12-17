@@ -11,18 +11,21 @@
 // See the License for the specific language governing permissions and limitations under the License.
 //
 // Author: Manuel Rodríguez <manuel.cederog@gmail.com>
-// Date: 16/01/2023
+// Date: 11/12/2023
 //
 // Description: RISC-V IOMMU Hardware Page Table Walker (PTW). Translation scheme Sv39x4.
-//              This module is an adaptation of the CVA6 Sv39 MMU developed by 
-//              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB 
+//              This module is an adaptation of the CVA6 Sv39 MMU developed by
+//              David Schaffenrath and Florian Zaruba; and the CVA6 Sv39x4 TLB
 //              developed by Bruno Sá.
-//              Does NOT include MSI translation support.
-//              Does NOT include support for CDW implicit translations when walking the PDT.
+//              Includes MSI translation support parameterizable.
 
 /* verilator lint_off WIDTH */
 
 module rv_iommu_ptw_sv39x4 #(
+
+    // MSI translation support
+    parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
+
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
     /// AXI Full response struct type
@@ -31,6 +34,9 @@ module rv_iommu_ptw_sv39x4 #(
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
     
+    // Trigger PTW
+    input  logic                    init_ptw_i,
+
     // Error signaling
     output logic                                ptw_active_o,           // Set when PTW is walking memory
     output logic                                ptw_error_o,            // set when an error occurred (excluding access errors)
@@ -38,12 +44,13 @@ module rv_iommu_ptw_sv39x4 #(
     output logic                                ptw_error_2S_int_o,     // set when an error occurred in stage 2 during stage 1 translation
     output logic [(rv_iommu::CAUSE_LEN-1):0]    cause_code_o,
 
-    input  logic                    en_1S_i,        // Enable signal for first-stage translation. Defined by DC/PC
+    input  logic                    en_1S_i,        // Enable signal for first-stage translation. Defined by DC
     input  logic                    en_2S_i,        // Enable signal for second-stage translation. Defined by DC only
     input  logic                    is_store_i,     // Indicate whether this translation was triggered by a store or a load
     input  logic                    is_rx_i,        // Indicate whether the access is read-for-execute
+    input  logic                    is_32_bit_i,    // Data is 32-bit wide
 
-    input  axi_rsp_t   mem_resp_i,
+    input  axi_rsp_t    mem_resp_i,
     output axi_req_t    mem_req_o,
 
     // to IOTLB, update logic
@@ -58,30 +65,38 @@ module rv_iommu_ptw_sv39x4 #(
     output riscv::pte_t             up_1S_content_o,
     output riscv::pte_t             up_2S_content_o,
 
-    output logic                    bare_translation_o,
-
     // IOTLB tags
     input  logic [riscv::VLEN-1:0]  req_iova_i,
     input  logic [19:0]             pscid_i,
     input  logic [15:0]             gscid_i,
 
-    // from IOTLB, to monitor misses
-    input  logic                    iotlb_access_i,
-    input  logic                    iotlb_hit_i,
+    // MSI translation
+    input  logic                                    msi_en_i,
+    input  logic [(rv_iommu::MSI_MASK_LEN-1):0]     msi_addr_mask_i,
+    input  logic [(rv_iommu::MSI_PATTERN_LEN-1):0]  msi_addr_pattern_i,
 
-    // from DC/PC
+    // Bus to send first-stage data to MSI PTW
+    output logic                        gpaddr_is_msi_o,
+    output logic [riscv::GPPNW-1:0]     msi_vpn_o,
+    output logic [19:0]                 msi_pscid_o,
+    output logic [15:0]                 msi_gscid_o,
+    output logic                        msi_1S_2M_o,
+    output logic                        msi_1S_1G_o,
+    output riscv::pte_t                 msi_gpte_o,
+
+    // from DC
     input  logic [riscv::PPNW-1:0]  iosatp_ppn_i,  // ppn from iosatp
-    input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp (may be forwarded by the CDW)
+    input  logic [riscv::PPNW-1:0]  iohgatp_ppn_i, // ppn from iohgatp
 
     output logic [riscv::GPLEN-1:0] bad_gpaddr_o    // to return the GPA in case of second-stage error
 );
 
     // PTW states
-    enum logic[2:0] {
-      IDLE,             // 000
-      MEM_ACCESS,       // 001
-      PROC_PTE,       // 010
-      ERROR   // 011
+    enum logic[1:0] {
+      IDLE,         // 00
+      MEM_ACCESS,   // 01
+      PROC_PTE,     // 10
+      ERROR,        // 11
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -103,6 +118,10 @@ module rv_iommu_ptw_sv39x4 #(
     // Register to store leaf first-stage PTE to be updated in the IOTLB
     riscv::pte_t leaf_1Spte_q, leaf_1Spte_n;
 
+    // To cast input memory port to MSI PTE data
+    rv_iommu::msi_wt_pte_t msi_pte;
+    assign msi_pte = rv_iommu::msi_wt_pte_t'(mem_resp_i.r.data);
+
     // global bit register
     logic global_mapping_q, global_mapping_n;
     // to register PSCID to be updated
@@ -118,6 +137,9 @@ module rv_iommu_ptw_sv39x4 #(
     // To save GPA_n
     logic [riscv::PLEN-1:0] gpa_x_q, gpa_x_n;
 
+    // GPA is the address of a virtual IF
+    logic gpaddr_is_msi;
+
     // To save final GPA
     logic [riscv::GPLEN-1:0] final_gpa;
 
@@ -126,6 +148,39 @@ module rv_iommu_ptw_sv39x4 #(
 
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
+
+    // MSI translation support
+    generate
+
+        // Enabled
+        if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
+
+            // GPA is the address of a virtual interrupt file
+            assign gpaddr_is_msi    = (msi_en_i && is_store_i && is_32_bit_i &&
+                                        ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
+
+            // Bus to send first-stage data to MSI PTW                            
+            assign msi_vpn_o        = iova_q[riscv::SVX-1:12];
+            assign msi_pscid_o      = iotlb_update_pscid_q;
+            assign msi_gscid_o      = iotlb_update_gscid_q;
+            assign msi_1S_2M_o      = (main_lvl_q == LVL2);
+            assign msi_1S_1G_o      = (main_lvl_q == LVL1);
+            assign msi_gpte_o       = pte;
+        end : gen_msi_support
+
+        // Disabled
+        else begin : gen_msi_support_disabled
+
+            assign gpaddr_is_msi    = 1'b0;
+            assign msi_vpn_o        = '0;
+            assign msi_pscid_o      = '0;
+            assign msi_gscid_o      = '0;
+            assign msi_1S_2M_o      = 1'b0;
+            assign msi_1S_1G_o      = 1'b0;
+            assign msi_gpte_o       = '0;
+        end : gen_msi_support_disabled
+
+    endgenerate
 
     //# IOTLB Update combinational logic
     always_comb begin : iotlb_update
@@ -168,11 +223,11 @@ module rv_iommu_ptw_sv39x4 #(
         if(en_2S_i) begin   // if stage 2 is enabled
             up_1S_content_o = leaf_1Spte_q | (global_mapping_q << 5);
             up_2S_content_o = pte;
-        end 
+        end
         
         else begin
-                up_1S_content_o = pte | (global_mapping_q << 5);
-                up_2S_content_o = '0;
+            up_1S_content_o = pte | (global_mapping_q << 5);
+            up_2S_content_o = '0;
         end
     end
 
@@ -183,7 +238,14 @@ module rv_iommu_ptw_sv39x4 #(
     //# Page table walker
     always_comb begin : ptw
         automatic logic [riscv::PLEN-1:0] gpa_x;
-        // default assignments
+
+        // Default assignments
+        // Wires
+        final_gpa               = '0;
+        gpa_x                   = '0;
+        init_msi_translation    = 1'b0;
+
+        // Output signals
         // AXI parameters
         // AW
         mem_req_o.aw.id         = 4'b0010; 
@@ -226,6 +288,8 @@ module rv_iommu_ptw_sv39x4 #(
         mem_req_o.ar.user                   = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
+
+        // R
         mem_req_o.r_ready       = 1'b0;                 // to signal read completion
         
         ptw_error_o             = 1'b0;
@@ -233,8 +297,9 @@ module rv_iommu_ptw_sv39x4 #(
         ptw_error_2S_int_o      = 1'b0;
         cause_code_o            = '0;
         update_o                = 1'b0;
-        bare_translation_o      = 1'b0;
+        gpaddr_is_msi_o         = 1'b0;
         
+        // Next state values
         main_lvl_n              = main_lvl_q;
         s1_lvl_n                = s1_lvl_q;
         ptw_pptr_n              = ptw_pptr_q;
@@ -247,8 +312,6 @@ module rv_iommu_ptw_sv39x4 #(
         iotlb_update_gscid_n    = iotlb_update_gscid_q;
         iova_n                  = iova_q;
         gpaddr_n                = gpaddr_q;
-        gpa_x                   = ptw_pptr_q;
-        final_gpa               = gpaddr_q;
         cause_n                 = cause_q;
 
         case (state_q)
@@ -264,55 +327,54 @@ module rv_iommu_ptw_sv39x4 #(
                 pf_excep_n          = 1'b0;
 
                 // check for possible IOTLB miss
-                if (iotlb_access_i & ~iotlb_hit_i) begin
+                if (init_ptw_i) begin
 
-                    // Two-stage: start in S2-L1
-                    if (en_1S_i && en_2S_i) begin
+                    state_n = MEM_ACCESS;
 
-                        ptw_stage_n = STAGE_2_INTERMED;
+                    // Determine walk configuration
+                    case ({en_1S_i, en_2S_i})
 
-                        //# GPA_1
-                        // Translate iosatp. Segments of the GVA are used as offset
-                        gpa_x = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
-                        gpa_x_n = gpa_x;
-
-                        // pptr for first S2-L1
-                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
-                    end
-
-                    // Stage 2 only: Start in unique S2-L1
-                    else if ((!en_1S_i && en_2S_i)) begin
+                        // Stage 2 only: Start in unique S2-L1
+                        2'b01: begin
+                            
+                            ptw_stage_n = STAGE_2_FINAL;
                         
-                        // Save the GPA
-                        gpaddr_n = req_iova_i[riscv::SVX-1:0];
+                            gpaddr_n    = req_iova_i[riscv::SVX-1:0];
+                            ptw_pptr_n  = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};                 
+                        end 
 
-                        // normal second-stage translation
-                        ptw_stage_n = STAGE_2_FINAL;
+                        // Stage 1 only: Start in S1-L1
+                        2'b10: begin
+                            
+                            ptw_stage_n = STAGE_1;
 
-                        // pptr for unique S2-L1
-                        ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], req_iova_i[riscv::SVX-1:30], 3'b0};
-                    end
-                    
-                    // Stage 1 only: Start in S1-L1
-                    else if (en_1S_i) begin
-                        ptw_stage_n = STAGE_1;
+                            // pptr for S1-L1
+                            ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
+                        end 
 
-                        // pptr for S1-L1
-                        ptw_pptr_n  = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
-                    end
+                        // Two-stage: start in S2-L1
+                        2'b11: begin
+                            ptw_stage_n = STAGE_2_INTERMED;
 
-                    if (en_1S_i || en_2S_i) begin
+                            //# GPA_1
+                            // Translate iosatp. Segments of the GVA are used as offset
+                            gpa_x = {iosatp_ppn_i, req_iova_i[riscv::SV-1:30], 3'b0};
+                            gpa_x_n = gpa_x;
 
-                        // register PSCID, GSCID and IOVA
-                        iotlb_update_pscid_n   = pscid_i;
-                        iotlb_update_gscid_n   = gscid_i;
-                        iova_n = req_iova_i;
-                        state_n                = MEM_ACCESS;
-                    end
+                            // pptr for first S2-L1
+                            ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], gpa_x[riscv::SVX-1:30], 3'b0};
+                        end
 
-                    // If no stage is enabled,
-                    // then signal external logic that translation is complete without updating IOTLB
-                    else bare_translation_o = 1'b1;
+                        // Both stages Bare (should never reach here)
+                        default: begin
+                            state_n = IDLE;
+                        end
+                    endcase
+
+                    // register PSCID, GSCID and IOVA
+                    iotlb_update_pscid_n    = pscid_i;
+                    iotlb_update_gscid_n    = gscid_i;
+                    iova_n                  = req_iova_i;
                 end
             end
 
@@ -323,18 +385,16 @@ module rv_iommu_ptw_sv39x4 #(
                 
                 // wait for AXI Bus to accept the request
                 if (mem_resp_i.ar_ready) begin
-                    state_n     = PROC_PTE;
+                    state_n = PROC_PTE;
                 end
             end
 
-            // Process the incoming memory data (hold in pte)
+            // Process normal PTEs
             PROC_PTE: begin
                 // we wait for RVALID to start reading
                 if (mem_resp_i.r_valid) begin
 
                     mem_req_o.r_ready   = 1'b1;
-
-                    //# Normal address translation
                         
                     // We need to save global configuration for non-leaf PTEs marked as global
                     if (pte.g && ptw_stage_q == STAGE_1)
@@ -387,6 +447,12 @@ module rv_iommu_ptw_sv39x4 #(
                                         ptw_pptr_n = {iohgatp_ppn_i[riscv::PPNW-1:2], final_gpa[riscv::SVX-1:30], 3'b0};
                                         main_lvl_n = LVL1;
                                     end
+
+                                    // GPA is an MSI address (even if Stage 2 is disabled)
+                                    if (gpaddr_is_msi) begin
+                                        gpaddr_is_msi_o = 1'b1;
+                                        state_n         = IDLE;
+                                    end
                                 end
 
                                 // result of any S2-L1 for 1G superpages, S2-L2 for 2M superpages and S2-L3 for 4K pages,
@@ -416,7 +482,10 @@ module rv_iommu_ptw_sv39x4 #(
                             // IOTLB is updated only if PTE checks are passed, 
                             // so that these checks do not need to be performed again on an IOTLB hit
 
-                            if ((ptw_stage_q == STAGE_2_FINAL) || !en_2S_i) begin
+                            // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
+                            // MSI translation process is invoked
+                            if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_imsic_addr)) begin
+                                
                                 update_o = 1'b1;
                             end
 
@@ -431,7 +500,7 @@ module rv_iommu_ptw_sv39x4 #(
                                 (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
                                 (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                 
-                                pf_excep_n        = 1'b1;
+                                pf_excep_n          = 1'b1;
                                 state_n             = ERROR;
                                 ptw_stage_n         = ptw_stage_q;
                                 update_o            = 1'b0;
@@ -560,7 +629,7 @@ module rv_iommu_ptw_sv39x4 #(
 
                     // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
                     if (ptw_stage_q == STAGE_1 && (|pte.ppn[riscv::PPNW-1:riscv::GPPNW]) != 1'b0) begin
-                        pf_excep_n    = 1'b1;
+                        pf_excep_n      = 1'b1;
                         state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
                         ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
                         update_o        = 1'b0;
