@@ -274,6 +274,51 @@ package rv_iommu_reg_pkg;
 
   typedef struct packed {
     struct packed {
+      logic [51:0]  q;
+    } vpn;
+  } iommu_reg2hw_tr_req_iova_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic         q;
+    } go;
+    struct packed {
+      logic         q;
+    } priv;
+    struct packed {
+      logic         q;
+    } exe;
+    struct packed {
+      logic         q;
+    } nw;
+    struct packed {
+      logic [19:0]  q;
+    } pid;
+    struct packed {
+      logic         q;
+    } pv;
+    struct packed {
+      logic [23:0]  q;
+    } did;
+  } iommu_reg2hw_tr_req_ctl_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic         q;
+    } fault;
+    struct packed {
+      logic [1:0]   q;
+    } pbmt;
+    struct packed {
+      logic         q;
+    } s;
+    struct packed {
+      logic [43:0]  q;
+    } ppn;
+  } iommu_reg2hw_tr_response_reg_t;
+
+  typedef struct packed {
+    struct packed {
       logic [3:0]  q;
     } civ;
     struct packed {
@@ -485,6 +530,32 @@ package rv_iommu_reg_pkg;
     } of;
   } iommu_hw2reg_iohpmevt_reg_t;
 
+  typedef struct packed {
+    struct packed {
+      logic        d;
+      logic        de;
+    } go;
+  } iommu_hw2reg_tr_req_ctl_reg_t;
+
+  typedef struct packed {
+    struct packed {
+      logic        d;
+      logic        de;
+    } fault;
+    struct packed {
+      logic [1:0]  d;
+      logic        de;
+    } pbmt;
+    struct packed {
+      logic        d;
+      logic        de;
+    } s;
+    struct packed {
+      logic [43:0] d;
+      logic        de;
+    } ppn;
+  } iommu_hw2reg_tr_response_reg_t;
+
   // Register -> HW type
   typedef struct packed {
     iommu_reg2hw_capabilities_reg_t capabilities; // [1772:1736]
@@ -503,6 +574,9 @@ package rv_iommu_reg_pkg;
     iommu_reg2hw_iohpmcycles_reg_t iohpmcycles;
     iommu_reg2hw_iohpmctr_reg_t [30:0] iohpmctr;
     iommu_reg2hw_iohpmevt_reg_t [30:0] iohpmevt;
+    iommu_reg2hw_tr_req_iova_reg_t tr_req_iova;
+    iommu_reg2hw_tr_req_ctl_reg_t tr_req_ctl;
+    iommu_reg2hw_tr_response_reg_t tr_response;
     iommu_reg2hw_icvec_reg_t icvec; // [1439:1424]
     iommu_reg2hw_msi_addr_reg_t [15:0] msi_addr; // [1423:1368]
     iommu_reg2hw_msi_data_reg_t [15:0] msi_data; // [1367:1336]
@@ -525,6 +599,8 @@ package rv_iommu_reg_pkg;
     iommu_hw2reg_iohpmctr_reg_t [30:0]  iohpmctr;
     iommu_hw2reg_iohpmevt_reg_t [30:0]  iohpmevt;
     iommu_hw2reg_ipsr_reg_t             ipsr; // [1467:1460]
+    iommu_hw2reg_tr_req_ctl_reg_t       tr_req_ctl;
+    iommu_hw2reg_tr_response_reg_t      tr_response;
   } iommu_hw2reg_t;
 
   // Register offsets
@@ -552,6 +628,12 @@ package rv_iommu_reg_pkg;
   parameter logic [BlockAw-1:0] IOMMU_IOHPMCTR_OFFSET_H     = 12'h 6c;
   parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET_L     = 12'h 160;
   parameter logic [BlockAw-1:0] IOMMU_IOHPMEVT_OFFSET_H     = 12'h 164;
+  parameter logic [BlockAw-1:0] IOMMU_TR_REQ_IOVA_OFFSET_L  = 12'h 258;
+  parameter logic [BlockAw-1:0] IOMMU_TR_REQ_IOVA_OFFSET_H  = 12'h 25C;
+  parameter logic [BlockAw-1:0] IOMMU_TR_REQ_CTL_OFFSET_L   = 12'h 260;
+  parameter logic [BlockAw-1:0] IOMMU_TR_REQ_CTL_OFFSET_H   = 12'h 264;
+  parameter logic [BlockAw-1:0] IOMMU_TR_RESPONSE_OFFSET_L  = 12'h 268;
+  parameter logic [BlockAw-1:0] IOMMU_TR_RESPONSE_OFFSET_H  = 12'h 26C;
   parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET_L        = 12'h 2f8;
   parameter logic [BlockAw-1:0] IOMMU_ICVEC_OFFSET_H        = 12'h 2fc;
   parameter logic [BlockAw-1:0] IOMMU_MSI_ADDR_OFFSET_L     = 12'h 300;
@@ -560,7 +642,7 @@ package rv_iommu_reg_pkg;
   parameter logic [BlockAw-1:0] IOMMU_MSI_VEC_CTL_OFFSET    = 12'h 30c;
 
   // Register width information to check illegal writes
-  parameter logic [3:0] IOMMU_PERMIT [30] = '{
+  parameter logic [3:0] IOMMU_PERMIT [36] = '{
     4'b 1111, // IOMMU_CAPABILITIES_L
     4'b 0011, // IOMMU_CAPABILITIES_H
     4'b 0001, // IOMMU_FCTL
@@ -585,6 +667,12 @@ package rv_iommu_reg_pkg;
     4'b 1111, // IOMMU_IOHPMCTR_H
     4'b 1111, // IOMMU_IOHPMEVT_L
     4'b 1111, // IOMMU_IOHPMEVT_H
+    4'b 1110, // IOMMU_TR_REQ_IOVA_L
+    4'b 1111, // IOMMU_TR_REQ_IOVA_H
+    4'b 1111, // IOMMU_TR_REQ_CTL_L
+    4'b 1111, // IOMMU_TR_REQ_CTL_H
+    4'b 1111, // IOMMU_TR_RESPONSE_L
+    4'b 1111, // IOMMU_TR_RESPONSE_H
     4'b 0011, // IOMMU_ICVEC_L
     4'b 0000, // IOMMU_ICVEC_H
     4'b 1111, // IOMMU_MSI_ADDR_L

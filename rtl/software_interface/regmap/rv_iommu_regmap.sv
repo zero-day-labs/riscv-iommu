@@ -29,6 +29,10 @@ module rv_iommu_regmap #(
   parameter int unsigned          N_INT_VEC = 16,
   // Number of Performance monitoring event counters (set to zero to disable HPM)
   parameter int unsigned          N_IOHPMCTR = 0, // max 31
+  // Include process_id support
+  parameter bit                   InclPC = 0,
+  // Include debug register interface
+  parameter bit                   InclDBG = 0,
 
   parameter type 			        reg_req_t = logic,
   parameter type 			        reg_rsp_t = logic,
@@ -67,7 +71,7 @@ module rv_iommu_regmap #(
   logic           			  reg_ready;
 
   logic addrmiss;
-  logic [210:0] wr_err;
+  logic [215:0] wr_err;
   logic [DATA_WIDTH-1:0] reg_rdata_next;
 
   reg_req_t  reg_intf_req;
@@ -285,6 +289,39 @@ module rv_iommu_regmap #(
   logic 	      iohpmevt_of_qs          [31];
   logic 	      iohpmevt_of_wd          [31];
   logic 		    iohpmevt_of_we          [31];
+
+  logic [19:0]  tr_req_iova_vpn_l_qs;
+  logic [19:0]  tr_req_iova_vpn_l_wd;
+  logic         tr_req_iova_vpn_l_we;
+  logic [31:0]  tr_req_iova_vpn_h_qs;
+  logic [31:0]  tr_req_iova_vpn_h_wd;
+  logic         tr_req_iova_vpn_h_we;
+  logic         tr_req_ctl_go_qs;
+  logic         tr_req_ctl_go_wd;
+  logic         tr_req_ctl_go_we;
+  logic         tr_req_ctl_priv_qs;
+  logic         tr_req_ctl_priv_wd;
+  logic         tr_req_ctl_priv_we;
+  logic         tr_req_ctl_exe_qs;
+  logic         tr_req_ctl_exe_wd;
+  logic         tr_req_ctl_exe_we;
+  logic         tr_req_ctl_nw_qs;
+  logic         tr_req_ctl_nw_wd;
+  logic         tr_req_ctl_nw_we;
+  logic [19:0]  tr_req_ctl_pid_qs;
+  logic [19:0]  tr_req_ctl_pid_wd;
+  logic         tr_req_ctl_pid_we;
+  logic         tr_req_ctl_pv_qs;
+  logic         tr_req_ctl_pv_wd;
+  logic         tr_req_ctl_pv_we;
+  logic [23:0]  tr_req_ctl_did_qs;
+  logic [23:0]  tr_req_ctl_did_wd;
+  logic         tr_req_ctl_did_we;
+  logic         tr_response_fault_qs;
+  logic [1:0]   tr_response_pbmt_qs;
+  logic         tr_response_s_qs;
+  logic [21:0]  tr_response_ppn_h_qs;
+  logic [21:0]  tr_response_ppn_l_qs;
   
   // ipsr
   logic 		ipsr_cip_qs;
@@ -1896,6 +1933,401 @@ module rv_iommu_regmap #(
       assign reg2hw.iohpmevt[i].of.q        = '0;
     end
 
+  // Debug Register Interface
+  generate
+    
+    // Include Debug Register Interface
+    if (InclDBG) begin : gen_dbg_if
+
+      // R[tr_req_iova]: V(False)
+      
+      //   F[vpn_low]
+      rv_iommu_field #(
+        .DATA_WIDTH      (20),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_tr_req_iova_vpn_l (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_iova_vpn_l_we),
+        .wd     (tr_req_iova_vpn_l_wd),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_iova.vpn.q[19:0]),
+
+        // to register interface (read)
+        .qs     (tr_req_iova_vpn_l_qs)
+      );
+
+      //   F[vpn_high]
+      rv_iommu_field #(
+        .DATA_WIDTH      (32),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_tr_req_iova_vpn_h (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_iova_vpn_h_we),
+        .wd     (tr_req_iova_vpn_h_wd),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_iova.vpn.q[51:20]),
+
+        // to register interface (read)
+        .qs     (tr_req_iova_vpn_h_qs)
+      );
+
+      // R[tr_req_ctl]: V(False)
+      
+      //   F[go/busy]
+      rv_iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessW1S),
+        .RESVAL  ('0)
+      ) u_tr_req_ctl_go (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_ctl_go_we),
+        .wd     (tr_req_ctl_go_wd),
+
+        // from internal hardware
+        .de     (hw2reg.tr_req_ctl.go.de),
+        .d      (hw2reg.tr_req_ctl.go.d),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_ctl.go.q),
+
+        // to register interface (read)
+        .qs     (tr_req_ctl_go_qs)
+      );
+
+      //   F[priv]
+      rv_iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_tr_req_ctl_priv (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_ctl_priv_we),
+        .wd     (tr_req_ctl_priv_wd),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_ctl.priv.q),
+
+        // to register interface (read)
+        .qs     (tr_req_ctl_priv_qs)
+      );
+
+      //   F[exe]
+      rv_iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_tr_req_ctl_exe (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_ctl_exe_we),
+        .wd     (tr_req_ctl_exe_wd),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_ctl.exe.q),
+
+        // to register interface (read)
+        .qs     (tr_req_ctl_exe_qs)
+      );
+
+      // Only generate PID field if PID is supported
+      if (InclPC) begin : gen_pc_support
+        
+        //   F[pid]
+        rv_iommu_field #(
+          .DATA_WIDTH      (20),
+          .SwAccess(SwAccessRW),
+          .RESVAL  ('0)
+        ) u_tr_req_ctl_pid (
+          .clk_i   (clk_i   ),
+          .rst_ni  (rst_ni  ),
+
+          // from register interface
+          .we     (tr_req_ctl_pid_we),
+          .wd     (tr_req_ctl_pid_wd),
+
+          // from internal hardware
+          .de     ('0),
+          .d      ('0),
+          .ds     (),
+
+          // to internal hardware
+          .qe     (),
+          .q      (reg2hw.tr_req_ctl.pid.q),
+
+          // to register interface (read)
+          .qs     (tr_req_ctl_pid_qs)
+        );
+
+        //   F[pv]
+        rv_iommu_field #(
+          .DATA_WIDTH      (1),
+          .SwAccess(SwAccessRW),
+          .RESVAL  ('0)
+        ) u_tr_req_ctl_pv (
+          .clk_i   (clk_i   ),
+          .rst_ni  (rst_ni  ),
+
+          // from register interface
+          .we     (tr_req_ctl_pv_we),
+          .wd     (tr_req_ctl_pv_wd),
+
+          // from internal hardware
+          .de     ('0),
+          .d      ('0),
+          .ds     (),
+
+          // to internal hardware
+          .qe     (),
+          .q      (reg2hw.tr_req_ctl.pv.q),
+
+          // to register interface (read)
+          .qs     (tr_req_ctl_pv_qs)
+        );
+      end : gen_pc_support
+      
+      else begin : gen_pc_support_disabled
+
+        assign reg2hw.tr_req_ctl.pid.q  = '0;
+        assign tr_req_ctl_pid_qs        = '0;
+        assign reg2hw.tr_req_ctl.pv.q   = 1'b0;
+        assign tr_req_ctl_pv_qs         = 1'b0;
+        
+      end : gen_pc_support_disabled
+
+      //   F[did]
+      rv_iommu_field #(
+        .DATA_WIDTH      (24),
+        .SwAccess(SwAccessRW),
+        .RESVAL  ('0)
+      ) u_tr_req_ctl_did (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (tr_req_ctl_did_we),
+        .wd     (tr_req_ctl_did_wd),
+
+        // from internal hardware
+        .de     ('0),
+        .d      ('0),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_req_ctl.did.q),
+
+        // to register interface (read)
+        .qs     (tr_req_ctl_did_qs)
+      );
+
+      // R[tr_response]: V(False)
+
+      //   F[fault]
+      rv_iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRO),
+        .RESVAL  ('0)
+      ) u_tr_response_fault (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (1'b0),
+        .wd     ('0),
+
+        // from internal hardware
+        .de     (hw2reg.tr_response.fault.de),
+        .d      (hw2reg.tr_response.fault.d),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_response.fault.q),
+
+        // to register interface (read)
+        .qs     (tr_response_fault_qs)
+      );
+
+      //   F[pbmt]
+      rv_iommu_field #(
+        .DATA_WIDTH      (2),
+        .SwAccess(SwAccessRO),
+        .RESVAL  ('0)
+      ) u_tr_response_pbmt (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (1'b0),
+        .wd     ('0),
+
+        // from internal hardware
+        .de     (hw2reg.tr_response.pbmt.de),
+        .d      (hw2reg.tr_response.pbmt.d),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_response.pbmt.q),
+
+        // to register interface (read)
+        .qs     (tr_response_pbmt_qs)
+      );
+
+      //   F[s]
+      rv_iommu_field #(
+        .DATA_WIDTH      (1),
+        .SwAccess(SwAccessRO),
+        .RESVAL  ('0)
+      ) u_tr_response_s (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (1'b0),
+        .wd     ('0),
+
+        // from internal hardware
+        .de     (hw2reg.tr_response.s.de),
+        .d      (hw2reg.tr_response.s.d),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_response.s.q),
+
+        // to register interface (read)
+        .qs     (tr_response_s_qs)
+      );
+
+      //   F[ppn_low]
+      rv_iommu_field #(
+        .DATA_WIDTH      (22),
+        .SwAccess(SwAccessRO),
+        .RESVAL  ('0)
+      ) u_tr_response_ppn_l (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (1'b0),
+        .wd     ('0),
+
+        // from internal hardware
+        .de     (hw2reg.tr_response.ppn.de),
+        .d      (hw2reg.tr_response.ppn.d[21:0]),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_response.ppn.q[21:0]),
+
+        // to register interface (read)
+        .qs     (tr_response_ppn_l_qs)
+      );
+
+      //   F[ppn_high]
+      rv_iommu_field #(
+        .DATA_WIDTH      (22),
+        .SwAccess(SwAccessRO),
+        .RESVAL  ('0)
+      ) u_tr_response_ppn_h (
+        .clk_i   (clk_i   ),
+        .rst_ni  (rst_ni  ),
+
+        // from register interface
+        .we     (1'b0),
+        .wd     ('0),
+
+        // from internal hardware
+        .de     (hw2reg.tr_response.ppn.de),
+        .d      (hw2reg.tr_response.ppn.d[43:22]),
+        .ds     (),
+
+        // to internal hardware
+        .qe     (),
+        .q      (reg2hw.tr_response.ppn.q[43:22]),
+
+        // to register interface (read)
+        .qs     (tr_response_ppn_h_qs)
+      );
+
+    end : gen_dbg_if
+    
+    else begin : gen_dbg_if_disabled
+
+      assign reg2hw.tr_req_iova.vpn.q   = '0;
+      assign tr_req_iova_vpn_h_qs       = '0;
+      assign tr_req_iova_vpn_l_qs       = '0;
+      assign reg2hw.tr_req_ctl.go.q     = 1'b0;
+      assign tr_req_ctl_go_qs           = 1'b0;
+      assign reg2hw.tr_req_ctl.priv.q   = 1'b0;
+      assign tr_req_ctl_priv_qs         = 1'b0;
+      assign reg2hw.tr_req_ctl.exe.q    = 1'b0;
+      assign tr_req_ctl_exe_qs          = 1'b0;
+      assign reg2hw.tr_req_ctl.pid.q    = '0;
+      assign tr_req_ctl_pid_qs          = '0;
+      assign reg2hw.tr_req_ctl.pv.q     = 1'b0;
+      assign tr_req_ctl_pv_qs           = 1'b0;
+      assign reg2hw.tr_req_ctl.did.q    = '0;
+      assign tr_req_ctl_did_qs          = '0;
+      assign reg2hw.tr_response.fault.q = 1'b0;
+      assign tr_response_fault_qs       = 1'b0;
+      assign reg2hw.tr_response.pbmt.q  = '0;
+      assign tr_response_pbmt_qs        = '0;
+      assign reg2hw.tr_response.s.q     = 1'b0;
+      assign tr_response_s_qs           = 1'b0;
+      assign reg2hw.tr_response.ppn.q   = '0;
+      assign tr_response_ppn_h_qs       = '0;
+      assign tr_response_ppn_l_qs       = '0;
+
+    end : gen_dbg_if_disabled
+  endgenerate
+
   // R[icvec]: V(False)
 
   generate
@@ -2140,7 +2572,7 @@ module rv_iommu_regmap #(
   //-------------------
   //# Address hit logic
   //-------------------
-  logic [210:0] addr_hit;
+  logic [215:0] addr_hit;
 
   /*
     Address hit map:
@@ -2168,12 +2600,18 @@ module rv_iommu_regmap #(
     [81:51]   iohpmctr_n (high)
     [112:82]  iohpmevt_n (low)
     [143:113] iohpmevt_n (high)
-    [144]     icvec (low)
-    [145]     icvec (high)
-    [161:146] msi_addr_x (low)
-    [177:162] msi_addr_x (high)
-    [193:178] msi_data_x
-    [209:194] msi_vec_ctl_x
+    [144]     tr_req_iova (low)
+    [145]     tr_req_iova (high)
+    [146]     tr_req_ctl  (low)
+    [147]     tr_req_ctl  (high)
+    [148]     tr_response (low)
+    [149]     tr_response (high)
+    [150]     icvec (low)
+    [151]     icvec (high)
+    [167:152] msi_addr_x (low)
+    [183:168] msi_addr_x (high)
+    [199:184] msi_data_x
+    [215:200] msi_vec_ctl_x
   */
 
   // Mandatory registers
@@ -2215,23 +2653,46 @@ module rv_iommu_regmap #(
     assign addr_hit[113+i] = 1'b0;
   end
 
-  assign addr_hit[144] = (reg_addr == IOMMU_ICVEC_OFFSET_L);
-  assign addr_hit[145] = (reg_addr == IOMMU_ICVEC_OFFSET_H);
+  // Debug Register IF
+  generate
+  if (InclDBG) begin : gen_dbg_if
+    
+    assign addr_hit[144] = (reg_addr == IOMMU_TR_REQ_IOVA_OFFSET_L);
+    assign addr_hit[145] = (reg_addr == IOMMU_TR_REQ_IOVA_OFFSET_H);
+    assign addr_hit[146] = (reg_addr == IOMMU_TR_REQ_CTL_OFFSET_L);
+    assign addr_hit[147] = (reg_addr == IOMMU_TR_REQ_CTL_OFFSET_H);
+    assign addr_hit[148] = (reg_addr == IOMMU_TR_RESPONSE_OFFSET_L);
+    assign addr_hit[149] = (reg_addr == IOMMU_TR_RESPONSE_OFFSET_H);
+  end : gen_dbg_if
+  
+  else begin : gen_dbg_if_disabled
+    
+    assign addr_hit[144] = 1'b0;
+    assign addr_hit[145] = 1'b0;
+    assign addr_hit[146] = 1'b0;
+    assign addr_hit[147] = 1'b0;
+    assign addr_hit[148] = 1'b0;
+    assign addr_hit[149] = 1'b0;
+  end : gen_dbg_if_disabled
+  endgenerate
+
+  assign addr_hit[150] = (reg_addr == IOMMU_ICVEC_OFFSET_L);
+  assign addr_hit[151] = (reg_addr == IOMMU_ICVEC_OFFSET_H);
 
   // MSI Config Table
   for (genvar i = 0; i < N_INT_VEC; i++) begin
-    assign addr_hit[146+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_L  + i*16));
-    assign addr_hit[162+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_H  + i*16));
-    assign addr_hit[178+i] = (reg_addr == (IOMMU_MSI_DATA_OFFSET    + i*16));
-    assign addr_hit[194+i] = (reg_addr == (IOMMU_MSI_VEC_CTL_OFFSET + i*16));
+    assign addr_hit[152+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_L  + i*16));
+    assign addr_hit[168+i] = (reg_addr == (IOMMU_MSI_ADDR_OFFSET_H  + i*16));
+    assign addr_hit[184+i] = (reg_addr == (IOMMU_MSI_DATA_OFFSET    + i*16));
+    assign addr_hit[200+i] = (reg_addr == (IOMMU_MSI_VEC_CTL_OFFSET + i*16));
   end
 
   // Hardwire unimplemented vectors to zero
   for (genvar i = N_INT_VEC; i < 16; i++) begin
-    assign addr_hit[146+i] = 1'b0;
-    assign addr_hit[162+i] = 1'b0;
-    assign addr_hit[178+i] = 1'b0;
-    assign addr_hit[194+i] = 1'b0;
+    assign addr_hit[152+i] = 1'b0;
+    assign addr_hit[168+i] = 1'b0;
+    assign addr_hit[184+i] = 1'b0;
+    assign addr_hit[200+i] = 1'b0;
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;  // a miss occurs when reading or writing and no addr_hit flag is set
@@ -2258,25 +2719,49 @@ module rv_iommu_regmap #(
     assign wr_err[113+i]  = 1'b0;
   end
 
-  assign wr_err[144] = (addr_hit[144] & (|(IOMMU_PERMIT[24] & ~reg_be)));
-  assign wr_err[145] = (addr_hit[145] & (|(IOMMU_PERMIT[25] & ~reg_be)));
+  // Debug register IF
+  generate
+  if (InclDBG) begin : gen_dbg_if
+    
+    assign wr_err[144] = (addr_hit[144] & (|(IOMMU_PERMIT[24] & ~reg_be)));
+    assign wr_err[145] = (addr_hit[145] & (|(IOMMU_PERMIT[25] & ~reg_be)));
+    assign wr_err[146] = (addr_hit[146] & (|(IOMMU_PERMIT[26] & ~reg_be)));
+    assign wr_err[147] = (addr_hit[147] & (|(IOMMU_PERMIT[27] & ~reg_be)));
+    assign wr_err[148] = (addr_hit[148] & (|(IOMMU_PERMIT[28] & ~reg_be)));
+    assign wr_err[149] = (addr_hit[149] & (|(IOMMU_PERMIT[29] & ~reg_be)));
+  end : gen_dbg_if
+  
+  else begin : gen_dbg_if_disabled
+    
+    assign wr_err[144] = 1'b0;
+    assign wr_err[145] = 1'b0;
+    assign wr_err[146] = 1'b0;
+    assign wr_err[147] = 1'b0;
+    assign wr_err[148] = 1'b0;
+    assign wr_err[149] = 1'b0;
+  end : gen_dbg_if_disabled
+  endgenerate
+  
+
+  assign wr_err[150] = (addr_hit[150] & (|(IOMMU_PERMIT[30] & ~reg_be)));
+  assign wr_err[151] = (addr_hit[151] & (|(IOMMU_PERMIT[31] & ~reg_be)));
 
   // MSI Config Table
   for (genvar i = 0; i < N_INT_VEC; i++) begin
     
-    assign wr_err[146+i] = (addr_hit[146+i] & (|(IOMMU_PERMIT[26] & ~reg_be)));
-    assign wr_err[162+i] = (addr_hit[162+i] & (|(IOMMU_PERMIT[27] & ~reg_be)));
-    assign wr_err[178+i] = (addr_hit[178+i] & (|(IOMMU_PERMIT[28] & ~reg_be)));
-    assign wr_err[194+i] = (addr_hit[194+i] & (|(IOMMU_PERMIT[29] & ~reg_be)));
+    assign wr_err[152+i] = (addr_hit[152+i] & (|(IOMMU_PERMIT[32] & ~reg_be)));
+    assign wr_err[168+i] = (addr_hit[168+i] & (|(IOMMU_PERMIT[33] & ~reg_be)));
+    assign wr_err[184+i] = (addr_hit[184+i] & (|(IOMMU_PERMIT[34] & ~reg_be)));
+    assign wr_err[200+i] = (addr_hit[200+i] & (|(IOMMU_PERMIT[35] & ~reg_be)));
   end
 
   // Hardwire unused bits to zero
   for (genvar i = N_INT_VEC; i < 16; i++) begin
     
-    assign wr_err[146+i] = 1'b0;
-    assign wr_err[162+i] = 1'b0;
-    assign wr_err[178+i] = 1'b0;
-    assign wr_err[194+i] = 1'b0;
+    assign wr_err[152+i] = 1'b0;
+    assign wr_err[168+i] = 1'b0;
+    assign wr_err[184+i] = 1'b0;
+    assign wr_err[200+i] = 1'b0;
   end
 
   //------------------
@@ -2488,17 +2973,87 @@ module rv_iommu_regmap #(
       assign iohpmevt_of_wd[i]          = '0;
     end
 
+  // Debug Register IF
+  generate
+
+    if (InclDBG) begin : gen_dbg_if
+      
+      assign tr_req_iova_vpn_l_we = addr_hit[144] & reg_we & !reg_error;
+      assign tr_req_iova_vpn_l_wd = reg_wdata[31:12];
+
+      assign tr_req_iova_vpn_l_we = addr_hit[145] & reg_we & !reg_error;
+      assign tr_req_iova_vpn_l_wd = reg_wdata[31:0];
+
+      assign tr_req_ctl_go_we = addr_hit[146] & reg_we & !reg_error;
+      assign tr_req_ctl_go_wd = reg_wdata[0];
+
+      assign tr_req_ctl_priv_we = addr_hit[146] & reg_we & !reg_error;
+      assign tr_req_ctl_priv_wd = reg_wdata[1];
+
+      assign tr_req_ctl_exe_we = addr_hit[146] & reg_we & !reg_error;
+      assign tr_req_ctl_exe_wd = reg_wdata[2];
+
+      assign tr_req_ctl_nw_we = addr_hit[146] & reg_we & !reg_error;
+      assign tr_req_ctl_nw_wd = reg_wdata[3];
+
+      if (InclPC) begin : gen_pc_support
+        
+        assign tr_req_ctl_pid_we = addr_hit[146] & reg_we & !reg_error;
+        assign tr_req_ctl_pid_wd = reg_wdata[31:12];
+
+        assign tr_req_ctl_pv_we = addr_hit[147] & reg_we & !reg_error;
+        assign tr_req_ctl_pv_wd = reg_wdata[0];
+
+      end : gen_pc_support
+      
+      else begin : gen_pc_support_disabled
+        
+        assign tr_req_ctl_pid_we = 1'b0;
+        assign tr_req_ctl_pid_wd = '0;
+
+        assign tr_req_ctl_pv_we = 1'b0;
+        assign tr_req_ctl_pv_wd = '0;
+      end : gen_pc_support_disabled
+
+      assign tr_req_ctl_did_we = addr_hit[147] & reg_we & !reg_error;
+      assign tr_req_ctl_did_wd = reg_wdata[31:8];
+    end : gen_dbg_if
+    
+    else begin : gen_dbg_if_disabled
+
+      assign tr_req_iova_vpn_l_we = 1'b0;
+      assign tr_req_iova_vpn_l_wd = '0;
+      assign tr_req_iova_vpn_l_we = 1'b0;
+      assign tr_req_iova_vpn_l_wd = '0;
+      assign tr_req_ctl_go_we = 1'b0;
+      assign tr_req_ctl_go_wd = '0;
+      assign tr_req_ctl_priv_we = 1'b0;
+      assign tr_req_ctl_priv_wd = '0;
+      assign tr_req_ctl_exe_we = 1'b0;
+      assign tr_req_ctl_exe_wd = '0;
+      assign tr_req_ctl_nw_we = 1'b0;
+      assign tr_req_ctl_nw_wd = '0;
+      assign tr_req_ctl_pid_we = 1'b0;
+      assign tr_req_ctl_pid_wd = '0;
+      assign tr_req_ctl_pv_we = 1'b0;
+      assign tr_req_ctl_pv_wd = '0;
+      assign tr_req_ctl_did_we = 1'b0;
+      assign tr_req_ctl_did_wd = '0;  
+    end : gen_dbg_if_disabled
+    
+  endgenerate
+
   // icvec
-  assign icvec_civ_we = addr_hit[144] & reg_we & !reg_error;
+  assign icvec_civ_we = addr_hit[150] & reg_we & !reg_error;
   assign icvec_civ_wd = reg_wdata[(LOG2_INTVEC-1)+0:0];
 
-  assign icvec_fiv_we = addr_hit[144] & reg_we & !reg_error;
+  assign icvec_fiv_we = addr_hit[150] & reg_we & !reg_error;
   assign icvec_fiv_wd = reg_wdata[(LOG2_INTVEC-1)+4:4];
 
-  assign icvec_pmiv_we = addr_hit[144] & reg_we & !reg_error;
+  assign icvec_pmiv_we = addr_hit[150] & reg_we & !reg_error;
   assign icvec_pmiv_wd = reg_wdata[(LOG2_INTVEC-1)+8:8];
 
-  assign icvec_piv_we = addr_hit[144] & reg_we & !reg_error;
+  assign icvec_piv_we = addr_hit[150] & reg_we & !reg_error;
   assign icvec_piv_wd = reg_wdata[(LOG2_INTVEC-1)+12:12];
 
   // MSI Config Table
@@ -2506,19 +3061,19 @@ module rv_iommu_regmap #(
   for (genvar i = 0; i < N_INT_VEC; i++) begin
     
     // msi_addr_x (low)
-    assign msi_addr_l_we[i] = addr_hit[146+i] & reg_we & !reg_error;
+    assign msi_addr_l_we[i] = addr_hit[152+i] & reg_we & !reg_error;
     assign msi_addr_l_wd[i] = reg_wdata[31:2];
 
     // msi_addr_x (high)
-    assign msi_addr_h_we[i] = addr_hit[162+i] & reg_we & !reg_error;
+    assign msi_addr_h_we[i] = addr_hit[168+i] & reg_we & !reg_error;
     assign msi_addr_h_wd[i] = reg_wdata[23:0];
 
     // msi_data_x
-    assign msi_data_we[i] = addr_hit[178+i] & reg_we & !reg_error;
+    assign msi_data_we[i] = addr_hit[184+i] & reg_we & !reg_error;
     assign msi_data_wd[i] = reg_wdata[31:0];
 
     // msi_vec_ctl_x
-    assign msi_vec_ctl_we[i] = addr_hit[194+i] & reg_we & !reg_error;
+    assign msi_vec_ctl_we[i] = addr_hit[200+i] & reg_we & !reg_error;
     assign msi_vec_ctl_wd[i] = reg_wdata[0];
   end
   endgenerate
@@ -2555,10 +3110,10 @@ module rv_iommu_regmap #(
   logic msi_data_hit_vector;
   logic msi_vect_hit_vector;
 
-  assign msi_addr_l_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(146+N_INT_VEC-1):146]) : '0;
-  assign msi_addr_h_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(162+N_INT_VEC-1):162]) : '0;
-  assign msi_data_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(178+N_INT_VEC-1):178]) : '0;
-  assign msi_vect_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(194+N_INT_VEC-1):194]) : '0;
+  assign msi_addr_l_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(152+N_INT_VEC-1):152]) : '0;
+  assign msi_addr_h_hit_vector = (N_INT_VEC > 0) ? (|addr_hit[(168+N_INT_VEC-1):168]) : '0;
+  assign msi_data_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(184+N_INT_VEC-1):184]) : '0;
+  assign msi_vect_hit_vector   = (N_INT_VEC > 0) ? (|addr_hit[(200+N_INT_VEC-1):200]) : '0;
 
   always_comb begin
     reg_rdata_next = '0;
@@ -2783,8 +3338,48 @@ module rv_iommu_regmap #(
         end
       end
 
-      // icvec (low)
+      // Debug Register IF
+      // tr_req_iova (low)
       addr_hit[144]: begin
+        reg_rdata_next[31:12] = tr_req_iova_vpn_l_qs;
+        reg_rdata_next[11:0]  = '0;
+      end
+
+      // tr_req_iova (high)
+      addr_hit[145]: begin
+        reg_rdata_next[31:0]  = tr_req_iova_vpn_h_qs;
+      end
+
+      // tr_req_ctl  (low)
+      addr_hit[146]: begin
+        reg_rdata_next[0]     = tr_req_ctl_go_qs;
+        reg_rdata_next[1]     = tr_req_ctl_priv_qs;
+        reg_rdata_next[2]     = tr_req_ctl_exe_qs;
+        reg_rdata_next[3]     = tr_req_ctl_nw_qs;
+        reg_rdata_next[31:12] = tr_req_ctl_pid_wd;
+      end
+
+      // tr_req_ctl  (high)
+      addr_hit[147]: begin
+        reg_rdata_next[0]     = tr_req_ctl_pv_qs;
+        reg_rdata_next[31:8]  = tr_req_ctl_did_qs;
+      end
+
+      // tr_response (low)
+      addr_hit[148]: begin
+        reg_rdata_next[0]     = tr_response_fault_qs;
+        reg_rdata_next[8:7]   = tr_response_pbmt_qs;
+        reg_rdata_next[9]     = tr_response_s_qs;
+        reg_rdata_next[31:10] = tr_response_ppn_l_qs;
+      end
+
+      // tr_response (high)
+      addr_hit[149]: begin
+        reg_rdata_next[21:0]  = tr_response_fault_qs;
+      end
+
+      // icvec (low)
+      addr_hit[150]: begin
         reg_rdata_next[(LOG2_INTVEC-1)+0:0] = icvec_civ_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+4:4] = icvec_fiv_qs;
         reg_rdata_next[(LOG2_INTVEC-1)+8:8] = icvec_pmiv_qs;
@@ -2793,7 +3388,7 @@ module rv_iommu_regmap #(
       end
 
       // icvec (high)
-      addr_hit[145]: begin
+      addr_hit[151]: begin
         reg_rdata_next[31:0] = '0;
       end
 
@@ -2801,7 +3396,7 @@ module rv_iommu_regmap #(
       (msi_addr_l_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[i+146]) begin
+          if (addr_hit[i+152]) begin
             reg_rdata_next[1:0] = '0;
             reg_rdata_next[31:2] = msi_addr_l_qs[i];
           end
@@ -2812,7 +3407,7 @@ module rv_iommu_regmap #(
       (msi_addr_h_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[i+162]) begin
+          if (addr_hit[i+168]) begin
             reg_rdata_next[23:0] = msi_addr_h_qs[i];
             reg_rdata_next[31:24] = '0;
           end
@@ -2823,7 +3418,7 @@ module rv_iommu_regmap #(
       (msi_data_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[i+178]) begin
+          if (addr_hit[i+184]) begin
             reg_rdata_next[31:0] = msi_data_qs[i];
           end
         end
@@ -2833,7 +3428,7 @@ module rv_iommu_regmap #(
       (msi_vect_hit_vector): begin
 
         for (int unsigned i = 0; i < N_INT_VEC; i++) begin
-          if (addr_hit[i+194]) begin
+          if (addr_hit[i+200]) begin
             reg_rdata_next[0] = msi_vec_ctl_qs[i];
             reg_rdata_next[31:1] = '0;
           end

@@ -27,6 +27,10 @@ module rv_iommu_sw_if_wrapper #(
     parameter int unsigned          N_INT_VEC = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
     parameter int unsigned          N_IOHPMCTR = 0, // max 31
+    // Include process_id support
+    parameter bit                   InclPC = 0,
+    // Include debug register interface
+    parameter bit                   InclDBG = 0,
 
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
@@ -236,6 +240,8 @@ module rv_iommu_sw_if_wrapper #(
         .IGS            (IGS        ),
         .N_INT_VEC      (N_INT_VEC  ),
         .N_IOHPMCTR     (N_IOHPMCTR ),
+        .InclPC         (InclPC     ),
+        .InclDBG        (InclDBG    ),
         .reg_req_t      (reg_req_t  ),
         .reg_rsp_t      (reg_rsp_t  )
     ) i_rv_iommu_regmap (

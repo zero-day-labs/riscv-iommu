@@ -29,6 +29,8 @@ module riscv_iommu #(
     parameter bit                   InclPC          = 0,
     // Include AXI4 address boundary check
     parameter bit                   InclBC          = 0,
+    // Include debug register interface
+    parameter bit                   InclDBG         = 0,
     
     // MSI translation support
     parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
@@ -418,7 +420,8 @@ module riscv_iommu #(
         .IGS            (IGS        ),
         .N_INT_VEC      (N_INT_VEC  ),
         .N_IOHPMCTR     (N_IOHPMCTR ),
-
+        .InclPC         (InclPC     ),
+        .InclDBG        (InclDBG    ),
         .axi_req_t      (axi_req_t  ),
         .axi_rsp_t      (axi_rsp_t  ),
         .reg_req_t      (reg_req_t  ),
