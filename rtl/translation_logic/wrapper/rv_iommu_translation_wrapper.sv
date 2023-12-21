@@ -40,6 +40,7 @@ module rv_iommu_translation_wrapper #(
 
     // Trigger translation
     input  logic    req_trans_i,
+    input  logic    req_dbg_i,
 
     // Translation request data
     input  logic [23:0]                     did_i,      // device_id associated with the transaction
@@ -75,6 +76,7 @@ module rv_iommu_translation_wrapper #(
     // Request status and output data
     output logic                        trans_valid_o,      // Translation completed
     output logic [riscv::PLEN-1:0]      spaddr_o,           // Translated address
+    output logic                        is_superpage_o,     // Superpage translation
     // Error
     output logic                                trans_error_o,      // Translation error
     output logic                                report_fault_o,     // The fault must be reported through the FQ
@@ -133,6 +135,7 @@ module rv_iommu_translation_wrapper #(
                 .rst_ni,
 
                 .req_trans_i,
+                .req_dbg_i,
 
                 .did_i,                 // device_id associated with the transaction
                 .pv_i,                  // a valid process_id is associated with the request
@@ -160,6 +163,7 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_valid_o,         // Translation completed
                 .spaddr_o,              // Translated address
+                .is_superpage_o         // Superpage PTE
 
                 .trans_error_o,         // Translation error
                 .report_fault_o,        // The fault must be reported through the FQ
@@ -212,6 +216,7 @@ module rv_iommu_translation_wrapper #(
                 .rst_ni,
 
                 .req_trans_i,
+                .req_dbg_i,
 
                 .did_i,                 // device_id associated with the transaction
                 .iova_i,                // IOVA
@@ -237,6 +242,7 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_valid_o,         // Translation completed
                 .spaddr_o,              // Translated address
+                .is_superpage_o         // Superpage PTE
 
                 .trans_error_o,         // Translation error
                 .report_fault_o,        // The fault must be reported through the FQ

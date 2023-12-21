@@ -107,14 +107,14 @@ module riscv_iommu #(
     logic   ar_request, aw_request;
 
     // Transaction parameters
-    logic [riscv::VLEN-1:0]         iova;
-    logic [23:0]                    did;
-    logic                           pv;
-    logic [19:0]                    pid;
+    logic [riscv::VLEN-1:0]         trans_iova, iova;
+    logic [23:0]                    trans_did, did;
+    logic                           trans_pv, pv;
+    logic [19:0]                    trans_pid, pid;
     logic [15:0]                    gscid;
     logic [19:0]                    pscid;
-    logic [rv_iommu::TTYP_LEN-1:0]  trans_type;
-    logic                           priv_lvl;
+    logic [rv_iommu::TTYP_LEN-1:0]  trans_type, ttype;
+    logic                           trans_priv, priv;
 
     // To calculate transaction size
     // AxBURST
@@ -128,6 +128,7 @@ module riscv_iommu #(
     // Success
     logic                               trans_valid;    // translation success
     logic [riscv::PLEN-1:0]             spaddr;         // translated address
+    logic                               is_superpage;   // Superpage PTE
     // Error
     logic                               trans_error;    // translation error
     logic                               is_guest_pf;    // guest page fault occurred
@@ -173,6 +174,12 @@ module riscv_iommu #(
     rv_iommu_reg_pkg::iommu_reg2hw_fctl_reg_t           fctl;
     rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t           ddtp;
 
+    // Debug Interface register wires
+    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t     dbg_if_iova;
+    rv_iommu_reg_pkg::iommu_hw2reg_tr_response_reg_t     dbg_if_resp;
+    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_ctl_reg_t      dbg_if_ctl;
+    rv_iommu_reg_pkg::iommu_hw2reg_tr_req_ctl_reg_t      dbg_if_ctl_busy;
+
     // Register IF bus between Programming IF and SW IF wrapper
     reg_req_t   regmap_req;
     reg_rsp_t   regmap_resp;
@@ -212,7 +219,8 @@ module riscv_iommu #(
     assign  resume_request = ((trans_valid)                    |    // Successful translation
                               (trans_error & !is_fq_fifo_full) |    // Translation error
                               (bound_violation)                |    // Address boundary violation
-                              (ignore_request));                    // Ignore request (MRIF only)
+                              (ignore_request))                &    // Ignore request (MRIF only)
+                              (~dbg_if_ctl.go.q);                   // Do not resume debug requests
 
     // Connect the aux AXI bus to the translation request interface
     // AW
@@ -256,6 +264,100 @@ module riscv_iommu #(
     // R
     assign axi_aux_req.r_ready                  = dev_tr_req_i.r_ready;
 
+    // Transaction parameters source: TR request / DBG IF
+    generate
+        
+    if (InclDBG) begin : gen_dbg_if
+
+        always_comb begin
+
+            dbg_if_resp.fault.d = 1'b0;
+            dbg_if_resp.pbmt.d  = '0;
+            dbg_if_resp.s.d     = 1'b0;
+            dbg_if_resp.ppn.d   = '0;
+
+            dbg_if_resp.fault.de    = 1'b0;
+            dbg_if_resp.pbmt.de     = 1'b0;
+            dbg_if_resp.s.de        = 1'b0;
+            dbg_if_resp.ppn.de      = 1'b0;
+
+            // Indicate completion
+            dbg_if_ctl_busy.d   = 1'b0;
+            dbg_if_ctl_busy.de  = 1'b0;
+
+            // DBG IF request
+            if (dbg_if_ctl.go.q) begin
+                
+                iova    = dbg_if_iova.vpn.q;
+                did     = dbg_if_ctl.did.q;
+                pv      = (InclPC) ? (dbg_if_ctl.pv.q)  : (1'b0);
+                pid     = (InclPC) ? (dbg_if_ctl.pid.q) : ('0);
+                priv    = dbg_if_ctl.priv.q;
+
+                case ({dbg_if_ctl.exe.q, dbg_if_ctl.nw.q})
+                    2'b00: ttype = rv_iommu::UNTRANSLATED_W;
+                    2'b01: ttype = rv_iommu::UNTRANSLATED_R;
+                    2'b10: ttype = rv_iommu::UNTRANSLATED_RX;
+                    2'b11: ttype = rv_iommu::UNTRANSLATED_RX; 
+                    default: 
+                endcase
+
+                // Debug request finished
+                if (trans_valid | trans_error & !is_fq_fifo_full) begin
+                    
+                    // Update response register
+                    dbg_if_resp.fault.d = trans_error;
+                    dbg_if_resp.s.d     = is_superpage;
+                    dbg_if_resp.ppn.d   = spaddr[riscv::PLEN-1:12];
+
+                    dbg_if_resp.fault.de    = 1'b1;
+                    dbg_if_resp.pbmt.de     = 1'b1;
+                    dbg_if_resp.s.de        = 1'b1;
+                    dbg_if_resp.ppn.de      = 1'b1;
+
+                    // Indicate completion
+                    dbg_if_ctl_busy.de  = 1'b1;
+                end
+            end
+
+            // Normal translation request
+            else begin
+                
+                iova    = trans_iova;
+                did     = trans_did;
+                pv      = trans_pv;
+                pid     = trans_pid;
+                ttype   = trans_type;
+                priv    = trans_priv;
+            end
+        end
+    end : gen_dbg_if
+        
+    else begin : gen_dbg_if_disabled
+        
+        iova    = trans_iova;
+        did     = trans_did;
+        pv      = trans_pv;
+        pid     = trans_pid;
+        ttype   = trans_type;
+        priv    = trans_priv;
+
+        dbg_if_resp.fault.d     = 1'b0;
+        dbg_if_resp.pbmt.d      = '0;
+        dbg_if_resp.s.d         = 1'b0;
+        dbg_if_resp.ppn.d       = '0;
+
+        dbg_if_resp.fault.de    = 1'b0;
+        dbg_if_resp.pbmt.de     = 1'b0;
+        dbg_if_resp.s.de        = 1'b0;
+        dbg_if_resp.ppn.de      = 1'b0;
+
+        dbg_if_ctl_busy.d       = 1'b0;
+        dbg_if_ctl_busy.de      = 1'b0;
+        
+    end : gen_dbg_if_disabled
+    endgenerate
+
     //# Programming Interface
     rv_iommu_prog_if #(
         .ADDR_WIDTH     (ADDR_WIDTH     ),
@@ -289,8 +391,8 @@ module riscv_iommu #(
         .rst_ni         (rst_ni),
 
         // To IOMMU ext port
-        .ds_resp_i     (ds_resp_i),
-        .ds_req_o      (ds_req_o),
+        .ds_resp_i      (ds_resp_i),
+        .ds_req_o       (ds_req_o),
         
         // From Translation logic wrapper
         // PTW
@@ -338,17 +440,18 @@ module riscv_iommu #(
         .rst_ni         (rst_ni ),
 
         .req_trans_i    (allow_request & !is_fq_fifo_full), // Trigger translation
+        .req_dbg_i      (dbg_if_ctl.go.q),                  // Trigger debug translation
 
         // Translation request data
-        .did_i          (did    ),  // AxMMUSID
-        .pv_i           (pv     ),  // AxMMUSSIDV
-        .pid_i          (pid    ),  // AxMMUSSID
-        .iova_i         (iova   ),  // AxADDR
+        .did_i          (did    ),  // AxMMUSID / DBG IF
+        .pv_i           (pv     ),  // AxMMUSSIDV / DBG IF
+        .pid_i          (pid    ),  // AxMMUSSID / DBG IF
+        .iova_i         (iova   ),  // AxADDR / DBG IF
         .gscid_o        (gscid  ),  // GSCID
         .pscid_o        (pscid  ),  // PSCID
         
-        .trans_type_i   (trans_type ),  // Transaction type
-        .priv_lvl_i     (priv_lvl   ),  // Priviledge level (S/U)
+        .trans_type_i   (ttype  ),  // Transaction type
+        .priv_lvl_i     (priv   ),  // Priviledge level (S/U)
         .is_32_bit_i    (is_32_bit  ),  // Transaction size is 32 bits
 
         // AXI ports directed to Data Structures Interface
@@ -366,13 +469,14 @@ module riscv_iommu #(
         .mrif_handler_axi_req_o (mrif_handler_axi_req   ),
 
         // From Regmap
-        .capabilities_i (capabilities   ),
-        .fctl_i         (fctl           ),
-        .ddtp_i         (ddtp           ),
+        .capabilities_i     (capabilities   ),
+        .fctl_i             (fctl           ),
+        .ddtp_i             (ddtp           ),
 
         // Request status and output data
         .trans_valid_o      (trans_valid),  // Translation successfully completed
         .spaddr_o           (spaddr),       // Translated address
+        .is_superpage_o     (is_superpage), // Superpage PTE
         // Error
         .trans_error_o      (trans_error    ),  // Translation error
         .report_fault_o     (report_fault   ), // To report fault through FQ
@@ -449,6 +553,11 @@ module riscv_iommu #(
         .fctl_o             (fctl),
         .ddtp_o             (ddtp),
 
+        .dbg_if_iova_o      (dbg_if_iova),
+        .dbg_if_resp_i      (dbg_if_resp),
+        .dbg_if_ctl_o       (dbg_if_ctl),
+        .dbg_if_ctl_i       (dbg_if_ctl_busy),
+
         // IOATC Invalidation control
         // DDTC Invalidation
         .flush_ddtc_o       (flush_ddtc),   // Flush DDTC
@@ -469,7 +578,7 @@ module riscv_iommu #(
         .flush_pscid_o      (flush_pscid),  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
         // Request data
-        .trans_type_i       (trans_type),       // transaction type
+        .trans_type_i       (ttype),            // transaction type
         .did_i              (did),              // device_id associated with the transaction
         .pv_i               (pv),               // to indicate if transaction has a valid process_id
         .pid_i              (pid),              // process_id associated with the transaction
@@ -508,12 +617,14 @@ module riscv_iommu #(
         // Default values
         ar_request      = 1'b0;
         aw_request      = 1'b0;
-        iova            = '0;
-        did             = '0;
-        pv              = 1'b0;
-        pid             = '0;
+
+        trans_iova      = '0;
+        trans_did       = '0;
+        trans_pv        = 1'b0;
+        trans_pid       = '0;
         trans_type      = rv_iommu::NONE;
-        priv_lvl        = 1'b0;
+        trans_priv      = 1'b0;
+
         burst_type      = '0;
         burst_length    = '0;
         n_bytes         = '0;
@@ -524,14 +635,15 @@ module riscv_iommu #(
             ar_request      =  1'b1;
 
             // Tags
-            iova            =  dev_tr_req_i.ar.addr;
+            trans_iova            =  dev_tr_req_i.ar.addr;
             // AXI DVM extension for SMMU
-            did             =  dev_tr_req_i.ar.stream_id;
-            pv              =  dev_tr_req_i.ar.ss_id_valid;
-            pid             =  dev_tr_req_i.ar.substream_id;
+            trans_did             =  dev_tr_req_i.ar.stream_id;
+            trans_pv              =  dev_tr_req_i.ar.ss_id_valid;
+            trans_pid             =  dev_tr_req_i.ar.substream_id;
             // ARPROT[2] indicates data access (r) when LOW, instruction access (rx) when HIGH
             trans_type      = (dev_tr_req_i.ar.prot[2]) ? (rv_iommu::UNTRANSLATED_RX) : (rv_iommu::UNTRANSLATED_R);
-            priv_lvl        =  dev_tr_req_i.ar.prot[0]; // AxPROT[0] indicates privileged transaction (supervisor lvl) when set
+            trans_priv      =  dev_tr_req_i.ar.prot[0]; // AxPROT[0] indicates privileged transaction (supervisor lvl) when set
+
             burst_type      =  dev_tr_req_i.ar.burst;
             burst_length    =  dev_tr_req_i.ar.len;
             n_bytes         =  dev_tr_req_i.ar.size;
@@ -543,14 +655,14 @@ module riscv_iommu #(
             aw_request  = 1'b1;
 
             // Tags
-            iova            =  dev_tr_req_i.aw.addr;
+            trans_iova      =  dev_tr_req_i.aw.addr;
             // AXI DVM extension for SMMU
-            did             =  dev_tr_req_i.aw.stream_id;
-            pv              =  dev_tr_req_i.aw.ss_id_valid;
-            pid             =  dev_tr_req_i.aw.substream_id;
-
+            trans_did       =  dev_tr_req_i.aw.stream_id;
+            trans_pv        =  dev_tr_req_i.aw.ss_id_valid;
+            trans_pid       =  dev_tr_req_i.aw.substream_id;
             trans_type      =  rv_iommu::UNTRANSLATED_W;
-            priv_lvl        =  dev_tr_req_i.aw.prot[0];
+            trans_priv      =  dev_tr_req_i.aw.prot[0];
+
             burst_type      =  dev_tr_req_i.aw.burst;
             burst_length    =  dev_tr_req_i.aw.len;
             n_bytes         =  dev_tr_req_i.aw.size;
@@ -567,7 +679,7 @@ module riscv_iommu #(
         rv_iommu_axi4_bc i_rv_iommu_axi4_bc
         (
             // AxVALID
-            .request_i          (ar_request | aw_request),
+            .request_i          ((ar_request | aw_request) & ~dbg_if_ctl.go.q),
             // AxADDR
             .addr_i             ( iova                  ),
             // AxBURST
@@ -644,6 +756,7 @@ module riscv_iommu #(
     end : gen_mrif_support_disabled
     endgenerate
 
+    // AXI Success / Abort / Error AXI demux
     axi_demux #(
         .AxiIdWidth     (ID_WIDTH       ),
         // AXI channel structs
@@ -675,6 +788,7 @@ module riscv_iommu #(
         .mst_resps_i    ( demux_resp        )   // { 2: comp IF, 1: ignore slave (MRIF), 0: error slave }
     );
 
+    // IOMMU Error Slave
     axi_err_slv #(
         .AxiIdWidth   (ID_WIDTH               ),
         .req_t        (axi_req_t              ),

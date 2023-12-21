@@ -63,9 +63,15 @@ module rv_iommu_sw_if_wrapper #(
     output axi_req_t    msi_ig_axi_req_o,
 
     // Register values required by translation logic
-    output rv_iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities_o,
-    output rv_iommu_reg_pkg::iommu_reg2hw_fctl_reg_t           fctl_o,
-    output rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t           ddtp_o,
+    output rv_iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t    capabilities_o,
+    output rv_iommu_reg_pkg::iommu_reg2hw_fctl_reg_t            fctl_o,
+    output rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t            ddtp_o,
+
+    // Debug register IF
+    output rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t     dbg_if_iova_o,
+    input  rv_iommu_reg_pkg::iommu_hw2reg_tr_response_reg_t     dbg_if_resp_i,
+    output rv_iommu_reg_pkg::iommu_reg2hw_tr_req_ctl_reg_t      dbg_if_ctl_o,
+    input  rv_iommu_reg_pkg::iommu_hw2reg_tr_req_ctl_reg_t      dbg_if_ctl_i,
 
     // IOATC Invalidation control (from CQ Handler to IOATC)
     // DDTC Invalidation
@@ -127,6 +133,12 @@ module rv_iommu_sw_if_wrapper #(
     assign capabilities_o   = reg2hw.capabilities;
     assign fctl_o           = reg2hw.fctl;
     assign ddtp_o           = reg2hw.ddtp;
+
+    // Debug Interface registers
+    assign dbg_if_iova_o        = reg2hw.tr_req_iova;
+    assign dbg_if_ctl_o         = reg2hw.tr_req_ctl;
+    assign hw2reg.tr_req_ctl    = dbg_if_ctl_i;         // Go/Busy bit
+    assign hw2reg.tr_response   = dbg_if_resp_i;        // Response
 
     // WE signal for cqcsr/fqcsr error bits
     logic   cq_error_wen;

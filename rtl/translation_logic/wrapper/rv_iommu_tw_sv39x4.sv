@@ -80,6 +80,7 @@ module rv_iommu_tw_sv39x4 #(
 
     // Trigger translation
     input  logic    req_trans_i,
+    input  logic    req_dbg_i,
 
     // Translation request data
     input  logic [23:0]                     did_i,      // device_id associated with the transaction
@@ -113,7 +114,7 @@ module rv_iommu_tw_sv39x4 #(
     // Request status and output data
     output logic                        trans_valid_o,      // Translation completed
     output logic [riscv::PLEN-1:0]      spaddr_o,           // Translated address
-    output logic                        is_msi_o,           // Indicate whether the translated address is an MSI address
+    output logic                        is_superpage_o,     // Superpage translation
     // Error
     output logic                                trans_error_o,      // Translation error
     output logic                                report_fault_o,     // The fault must be reported through the FQ
@@ -179,6 +180,9 @@ module rv_iommu_tw_sv39x4 #(
     // To determine if transaction is read-for-execute
     logic is_rx;
     assign is_rx = (!trans_type_i[3] && !trans_type_i[1] && trans_type_i[0]);
+
+    // The translation involved a superpage
+    assign is_superpage_o = iotlb_lu_1S_2M | iotlb_lu_1S_1G | iotlb_lu_2S_2M | iotlb_lu_2S_1G;
 
     // Set for faults occurred before DDTC lookup
     logic   report_always;
@@ -482,7 +486,7 @@ module rv_iommu_tw_sv39x4 #(
             .mem_req_o          (msiptw_axi_req_o   ),
 
            // Trigger MSI translation
-            .init_msi_trans_i   (init_msi_trans     ),
+            .init_msi_trans_i   (init_msi_trans & ~req_dbg_i),
 
             // Ignore access (abort without faults)
             .ignore_o           (msiptw_ignore      ),
@@ -688,7 +692,7 @@ module rv_iommu_tw_sv39x4 #(
         report_always       = 1'b0;
 
         // A translation is triggered by setting req_trans_i
-        if (req_trans_i) begin
+        if (req_trans_i | req_dbg_i) begin
     
             //# Input Checks
             // "If ddtp.iommu_mode == Off then stop and report "All inbound transactions disallowed" (cause = 256)."
@@ -869,6 +873,12 @@ module rv_iommu_tw_sv39x4 #(
             if (iotlb_access && bare_translation) begin
                 trans_valid_o   = 1'b1;
                 spaddr_o        = iova_i[riscv::PLEN-1:0];
+            end
+
+            // Debug requests cannot be MSI
+            if (init_msi_trans & req_dbg_i) begin
+                wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
+                wrap_error      = 1'b1;
             end
         end
     end
