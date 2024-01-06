@@ -24,6 +24,7 @@ module rv_iommu_translation_wrapper #(
     parameter int unsigned  IOTLB_ENTRIES       = 4,
     parameter int unsigned  DDTC_ENTRIES        = 4,
     parameter int unsigned  PDTC_ENTRIES        = 4,
+    parameter int unsigned  MRIFC_ENTRIES       = 4,
 
     // Include Process Context support
     parameter bit               InclPC          = 0,
@@ -126,6 +127,7 @@ module rv_iommu_translation_wrapper #(
                 .IOTLB_ENTRIES      (IOTLB_ENTRIES  ),
                 .DDTC_ENTRIES       (DDTC_ENTRIES   ),
                 .PDTC_ENTRIES       (PDTC_ENTRIES   ),
+                .MRIFC_ENTRIES      (MRIFC_ENTRIES  ),
                 .MSITrans           (MSITrans       ),
 
                 .axi_req_t          (axi_req_t      ),
@@ -207,6 +209,7 @@ module rv_iommu_translation_wrapper #(
             rv_iommu_tw_sv39x4 #(
                 .IOTLB_ENTRIES  (IOTLB_ENTRIES  ),
                 .DDTC_ENTRIES   (DDTC_ENTRIES   ),
+                .MRIFC_ENTRIES  (MRIFC_ENTRIES  ),
                 .MSITrans       (MSITrans       ),
 
                 .axi_req_t      (axi_req_t      ),

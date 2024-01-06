@@ -64,6 +64,7 @@ module rv_iommu_tw_sv39x4_pc #(
     parameter int unsigned  IOTLB_ENTRIES       = 4,
     parameter int unsigned  DDTC_ENTRIES        = 4,
     parameter int unsigned  PDTC_ENTRIES        = 4,
+    parameter int unsigned  MRIFC_ENTRIES       = 4,
 
     // MSI translation support
     parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
@@ -610,7 +611,25 @@ module rv_iommu_tw_sv39x4_pc #(
     // MSI translation support disabled
     else begin : gen_msi_support_disabled
         
-        // TODO
+        assign msiptw_axi_req_o     = '0;
+
+        assign msiptw_ignore        = 1'b0;
+
+        assign msi_up_vpn           = '0;
+        assign msi_up_pscid         = '0;
+        assign msi_up_gscid         = '0;
+        assign msi_up_1S_2M         = '0;
+        assign msi_up_1S_1G         = '0;
+        assign msi_up_1S_content    = '0;
+
+        assign msi_update           = 1'b0;        
+        assign msi_up_content       = '0;  
+        
+        assign mrifc_update         = 1'b0;
+        assign mrifc_up_msi_content = '0;
+
+        assign msiptw_error         = 1'b0;
+        assign msiptw_cause_code    = '0;
     end : gen_msi_support_disabled
     endgenerate
 
@@ -625,8 +644,8 @@ module rv_iommu_tw_sv39x4_pc #(
             .axi_req_t          (axi_req_t ),
             .axi_rsp_t          (axi_rsp_t )
         ) i_rv_iommu_mrif_handler (
-            .clk_i  (clk_i),    // Clock
-            .rst_ni (rst_ni),   // Asynchronous reset active low
+            .clk_i          (clk_i),    // Clock
+            .rst_ni         (rst_ni),   // Asynchronous reset active low
 
             // Memory interface
             .mem_resp_i     (mrif_handler_axi_resp_i),
@@ -693,7 +712,16 @@ module rv_iommu_tw_sv39x4_pc #(
     // MRIF Support disabled
     else begin : gen_mrif_support_disabled
         
-        // TODO
+        assign mrif_handler_axi_req_o   = '0;
+
+        assign mrif_handler_ignore      = 1'b0;
+
+        assign mrif_handler_error       = 1'b0;
+        assign mrif_handler_cause_code  = '0;
+
+        assign mrifc_lu_hit             = 1'b0;
+        assign mrifc_lu_1S_content      = '0;
+        assign mrifc_lu_msi_content     = '0;
     end : gen_mrif_support_disabled
     endgenerate
 
@@ -1013,12 +1041,12 @@ module rv_iommu_tw_sv39x4_pc #(
                 trans_valid_o   = 1'b1;
                 spaddr_o        = iova_i[riscv::PLEN-1:0];
             end
+        end
 
-            // Debug requests cannot be MSI
-            if (init_msi_trans & req_dbg_i) begin
-                wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
-                wrap_error      = 1'b1;
-            end
+        // Debug requests cannot be MSI
+        if (init_msi_trans & req_dbg_i) begin
+            wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
+            wrap_error      = 1'b1;
         end
     end
 

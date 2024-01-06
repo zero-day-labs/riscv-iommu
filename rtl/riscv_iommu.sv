@@ -360,25 +360,28 @@ module riscv_iommu #(
         
     else begin : gen_dbg_if_disabled
         
-        iova                    = trans_iova;
-        did                     = trans_did;
-        pv                      = trans_pv;
-        pid                     = trans_pid;
-        ttype                   = trans_type;
-        priv                    = trans_priv;
+        assign iova                 = trans_iova;
+        assign did                  = trans_did;
+        assign pv                   = trans_pv;
+        assign pid                  = trans_pid;
+        assign ttype                = trans_type;
+        assign priv                 = trans_priv;
 
-        dbg_if_resp.fault.d     = 1'b0;
-        dbg_if_resp.pbmt.d      = '0;
-        dbg_if_resp.s.d         = 1'b0;
-        dbg_if_resp.ppn.d       = '0;
+        assign dbg_if_resp.fault.d  = 1'b0;
+        assign dbg_if_resp.pbmt.d   = '0;
+        assign dbg_if_resp.s.d      = 1'b0;
+        assign dbg_if_resp.ppn.d    = '0;
 
-        dbg_if_resp.fault.de    = 1'b0;
-        dbg_if_resp.pbmt.de     = 1'b0;
-        dbg_if_resp.s.de        = 1'b0;
-        dbg_if_resp.ppn.de      = 1'b0;
+        assign dbg_if_resp.fault.de = 1'b0;
+        assign dbg_if_resp.pbmt.de  = 1'b0;
+        assign dbg_if_resp.s.de     = 1'b0;
+        assign dbg_if_resp.ppn.de   = 1'b0;
 
-        dbg_if_ctl_busy.d       = 1'b0;
-        dbg_if_ctl_busy.de      = 1'b0;
+        assign dbg_if_ctl_busy.d    = 1'b0;
+        assign dbg_if_ctl_busy.de   = 1'b0;
+
+        assign dbg_ongoing_q        = 1'b0;
+        assign dbg_ongoing_n        = 1'b0;
         
     end : gen_dbg_if_disabled
     endgenerate
