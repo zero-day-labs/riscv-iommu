@@ -101,7 +101,9 @@ module riscv_iommu #(
     // To trigger an address translation. Only set after verifying AXI4 boundary limits
     logic   allow_request;
     // The current transaction violates the AXI4 4-kiB address boundary limit
-    logic bound_violation;
+    logic   bound_violation;
+    // A debug translation is ongoing
+    logic   dbg_ongoing_q, dbg_ongoing_n;
 
     // To classify transaction as read or write
     logic   ar_request, aw_request;
@@ -175,10 +177,10 @@ module riscv_iommu #(
     rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t           ddtp;
 
     // Debug Interface register wires
-    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t     dbg_if_iova;
-    rv_iommu_reg_pkg::iommu_hw2reg_tr_response_reg_t     dbg_if_resp;
-    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_ctl_reg_t      dbg_if_ctl;
-    rv_iommu_reg_pkg::iommu_hw2reg_tr_req_ctl_reg_t      dbg_if_ctl_busy;
+    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t    dbg_if_iova;
+    rv_iommu_reg_pkg::iommu_hw2reg_tr_response_reg_t    dbg_if_resp;
+    rv_iommu_reg_pkg::iommu_reg2hw_tr_req_ctl_reg_t     dbg_if_ctl;
+    rv_iommu_reg_pkg::iommu_hw2reg_tr_req_ctl_reg_t     dbg_if_ctl_busy;
 
     // Register IF bus between Programming IF and SW IF wrapper
     reg_req_t   regmap_req;
@@ -192,11 +194,11 @@ module riscv_iommu #(
     axi_rsp_t   cdw_axi_resp;
     axi_req_t   cdw_axi_req;
     // MSI PTW
-    axi_rsp_t    msiptw_axi_resp,
-    axi_req_t    msiptw_axi_req,
+    axi_rsp_t   msiptw_axi_resp,
+    axi_req_t   msiptw_axi_req,
     // MRIF handler
-    axi_rsp_t    mrif_handler_axi_resp,
-    axi_req_t    mrif_handler_axi_req,
+    axi_rsp_t   mrif_handler_axi_resp,
+    axi_req_t   mrif_handler_axi_req,
     // CQ
     axi_rsp_t   cq_axi_resp;
     axi_req_t   cq_axi_req;
@@ -265,58 +267,70 @@ module riscv_iommu #(
     assign axi_aux_req.r_ready                  = dev_tr_req_i.r_ready;
 
     // Transaction parameters source: TR request / DBG IF
+    // Priority is given to normal translations
+    // If a debug translation is ongoing and a normal translation is triggered, we wait for the debug translation to complete.
     generate
         
     if (InclDBG) begin : gen_dbg_if
 
         always_comb begin
 
-            dbg_if_resp.fault.d = 1'b0;
-            dbg_if_resp.pbmt.d  = '0;
-            dbg_if_resp.s.d     = 1'b0;
-            dbg_if_resp.ppn.d   = '0;
+            // Response registers
+            dbg_if_resp.fault.d     = 1'b0;
+            dbg_if_resp.pbmt.d      = '0;
+            dbg_if_resp.s.d         = 1'b0;
+            dbg_if_resp.ppn.d       = '0;
 
             dbg_if_resp.fault.de    = 1'b0;
             dbg_if_resp.pbmt.de     = 1'b0;
             dbg_if_resp.s.de        = 1'b0;
             dbg_if_resp.ppn.de      = 1'b0;
 
-            // Indicate completion
-            dbg_if_ctl_busy.d   = 1'b0;
-            dbg_if_ctl_busy.de  = 1'b0;
+            // To indicate completion
+            dbg_if_ctl_busy.d       = 1'b0;
+            dbg_if_ctl_busy.de      = 1'b0;
 
-            // DBG IF request
-            if (dbg_if_ctl.go.q) begin
+            dbg_ongoing_n           = 1'b0;
+
+            // DBG IF request received and no translation is ongoing
+            if (dbg_if_ctl.go.q & ~allow_request) begin
+
+                // Indicate that a debug translation is ongoing
+                dbg_ongoing_n = 1'b1;
                 
+                // Set translation parameters from DBG IF registers
                 iova    = dbg_if_iova.vpn.q;
                 did     = dbg_if_ctl.did.q;
-                pv      = (InclPC) ? (dbg_if_ctl.pv.q)  : (1'b0);
-                pid     = (InclPC) ? (dbg_if_ctl.pid.q) : ('0);
+                pv      = dbg_if_ctl.pv.q   : (1'b0);
+                pid     = dbg_if_ctl.pid.q  : ('0);
                 priv    = dbg_if_ctl.priv.q;
 
+                // RWX values
                 case ({dbg_if_ctl.exe.q, dbg_if_ctl.nw.q})
                     2'b00: ttype = rv_iommu::UNTRANSLATED_W;
                     2'b01: ttype = rv_iommu::UNTRANSLATED_R;
                     2'b10: ttype = rv_iommu::UNTRANSLATED_RX;
-                    2'b11: ttype = rv_iommu::UNTRANSLATED_RX; 
+                    2'b11: ttype = rv_iommu::UNTRANSLATED_RX;
                     default: 
                 endcase
 
                 // Debug request finished
-                if (trans_valid | trans_error & !is_fq_fifo_full) begin
+                if (trans_valid | trans_error) begin
                     
                     // Update response register
-                    dbg_if_resp.fault.d = trans_error;
-                    dbg_if_resp.s.d     = is_superpage;
-                    dbg_if_resp.ppn.d   = spaddr[riscv::PLEN-1:12];
+                    dbg_if_resp.fault.d     = trans_error;
+                    dbg_if_resp.s.d         = is_superpage;
+                    dbg_if_resp.ppn.d       = spaddr[riscv::PLEN-1:12];
 
                     dbg_if_resp.fault.de    = 1'b1;
-                    dbg_if_resp.pbmt.de     = 1'b1;
                     dbg_if_resp.s.de        = 1'b1;
                     dbg_if_resp.ppn.de      = 1'b1;
 
-                    // Indicate completion
-                    dbg_if_ctl_busy.de  = 1'b1;
+                    // Clear busy register to indicate completion
+                    dbg_if_ctl_busy.de      = 1'b1;
+
+                    // Clear control flag
+                    dbg_ongoing_n           = 1'b0;
                 end
             end
 
@@ -331,16 +345,27 @@ module riscv_iommu #(
                 priv    = trans_priv;
             end
         end
+
+        always_ff @(posedge clk_i or negedge rst_ni) begin
+            if (~rst_ni) begin
+                dbg_ongoing_q   <= 1'b0;
+            end
+
+            else begin
+                dbg_ongoing_q   <= dbg_ongoing_n;
+            end
+            
+        end
     end : gen_dbg_if
         
     else begin : gen_dbg_if_disabled
         
-        iova    = trans_iova;
-        did     = trans_did;
-        pv      = trans_pv;
-        pid     = trans_pid;
-        ttype   = trans_type;
-        priv    = trans_priv;
+        iova                    = trans_iova;
+        did                     = trans_did;
+        pv                      = trans_pv;
+        pid                     = trans_pid;
+        ttype                   = trans_type;
+        priv                    = trans_priv;
 
         dbg_if_resp.fault.d     = 1'b0;
         dbg_if_resp.pbmt.d      = '0;
@@ -439,19 +464,19 @@ module riscv_iommu #(
         .clk_i          (clk_i  ),
         .rst_ni         (rst_ni ),
 
-        .req_trans_i    (allow_request & !is_fq_fifo_full), // Trigger translation
-        .req_dbg_i      (dbg_if_ctl.go.q),                  // Trigger debug translation
+        .req_trans_i    (allow_request),                    // Trigger normal translation
+        .req_dbg_i      (dbg_if_ctl.go.q & ~allow_request), // Trigger debug translation
 
         // Translation request data
-        .did_i          (did    ),  // AxMMUSID / DBG IF
-        .pv_i           (pv     ),  // AxMMUSSIDV / DBG IF
-        .pid_i          (pid    ),  // AxMMUSSID / DBG IF
-        .iova_i         (iova   ),  // AxADDR / DBG IF
-        .gscid_o        (gscid  ),  // GSCID
-        .pscid_o        (pscid  ),  // PSCID
+        .did_i          (did        ),  // AxMMUSID / DBG IF
+        .pv_i           (pv         ),  // AxMMUSSIDV / DBG IF
+        .pid_i          (pid        ),  // AxMMUSSID / DBG IF
+        .iova_i         (iova       ),  // AxADDR / DBG IF
+        .gscid_o        (gscid      ),  // GSCID
+        .pscid_o        (pscid      ),  // PSCID
         
-        .trans_type_i   (ttype  ),  // Transaction type
-        .priv_lvl_i     (priv   ),  // Priviledge level (S/U)
+        .trans_type_i   (ttype      ),  // Transaction type
+        .priv_lvl_i     (priv       ),  // Priviledge level (S/U)
         .is_32_bit_i    (is_32_bit  ),  // Transaction size is 32 bits
 
         // AXI ports directed to Data Structures Interface
@@ -520,16 +545,16 @@ module riscv_iommu #(
 
     //# Software Interface Wrapper
     rv_iommu_sw_if_wrapper #(
-        .MSITrans       (MSITrans   ),
-        .IGS            (IGS        ),
-        .N_INT_VEC      (N_INT_VEC  ),
-        .N_IOHPMCTR     (N_IOHPMCTR ),
-        .InclPC         (InclPC     ),
-        .InclDBG        (InclDBG    ),
-        .axi_req_t      (axi_req_t  ),
-        .axi_rsp_t      (axi_rsp_t  ),
-        .reg_req_t      (reg_req_t  ),
-        .reg_rsp_t      (reg_rsp_t  )
+        .MSITrans           (MSITrans   ),
+        .IGS                (IGS        ),
+        .N_INT_VEC          (N_INT_VEC  ),
+        .N_IOHPMCTR         (N_IOHPMCTR ),
+        .InclPC             (InclPC     ),
+        .InclDBG            (InclDBG    ),
+        .axi_req_t          (axi_req_t  ),
+        .axi_rsp_t          (axi_rsp_t  ),
+        .reg_req_t          (reg_req_t  ),
+        .reg_rsp_t          (reg_rsp_t  )
     ) i_rv_iommu_sw_if_wrapper (
         .clk_i              (clk_i),
         .rst_ni             (rst_ni),
@@ -635,11 +660,11 @@ module riscv_iommu #(
             ar_request      =  1'b1;
 
             // Tags
-            trans_iova            =  dev_tr_req_i.ar.addr;
+            trans_iova      =  dev_tr_req_i.ar.addr;
             // AXI DVM extension for SMMU
-            trans_did             =  dev_tr_req_i.ar.stream_id;
-            trans_pv              =  dev_tr_req_i.ar.ss_id_valid;
-            trans_pid             =  dev_tr_req_i.ar.substream_id;
+            trans_did       =  dev_tr_req_i.ar.stream_id;
+            trans_pv        =  dev_tr_req_i.ar.ss_id_valid;
+            trans_pid       =  dev_tr_req_i.ar.substream_id;
             // ARPROT[2] indicates data access (r) when LOW, instruction access (rx) when HIGH
             trans_type      = (dev_tr_req_i.ar.prot[2]) ? (rv_iommu::UNTRANSLATED_RX) : (rv_iommu::UNTRANSLATED_R);
             trans_priv      =  dev_tr_req_i.ar.prot[0]; // AxPROT[0] indicates privileged transaction (supervisor lvl) when set
@@ -652,7 +677,7 @@ module riscv_iommu #(
         // AW request received
         else if (dev_tr_req_i.aw_valid) begin
 
-            aw_request  = 1'b1;
+            aw_request      = 1'b1;
 
             // Tags
             trans_iova      =  dev_tr_req_i.aw.addr;
@@ -679,9 +704,9 @@ module riscv_iommu #(
         rv_iommu_axi4_bc i_rv_iommu_axi4_bc
         (
             // AxVALID
-            .request_i          ((ar_request | aw_request) & ~dbg_if_ctl.go.q),
+            .request_i          ((ar_request | aw_request) & ~dbg_ongoing_q),
             // AxADDR
-            .addr_i             ( iova                  ),
+            .addr_i             ( trans_iova            ),
             // AxBURST
             .burst_type_i       ( burst_type            ),
             // AxLEN
@@ -699,7 +724,7 @@ module riscv_iommu #(
     // In this scenario, there's no need to include this logic.
     else begin : gen_axi4_bc_disabled
 
-        assign allow_request   = (ar_request | aw_request);
+        assign allow_request   = ((ar_request | aw_request) & ~dbg_ongoing_q);
         assign bound_violation = 1'b0;
     end : gen_axi4_bc_disabled
     endgenerate
