@@ -195,9 +195,9 @@ package rv_iommu;
 
     // MSI PTE (MRIF mode)
     typedef struct packed {
-        logic [2:0]     __rsv_4;
+        logic [2:0]     __rsv_2;
         logic           nid_10;
-        logic [5:0]     __rsv_3;
+        logic [5:0]     __rsv_1;
         logic [44-1:0]  nppn;
         logic [9:0]     nid_9_0;
     } msi_pte_notice_t;
@@ -448,7 +448,7 @@ package rv_iommu;
 
     // Extract Interrupt File number from GPA
     // The resulting IF number is used to index the corresponding MSI PTE in memory.
-    function logic [(MSI_MASK_LEN-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
+    function logic [(riscv::GPPNW-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
         logic [(riscv::GPPNW-1):0] masked_gpaddr, imsic_num;
         int unsigned i;
 

@@ -54,15 +54,20 @@ module rv_iommu_msiptw #(
     // Abort access (discard without fault)
     output logic ignore_o,
 
+    // Request IOVA
+    input  logic [riscv::GPLEN-1:0]     req_iova_i,
+    // First-stage translation enable
+    input  logic                        en_1S_i,
+    // The translation is read-for-execute
+    input  logic                        is_rx_i,
+
+    // First-stage data provided by PTW
     input  logic [(riscv::GPPNW-1):0]   vpn_i,
     input  logic [19:0]                 pscid_i,
     input  logic [15:0]                 gscid_i,
     input  logic                        is_1S_2M_i,
     input  logic                        is_1S_1G_i,
     input  riscv::pte_t                 gpte_i,
-
-    // The translation is read-for-execute
-    input  logic                        is_rx_i,
 
     // MSI PT base PPN
     input  logic [(riscv::PPNW-1):0]            msiptp_ppn_i,
@@ -96,7 +101,7 @@ module rv_iommu_msiptw #(
         IDLE,             // 000
         MEM_ACCESS,       // 001
         FLAT_PROC_PTE,    // 010
-        FLAT_ERROR,       // 011
+        FLAT_ERROR        // 011
     } state_flat_t;
     state_flat_t flat_state_q, flat_state_n;
 
@@ -118,70 +123,23 @@ module rv_iommu_msiptw #(
     logic init_msi_mrif;
 
     // Registers to propagate first-stage data
-    logic [(riscv::GPPNW-1):0]   vpn_q,     vpn_n;
-    logic [19:0]                 pscid_q,   pscid_n;
-    logic [15:0]                 gscid_q,   gscid_n;
-    logic                        1S_2M_q,   1S_2M_n;
-    logic                        1S_1G_q,   1S_1G_n;
-    riscv::pte_t                 gpte_q,    gpte_n;
+    logic [(riscv::GPPNW-1):0]   vpn_q,         vpn_n;
+    logic [19:0]                 pscid_q,       pscid_n;
+    logic [15:0]                 gscid_q,       gscid_n;
+    logic                        is_1S_2M_q,    is_1S_2M_n;
+    logic                        is_1S_1G_q,    is_1S_1G_n;
+    riscv::pte_t                 gpte_q,        gpte_n;
 
     // Generic update ports
     assign vpn_o          = vpn_q;
     assign pscid_o        = pscid_q;
     assign gscid_o        = gscid_q;
-    assign 1S_2M_o        = 1S_2M_q;
-    assign 1S_1G_o        = 1S_1G_q;
-    assign 1S_content_o   = gpte_q;
+    assign is_1S_2M_o     = is_1S_2M_q;
+    assign is_1S_1G_o     = is_1S_1G_q;
+    assign content_1S_o   = gpte_q;
 
     // IOTLB update ports
     assign iotlb_msi_content_o  = msi_pte_flat;
-
-    //# MSI-MRIF signals and assignments
-    generate
-
-    // MRIF support enabled
-    if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
-
-        // States
-        typedef enum logic[1:0] {
-            MRIF_PTE,         // 00
-            NOTICE_PTE,       // 01
-            MRIF_ERROR,       // 10
-        } state_mrif_t;
-        state_mrif_t mrif_state_q, mrif_state_n;
-
-        // Read ports
-        rv_iommu::msi_pte_mrif_t msi_pte_mrif;
-        rv_iommu::msi_pte_notice_t msi_pte_notice;
-        assign msi_pte_mrif = rv_iommu::msi_pte_mrif_t'(mem_resp_i.r.data);
-        assign msi_pte_notice = rv_iommu::msi_pte_notice_t'(mem_resp_i.r.data);
-
-        // Fault code
-        logic [(rv_iommu::CAUSE_LEN-1):0] mrif_cause_q, mrif_cause_n;
-
-        // To wait for last AXI beat
-        logic mrif_wait_rlast_q, mrif_wait_rlast_n;
-
-        // Destination MRIF address register
-        logic [46:0] mrif_addr_q, mrif_addr_n;
-
-        // MRIFC update ports
-        assign mrifc_msi_content_o.addr = mrif_addr_q;
-        assign mrifc_msi_content_o.nid  = {msi_pte_notice.nid_10, msi_pte_notice.nid_9_0};
-        assign mrifc_msi_content_o.nppn = msi_pte_notice.nppn;
-
-        assign error_o = (flat_state_q == FLAT_ERROR) | (mrif_state_q == MRIF_ERROR);
-        assign cause_o = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ((mrif_state_q == MRIF_ERROR) ? (mrif_cause_q) : ('0));
-    end : gen_mrif_support
-
-    // MRIF support disabled
-    else begin : gen_mrif_support_disabled
-
-        assign mrifc_msi_content_o  = '0;
-        assign error_o              = (flat_state_q == FLAT_ERROR);
-        assign cause_o              = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ('0);
-    end : gen_mrif_support_disabled
-    endgenerate
 
     //# MSI-FLAT Combinational Block
     always_comb begin : flat_comb
@@ -247,8 +205,8 @@ module rv_iommu_msiptw #(
         vpn_n               = vpn_q;
         pscid_n             = pscid_q;
         gscid_n             = gscid_q;
-        1S_2M_n             = 1S_2M_q;
-        1S_1G_n             = 1S_1G_q;
+        is_1S_2M_n          = is_1S_2M_q;
+        is_1S_1G_n          = is_1S_1G_q;
         gpte_n              = gpte_q;
 
         case (flat_state_q)
@@ -272,14 +230,34 @@ module rv_iommu_msiptw #(
                     // Set pptr and propagate first-stage data
                     else begin
                         
-                        pptr_n          = {msiptp_ppn_i, 12'b0} | (rv_iommu::extract_imsic_num(msi_vpn_i, msi_addr_mask_i) << 4);
+                        /* verilator lint_off WIDTH */
+                        // First-stage translation enabled. Tags come from PTW. Propagate first-stage data
+                        if (en_1S_i) begin
 
-                        vpn_n           = vpn_i;
+                            pptr_n          = {msiptp_ppn_i, 12'b0} | 
+                                                (rv_iommu::extract_imsic_num(gpte_i.ppn[(riscv::GPPNW-1):0], msi_addr_mask_i) << 4);
+
+                            // First-stage parameters
+                            vpn_n           = vpn_i;        // GVA
+                            is_1S_2M_n      = is_1S_2M_i;
+                            is_1S_1G_n      = is_1S_1G_i;
+                            gpte_n          = gpte_i;
+                        end
+                        
+                        // First-stage translation disabled. Tags come directly from translation logic
+                        else begin
+                            pptr_n          = {msiptp_ppn_i, 12'b0} | 
+                                                (rv_iommu::extract_imsic_num(req_iova_i[(riscv::GPLEN-1):12], msi_addr_mask_i) << 4);
+
+                            // First-stage parameters
+                            vpn_n           = req_iova_i[(riscv::GPLEN-1):12];  // GPA
+                            is_1S_2M_n      = 1'b0;
+                            is_1S_1G_n      = 1'b0;
+                            gpte_n          = '0;
+                        end
+                        /* verilator lint_on WIDTH */
                         pscid_n         = pscid_i;
                         gscid_n         = gscid_i;
-                        1S_2M_n         = 1S_2M_i;
-                        1S_1G_n         = 1S_1G_i;
-                        gpte_n          = gpte_i;
 
                         flat_state_n    = MEM_ACCESS;
                     end
@@ -357,7 +335,7 @@ module rv_iommu_msiptw #(
                                 // Update IOTLB and go to IDLE
                                 else begin
                                     iotlb_update_o      = 1'b1;
-                                    flat_wait_rlast_n   = 1'b0;   
+                                    flat_wait_rlast_n   = 1'b0;
                                     flat_state_n        = IDLE;
                                 end
                             end 
@@ -383,12 +361,61 @@ module rv_iommu_msiptw #(
         endcase
     end : flat_comb
 
-    //# MSI-MRIF Combinational Block
+    //# MSI-FLAT Sequential Block
+    always_ff @(posedge clk_i or negedge rst_ni) begin : flat_seq
+        if (~rst_ni) begin
+            flat_state_q        <= IDLE;
+            flat_wait_rlast_q   <= 1'b0;
+            pptr_q              <= '0;
+            flat_cause_q        <= '0;
+        end 
+        
+        else begin
+            flat_state_q        <= flat_state_n;
+            flat_wait_rlast_q   <= flat_wait_rlast_n;
+            pptr_q              <= pptr_n;
+            flat_cause_q        <= flat_cause_n;
+        end
+    end : flat_seq
+
+    //# MSI-MRIF
     generate
 
     // MRIF support enabled
     if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
+
+        // States
+        typedef enum logic[1:0] {
+            MRIF_PTE,         // 00
+            NOTICE_PTE,       // 01
+            MRIF_ERROR        // 10
+        } state_mrif_t;
+        state_mrif_t mrif_state_q, mrif_state_n;
+
+        // Read ports
+        rv_iommu::msi_pte_mrif_t msi_pte_mrif;
+        rv_iommu::msi_pte_notice_t msi_pte_notice;
+        assign msi_pte_mrif     = rv_iommu::msi_pte_mrif_t'(mem_resp_i.r.data);
+        assign msi_pte_notice   = rv_iommu::msi_pte_notice_t'(mem_resp_i.r.data);
+
+        // Fault code
+        logic [(rv_iommu::CAUSE_LEN-1):0] mrif_cause_q, mrif_cause_n;
+
+        // To wait for last AXI beat
+        logic mrif_wait_rlast_q, mrif_wait_rlast_n;
+
+        // Destination MRIF address register
+        logic [46:0] mrif_addr_q, mrif_addr_n;
+
+        // MRIFC update ports
+        assign mrifc_msi_content_o.addr = mrif_addr_q;
+        assign mrifc_msi_content_o.nid  = {msi_pte_notice.nid_10, msi_pte_notice.nid_9_0};
+        assign mrifc_msi_content_o.nppn = msi_pte_notice.nppn;
+
+        assign error_o = (flat_state_q == FLAT_ERROR) | (mrif_state_q == MRIF_ERROR);
+        assign cause_o = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ((mrif_state_q == MRIF_ERROR) ? (mrif_cause_q) : ('0));
     
+        //# MSI-MRIF Combinational Block
         always_comb begin : mrif_comb
 
             // Default assignments
@@ -396,13 +423,12 @@ module rv_iommu_msiptw #(
 
             // Output values
             mrifc_update_o      = 1'b0;
-            ignore_o             = 1'b0;
+            ignore_o            = 1'b0;
 
             // Next values
             mrif_state_n        = mrif_state_q;
             mrif_cause_n        = mrif_cause_q;
             mrif_addr_n         = mrif_addr_q;
-            req_addr_n          = req_addr_q;
             mrif_wait_rlast_n   = mrif_wait_rlast_q;
 
             case (mrif_state_q)
@@ -423,7 +449,7 @@ module rv_iommu_msiptw #(
                         end
 
                         // Check bits [11:0] of the access address (this implementation does not support BE accesses)
-                        else if ((|req_addr_i[11:0])) begin
+                        else if ((|req_iova_i[11:0])) begin
                             // this check does not generate faults, the transfer is discarded
                             ignore_o         = 1'b1;
                             mrif_state_n    = MRIF_PTE;
@@ -451,8 +477,8 @@ module rv_iommu_msiptw #(
 
                         // Everything OK, update MRIF cache
                         else begin
-                            mrifc_update_o       = 1'b1;
-                            mrif_state_n        = MRIF_PTE;
+                            mrifc_update_o  = 1'b1;
+                            mrif_state_n    = MRIF_PTE;
                         end
                     end
                 end
@@ -468,7 +494,8 @@ module rv_iommu_msiptw #(
             endcase
 
             // Check for AXI transmission errors
-            if ((((mrif_state_q == NOTICE_PTE) && init_msi_mrif) | (mrif_state_q == NOTICE_PTE) ) && 
+            // Exclude transmission errors from MSI-FLAT FSM
+            if ((((mrif_state_q == MRIF_PTE) && init_msi_mrif) | (mrif_state_q == NOTICE_PTE) ) && 
                 (mem_resp_i.r_valid) && (mem_resp_i.r.resp != axi_pkg::RESP_OKAY                )) begin
 
                 mrifc_update_o      = 1'b0;
@@ -477,36 +504,8 @@ module rv_iommu_msiptw #(
                 mrif_state_n        = MRIF_ERROR;
             end
         end : mrif_comb
-    end : gen_mrif_support
 
-    // MRIF support disabled
-    else begin : gen_mrif_support_disabled
-
-        mrifc_update_o  = 1'b0;
-        ignore_o         = 1'b0;
-    end : gen_mrif_support_disabled
-    endgenerate
-
-    //# MSI-FLAT Sequential Block
-    always_ff @(posedge clk_i or negedge rst_ni) begin : flat_seq
-        if (~rst_ni) begin
-            flat_state_q        <= IDLE;
-            flat_wait_rlast_q   <= 1'b0;
-            pptr_q              <= '0;
-            flat_cause_q        <= '0;
-        end 
-        
-        else begin
-            flat_state_q        <= flat_state_n;
-            flat_wait_rlast_q   <= flat_wait_rlast_n;
-            pptr_q              <= pptr_n;
-            flat_cause_q        <= flat_cause_n;
-        end
-    end : flat_seq
-
-    //# MSI-MRIF Sequential Block
-    generate
-    if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
+        //# MSI-MRIF Sequential Block
         always_ff @(posedge clk_i or negedge rst_ni) begin : mrif_seq
             if (~rst_ni) begin
                 mrif_state_q        <= MRIF_PTE;
@@ -516,8 +515,8 @@ module rv_iommu_msiptw #(
                 vpn_q               <= '0;
                 pscid_q             <= '0;
                 gscid_q             <= '0;
-                1S_2M_q             <= 1'b0;
-                1S_1G_q             <= 1'b0;
+                is_1S_2M_q          <= 1'b0;
+                is_1S_1G_q          <= 1'b0;
                 gpte_q              <= '0;
                 
             end 
@@ -530,12 +529,24 @@ module rv_iommu_msiptw #(
                 vpn_q               <= vpn_n;
                 pscid_q             <= pscid_n;
                 gscid_q             <= gscid_n;
-                1S_2M_q             <= 1S_2M_n;
-                1S_1G_q             <= 1S_1G_n;
+                is_1S_2M_q          <= is_1S_2M_n;
+                is_1S_1G_q          <= is_1S_1G_n;
                 gpte_q              <= gpte_n;
             end
         end : mrif_seq
     end : gen_mrif_support
+
+    // MRIF support disabled
+    else begin : gen_mrif_support_disabled
+
+        assign mrifc_update_o   = 1'b0;
+        assign ignore_o         = 1'b0;
+
+        assign mrifc_msi_content_o  = '0;
+        assign error_o              = (flat_state_q == FLAT_ERROR);
+        assign cause_o              = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ('0);
+
+    end : gen_mrif_support_disabled
     endgenerate
 
 endmodule

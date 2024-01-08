@@ -57,8 +57,6 @@ module rv_iommu_regmap #(
   import rv_iommu_reg_pkg::* ;
   import rv_iommu_field_pkg::* ;
 
-  localparam logic [N_IOHPMCTR-1:0] IOCOUNTINH_RESVAL = '1;
-
   // register signals
   // EXP: Register signals to connect the SW register interface port to the register file.
   logic           			  reg_we;
@@ -1459,6 +1457,8 @@ module rv_iommu_regmap #(
 
   generate
   if (N_IOHPMCTR > 0) begin
+
+    localparam logic [N_IOHPMCTR-1:0] IOCOUNTINH_RESVAL = '1;
 
     // R[iocountinh]: V(False)
 
@@ -2981,8 +2981,8 @@ module rv_iommu_regmap #(
       assign tr_req_iova_vpn_l_we = addr_hit[144] & reg_we & !reg_error;
       assign tr_req_iova_vpn_l_wd = reg_wdata[31:12];
 
-      assign tr_req_iova_vpn_l_we = addr_hit[145] & reg_we & !reg_error;
-      assign tr_req_iova_vpn_l_wd = reg_wdata[31:0];
+      assign tr_req_iova_vpn_h_we = addr_hit[145] & reg_we & !reg_error;
+      assign tr_req_iova_vpn_h_wd = reg_wdata[31:0];
 
       assign tr_req_ctl_go_we = addr_hit[146] & reg_we & !reg_error;
       assign tr_req_ctl_go_wd = reg_wdata[0];
@@ -3375,7 +3375,7 @@ module rv_iommu_regmap #(
 
       // tr_response (high)
       addr_hit[149]: begin
-        reg_rdata_next[21:0]  = tr_response_fault_qs;
+        reg_rdata_next[21:0]  = tr_response_ppn_h_qs;
       end
 
       // icvec (low)

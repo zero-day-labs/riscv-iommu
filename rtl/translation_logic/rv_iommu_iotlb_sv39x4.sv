@@ -42,6 +42,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     input  logic                    up_1S_1G_i,
     input  logic                    up_2S_2M_i,
     input  logic                    up_2S_1G_i,
+    input  logic                    up_is_msi_i,
     input  logic [riscv::GPPNW-1:0] up_vpn_i,
     input  logic [19:0]             up_pscid_i,
     input  logic [15:0]             up_gscid_i,
@@ -59,6 +60,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
     output logic                    lu_1S_1G_o,
     output logic                    lu_2S_2M_o,               
     output logic                    lu_2S_1G_o,
+    output logic                    lu_is_msi_o,        // MSI translation
     output logic                    lu_hit_o,           // hit flag
     output riscv::pte_t             lu_1S_content_o,    // first-stage PTE (GPA PPN)
     output riscv::pte_t             lu_2S_content_o     // second-stage PTE (SPA PPN)
@@ -75,6 +77,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         logic                   is_1S_1G;   // first-stage 1GiB superpage: VPN[0,1] makes part of the offset
         logic                   is_2S_2M;   // second-stage 2MiB superpage: VPN[0] makes part of the offset
         logic                   is_2S_1G;   // second-stage 1GiB superpage: VPN[0,1] makes part of the offset
+        logic                   is_msi;     // second-stage entry contains an MSI translation
         logic                   en_1S;      // first-stage translation enable
         logic                   en_2S;      // second-stage translation enable
         logic                   valid;      // valid bit
@@ -153,9 +156,6 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                 
                 // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
                 if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
-
-                    // Construct a GPA with input GVA, according to the size of the page (bypassed offset field is different in each case)
-                    lu_gpaddr_o = make_gpaddr(en_1S_i, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, lu_iova_i, content_q[i].pte_1S);
                     
                     // 1G match | 2M match | 4k match
                     if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
@@ -163,6 +163,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                         lu_1S_1G_o      = tags_q[i].is_1S_1G;
                         lu_2S_2M_o      = tags_q[i].is_2S_2M;               
                         lu_2S_1G_o      = tags_q[i].is_2S_1G;
+                        lu_is_msi_o     = tags_q[i].is_msi;
                         lu_1S_content_o = content_q[i].pte_1S;
                         lu_2S_content_o = content_q[i].pte_2S;
                         lu_hit_o        = 1'b1;
@@ -237,7 +238,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                                 NOTE: Host address space entries are those with G-stage translation disabled. Some devices may be retained by the hypervisor or host OS
                 |0 |0 |1   |    Invalidate all entries for the host address space identified by PSCID, except for those with G=1
                 |0 |1 |0   |    Invalidate all entries identified by the IOVA in ADDR field, for all host address spaces, including those with G=1
-                |0 |1 |1   |    Invalidate all entries identified by the IOVA in ADDR field, for the host address space identified by PSCID, except for those with G=1 //? Should it be only one entry?
+                |0 |1 |1   |    Invalidate all entries identified by the IOVA in ADDR field, for the host address space identified by PSCID, except for those with G=1
                 |1 |0 |0   |    Invalidate all entries for all address spaces associated to the VM identified by GSCID, including those with G=1
                 |1 |0 |1   |    Invalidate all entries for the address space identified by PSCID, in the VM identified by GSCID, except for those with G=1
                 |1 |1 |0   |    Invalidate all entries corresponding to the IOVA in ADDR field, associated to the VM identified by GSCID, including those with G=1
@@ -363,6 +364,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                     is_1S_2M:   up_1S_2M_i,
                     is_2S_1G:   up_2S_1G_i,
                     is_2S_2M:   up_2S_2M_i,
+                    is_msi:     up_is_msi_i,
                     valid:      1'b1
                 };
                 // and content as well

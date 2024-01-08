@@ -27,21 +27,24 @@ module rv_iommu_translation_wrapper #(
     parameter int unsigned  MRIFC_ENTRIES       = 4,
 
     // Include Process Context support
-    parameter bit               InclPC          = 0,
+    parameter bit           InclPC              = 0,
     // MSI translation support
     parameter rv_iommu::msi_trans_t MSITrans    = rv_iommu::MSI_DISABLED,
 
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
     /// AXI Full response struct type
-    parameter type  axi_rsp_t       = logic
+    parameter type  axi_rsp_t       = logic,
+
+    // DC type
+    parameter type dc_t             = logic
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
 
     // Trigger translation
-    input  logic    req_trans_i,
-    input  logic    req_dbg_i,
+    input  logic    req_trans_i,    // Normal translation
+    input  logic    req_dbg_i,      // Debug translation
 
     // Translation request data
     input  logic [23:0]                     did_i,      // device_id associated with the transaction
@@ -131,7 +134,8 @@ module rv_iommu_translation_wrapper #(
                 .MSITrans           (MSITrans       ),
 
                 .axi_req_t          (axi_req_t      ),
-                .axi_rsp_t          (axi_rsp_t      )
+                .axi_rsp_t          (axi_rsp_t      ),
+                .dc_t               (dc_t           )
             ) i_rv_iommu_tw_sv39x4_pc (
                 .clk_i,
                 .rst_ni,
@@ -165,7 +169,7 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_valid_o,         // Translation completed
                 .spaddr_o,              // Translated address
-                .is_superpage_o         // Superpage PTE
+                .is_superpage_o,        // Superpage PTE
 
                 .trans_error_o,         // Translation error
                 .report_fault_o,        // The fault must be reported through the FQ
@@ -196,7 +200,7 @@ module rv_iommu_translation_wrapper #(
                 .flush_pscv_i,          // PSCID valid
                 .flush_vpn_i,           // IOVA to tag entries to be flushed
                 .flush_gscid_i,         // GSCID (Guest physical address space identifier) to tag entries to be flushed
-                .flush_pscid_i          // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+                .flush_pscid_i,         // PSCID (Guest virtual address space identifier) to tag entries to be flushed
             
                 .ignore_request_o,      // Ignore request (MRIF only)
                 .msi_data_valid_i,      // MSI data sent by DMA available
@@ -213,7 +217,8 @@ module rv_iommu_translation_wrapper #(
                 .MSITrans       (MSITrans       ),
 
                 .axi_req_t      (axi_req_t      ),
-                .axi_rsp_t      (axi_rsp_t      )
+                .axi_rsp_t      (axi_rsp_t      ),
+                .dc_t           (dc_t           )
             ) i_rv_iommu_tw_sv39x4 (
                 .clk_i,
                 .rst_ni,
@@ -245,7 +250,7 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_valid_o,         // Translation completed
                 .spaddr_o,              // Translated address
-                .is_superpage_o         // Superpage PTE
+                .is_superpage_o,        // Superpage PTE
 
                 .trans_error_o,         // Translation error
                 .report_fault_o,        // The fault must be reported through the FQ

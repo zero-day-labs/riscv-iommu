@@ -29,8 +29,10 @@ module rv_iommu_cdw #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type (DO NOT OVERWRITE)
-    parameter type dc_t             = (MSITrans == rv_iommu::MSI_DISABLED) ? (rv_iommu::dc_base_t) : (rv_iommu::dc_ext_t)
+    // DC type
+    parameter type dc_t             = logic,
+
+    // AR burst size (DO NOT OVERRIDE)
     parameter logic [7:0] ar_len    = ((MSITrans != rv_iommu::MSI_DISABLED) ? (8'd6) : (8'd3))
 ) (
     input  logic                    clk_i,                  // Clock
@@ -105,33 +107,6 @@ module rv_iommu_cdw #(
 
     assign nl = rv_iommu::nl_entry_t'(mem_resp_i.r.data);
 
-    // MSI Translation wires and registers
-    generate
-        
-        if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
-
-            rv_iommu::msiptp_t              dc_msiptp_q, dc_msiptp_n;
-            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask_q, dc_msi_addr_mask_n;
-            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt_q, dc_msi_addr_patt_n;
-
-            assign up_dc_content_o.msi_addr_pattern = dc_msi_addr_patt_q;
-            assign up_dc_content_o.msi_addr_mask    = dc_msi_addr_mask_q;
-            assign up_dc_content_o.msiptp           = dc_msiptp_q;
-            
-            rv_iommu::msiptp_t              dc_msiptp;
-            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask;
-            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt;
-
-            assign dc_msiptp        = rv_iommu::msiptp_t'(mem_resp_i.r.data);
-            assign dc_msi_addr_mask = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
-            assign dc_msi_addr_patt = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
-
-            // Signal MSI field config error to main FSM
-            logic msi_check_error;
-
-        end : gen_msi_support
-    endgenerate
-
     // PTW states
     typedef enum logic[2:0] {
       IDLE,                     // 000
@@ -169,6 +144,8 @@ module rv_iommu_cdw #(
 
     // Enable MSI DC fields configuration checks
     logic en_msi_check;
+    // Signal MSI field config error to main FSM
+    logic msi_check_error;
 
     // PTW walking
     assign cdw_active_o     = (state_q != IDLE);
@@ -271,7 +248,7 @@ module rv_iommu_cdw #(
                     // 3LVL
                     if (ddtp_mode_i == 4'b0100)
                         cdw_pptr_n = {ddtp_ppn_i, 
-                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[23:16]) : (req_did_i[23:15]), 
+                                        (MSITrans == rv_iommu::MSI_DISABLED) ? ({1'b0, req_did_i[23:16]}) : (req_did_i[23:15]), 
                                             3'b0};
                     // 2LVL
                     else if (ddtp_mode_i == 4'b0011)
@@ -281,8 +258,7 @@ module rv_iommu_cdw #(
                     // 1LVL
                     else if (ddtp_mode_i == 4'b0010)
                         cdw_pptr_n = {ddtp_ppn_i, 
-                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[6:0]) : (req_did_i[5:0]), 
-                                            (MSITrans == rv_iommu::MSI_DISABLED) ? (5'b0) : (6'b0)};
+                                        (MSITrans == rv_iommu::MSI_DISABLED) ? ({req_did_i[6:0], 5'b0}) : ({req_did_i[5:0], 6'b0})};
                 end
             end
 
@@ -340,8 +316,7 @@ module rv_iommu_cdw #(
                             LVL2: begin
                                 cdw_lvl_n = LVL1;
                                 cdw_pptr_n = {nl.ppn, 
-                                                (MSITrans == rv_iommu::MSI_DISABLED) ? (device_id_q[6:0]) : (device_id_q[5:0]), 
-                                                    (MSITrans == rv_iommu::MSI_DISABLED) ? (5'b0) : (6'b0)};
+                                                (MSITrans == rv_iommu::MSI_DISABLED) ? ({device_id_q[6:0], 5'b0}) : ({device_id_q[5:0], 6'b0})};
                             end
 
                             default:;
@@ -522,11 +497,28 @@ module rv_iommu_cdw #(
         // MSI translation supported
         if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
 
+            // MSI Translation wires and registers
+            rv_iommu::msiptp_t              dc_msiptp_q, dc_msiptp_n;
+            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask_q, dc_msi_addr_mask_n;
+            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt_q, dc_msi_addr_patt_n;
+            
+            rv_iommu::msiptp_t              dc_msiptp;
+            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask;
+            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt;
+
             always_comb begin : msi_config_checks
 
                 // Default values
                 // Wires
                 msi_check_error     = 1'b0;
+                dc_msiptp           = rv_iommu::msiptp_t'(mem_resp_i.r.data);
+                dc_msi_addr_mask    = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
+                dc_msi_addr_patt    = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
+
+                // Outputs
+                up_dc_content_o.msi_addr_pattern = dc_msi_addr_patt_q;
+                up_dc_content_o.msi_addr_mask    = dc_msi_addr_mask_q;
+                up_dc_content_o.msiptp           = dc_msiptp_q;
 
                 // Next state values
                 dc_msiptp_n         = dc_msiptp_q;

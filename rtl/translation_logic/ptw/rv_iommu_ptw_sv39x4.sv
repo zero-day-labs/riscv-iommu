@@ -78,8 +78,6 @@ module rv_iommu_ptw_sv39x4 #(
     // Bus to send first-stage data to MSI PTW
     output logic                        gpaddr_is_msi_o,
     output logic [riscv::GPPNW-1:0]     msi_vpn_o,
-    output logic [19:0]                 msi_pscid_o,
-    output logic [15:0]                 msi_gscid_o,
     output logic                        msi_1S_2M_o,
     output logic                        msi_1S_1G_o,
     output riscv::pte_t                 msi_gpte_o,
@@ -96,7 +94,7 @@ module rv_iommu_ptw_sv39x4 #(
       IDLE,         // 00
       MEM_ACCESS,   // 01
       PROC_PTE,     // 10
-      ERROR,        // 11
+      ERROR         // 11
     } state_q, state_n;
 
     // Page levels: 3 for Sv39x4
@@ -117,10 +115,6 @@ module rv_iommu_ptw_sv39x4 #(
 
     // Register to store leaf first-stage PTE to be updated in the IOTLB
     riscv::pte_t leaf_1Spte_q, leaf_1Spte_n;
-
-    // To cast input memory port to MSI PTE data
-    rv_iommu::msi_wt_pte_t msi_pte;
-    assign msi_pte = rv_iommu::msi_wt_pte_t'(mem_resp_i.r.data);
 
     // global bit register
     logic global_mapping_q, global_mapping_n;
@@ -161,8 +155,6 @@ module rv_iommu_ptw_sv39x4 #(
 
             // Bus to send first-stage data to MSI PTW                            
             assign msi_vpn_o        = iova_q[riscv::SVX-1:12];
-            assign msi_pscid_o      = iotlb_update_pscid_q;
-            assign msi_gscid_o      = iotlb_update_gscid_q;
             assign msi_1S_2M_o      = (main_lvl_q == LVL2);
             assign msi_1S_1G_o      = (main_lvl_q == LVL1);
             assign msi_gpte_o       = pte;
@@ -173,8 +165,6 @@ module rv_iommu_ptw_sv39x4 #(
 
             assign gpaddr_is_msi    = 1'b0;
             assign msi_vpn_o        = '0;
-            assign msi_pscid_o      = '0;
-            assign msi_gscid_o      = '0;
             assign msi_1S_2M_o      = 1'b0;
             assign msi_1S_1G_o      = 1'b0;
             assign msi_gpte_o       = '0;
@@ -243,7 +233,6 @@ module rv_iommu_ptw_sv39x4 #(
         // Wires
         final_gpa               = '0;
         gpa_x                   = '0;
-        init_msi_translation    = 1'b0;
 
         // Output signals
         // AXI parameters
@@ -484,7 +473,7 @@ module rv_iommu_ptw_sv39x4 #(
 
                             // When Stage 2 is disabled and the GPA (SPA) is an MSI address, IOTLB is not updated yet and
                             // MSI translation process is invoked
-                            if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_imsic_addr)) begin
+                            if ((ptw_stage_q == STAGE_2_FINAL) || (!en_2S_i && !gpaddr_is_msi)) begin
                                 
                                 update_o = 1'b1;
                             end

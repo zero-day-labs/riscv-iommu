@@ -48,7 +48,7 @@ module rv_iommu_mrif_handler #(
     // Init MRIF processing. MSI data and MRIF cache data are valid.
     input  logic        init_mrif_i,
     // Abort access (discard without fault)
-    output logic        abort_o,
+    output logic        ignore_o,
 
     // Interrupt identity (MSI data)
     input  logic [31:0] int_id_i,
@@ -71,14 +71,16 @@ module rv_iommu_mrif_handler #(
         WRITE_MRIF,     // 011
         WRITE_NOTICE,   // 100
         ERROR           // 101
-    } state_q, state_n;
+    } state_mrif_handler_t;
+    state_mrif_handler_t state_q, state_n;
 
     // Write FSM states
     typedef enum logic [1:0] {
         AW_REQ,
         W_DATA,
         B_RESP
-    } wr_state_q, wr_state_n;
+    } mrif_write_t;
+    mrif_write_t wr_state_q, wr_state_n;
 
     // Physical pointer to access memory
     logic [riscv::PLEN-1:0] pptr_q, pptr_n;
@@ -152,7 +154,7 @@ module rv_iommu_mrif_handler #(
         // R
         mem_req_o.r_ready   = 1'b0;
 
-        abort_o         = 1'b0;
+        ignore_o         = 1'b0;
 
         // Next values
         state_n         = state_q;
@@ -176,11 +178,13 @@ module rv_iommu_mrif_handler #(
 
                     // Validate interrupt identity
                     if (|int_id_i[31:11]) begin
-                        abort_o = 1'b1;  // discard transaction (without raising fault)
+                        ignore_o = 1'b1;  // discard transaction (without raising fault)
                     end
 
                     // Everything OK
                     else begin
+                        
+                        // Offset within the MRIF is determined by the interrupt identity
                         pptr_n      = {mrif_addr_i, int_id_i[10:6], 4'b0};
                         int_id_n    = int_id_i[10:0];
                         state_n     = MEM_ACCESS;
@@ -264,7 +268,7 @@ module rv_iommu_mrif_handler #(
                             wr_state_n  = AW_REQ;
 
                             // Check IE bit to determine whether to send notice MSI
-                            state_n = (mrif_ie_q & int_id_bit) ? (WRITE_NOTICE) : (IDLE);
+                            state_n = (|(mrif_ie_q & int_id_bit)) ? (WRITE_NOTICE) : (IDLE);
 
                             // AXI error
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
@@ -298,10 +302,10 @@ module rv_iommu_mrif_handler #(
                     // Send data through W channel
                     W_DATA: begin
                         
-                        mem_req_o.w_valid   = 1'b1;
-                        mem_req_o.w.strb    = 8'b0000_1111;
-                        mem_req_o.w.last    = 1'b1;
-                        mem_req_o.w.data    = {21'b0, notice_nid_i};
+                        mem_req_o.w_valid       = 1'b1;
+                        mem_req_o.w.strb        = 8'b0000_1111;
+                        mem_req_o.w.last        = 1'b1;
+                        mem_req_o.w.data[31:0]  = {21'b0, notice_nid_i};
 
                         if(mem_resp_i.w_ready) begin
                             wr_state_n  = B_RESP;

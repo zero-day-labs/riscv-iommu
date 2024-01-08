@@ -29,8 +29,10 @@ module rv_iommu_cdw_pc #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type (DO NOT OVERWRITE)
-    parameter type dc_t             =  (MSITrans == rv_iommu::MSI_DISABLED) ? (rv_iommu::dc_base_t) : (rv_iommu::dc_ext_t),
+    // DC type
+    parameter type dc_t             = logic,
+
+    // AR burst size (DO NOT OVERRIDE)
     parameter logic [7:0] ar_len    = ((MSITrans != rv_iommu::MSI_DISABLED) ? (8'd6) : (8'd3))
 ) (
     input  logic                    clk_i,                  // Clock
@@ -114,15 +116,15 @@ module rv_iommu_cdw_pc #(
     // DDTC / PDTC Update
     assign up_did_o = device_id_q;
 
-    assign up_dc_content_o.tc = dc_tc_q;
-    assign up_dc_content_o.iohgatp = dc_iohgatp_q;
-    assign up_dc_content_o.ta = dc_ta_q;
-    assign up_dc_content_o.fsc = dc_fsc_q;
+    assign up_dc_content_o.tc       = dc_tc_q;
+    assign up_dc_content_o.iohgatp  = dc_iohgatp_q;
+    assign up_dc_content_o.ta       = dc_ta_q;
+    assign up_dc_content_o.fsc      = dc_fsc_q;
 
     assign up_pid_o = process_id_q;
 
-    assign up_pc_content_o.ta = pc_ta_q;
-    assign up_pc_content_o.fsc = pc_fsc_q;
+    assign up_pc_content_o.ta   = pc_ta_q;
+    assign up_pc_content_o.fsc  = pc_fsc_q;
 
     // Cast read port to corresponding data structure
     rv_iommu::tc_t          dc_tc;
@@ -144,30 +146,6 @@ module rv_iommu_cdw_pc #(
     assign pc_fsc = rv_iommu::fsc_t'(mem_resp_i.r.data);
 
     assign nl = rv_iommu::nl_entry_t'(mem_resp_i.r.data);
-
-    // MSI Translation wires and registers
-    generate
-        
-        if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
-
-            rv_iommu::msiptp_t              dc_msiptp_q, dc_msiptp_n;
-            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask_q, dc_msi_addr_mask_n;
-            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt_q, dc_msi_addr_patt_n;
-
-            assign up_dc_content_o.msi_addr_pattern = dc_msi_addr_patt_q;
-            assign up_dc_content_o.msi_addr_mask    = dc_msi_addr_mask_q;
-            assign up_dc_content_o.msiptp           = dc_msiptp_q;
-            
-            rv_iommu::msiptp_t              dc_msiptp;
-            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask;
-            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt;
-
-            assign dc_msiptp        = rv_iommu::msiptp_t'(mem_resp_i.r.data);
-            assign dc_msi_addr_mask = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
-            assign dc_msi_addr_patt = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
-
-        end : gen_msi_support
-    endgenerate
 
     // PTW states
     typedef enum logic[2:0] {
@@ -308,6 +286,8 @@ module rv_iommu_cdw_pc #(
         dc_iohgatp_n            = dc_iohgatp_q;
         dc_ta_n                 = dc_ta_q;
         dc_fsc_n                = dc_fsc_q;
+        pc_ta_n                 = pc_ta_q;
+        pc_fsc_n                = pc_fsc_q;
 
         case (state_q)
 
@@ -330,19 +310,19 @@ module rv_iommu_cdw_pc #(
                     // load pptr according to ddtp.MODE
                     // 3LVL
                     if (ddtp_mode_i == 4'b0100)
+                        // 56 = 44 + 9 + 3 
                         cdw_pptr_n = {ddtp_ppn_i, 
-                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[23:16]) : (req_did_i[23:15]), 
+                                        ((MSITrans == rv_iommu::MSI_DISABLED) ? ({1'b0, req_did_i[23:16]}) : (req_did_i[23:15])), 
                                             3'b0};
                     // 2LVL
                     else if (ddtp_mode_i == 4'b0011)
                         cdw_pptr_n = {ddtp_ppn_i, 
-                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[15:7]) : (req_did_i[14:6]), 
+                                        ((MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[15:7]) : (req_did_i[14:6])), 
                                             3'b0};
                     // 1LVL
                     else if (ddtp_mode_i == 4'b0010)
                         cdw_pptr_n = {ddtp_ppn_i, 
-                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[6:0]) : (req_did_i[5:0]), 
-                                            (MSITrans == rv_iommu::MSI_DISABLED) ? (5'b0) : (6'b0)};
+                                        (MSITrans == rv_iommu::MSI_DISABLED) ? ({req_did_i[6:0], 5'b0}) : ({req_did_i[5:0], 6'b0})};
                 end
 
                 // check for PDTC misses
@@ -443,8 +423,7 @@ module rv_iommu_cdw_pc #(
                             LVL2: begin
                                 cdw_lvl_n = LVL1;
                                 if (is_ddt_walk_q) cdw_pptr_n = {nl.ppn, 
-                                                                    (MSITrans == rv_iommu::MSI_DISABLED) ? (device_id_q[6:0]) : (device_id_q[5:0]), 
-                                                                        (MSITrans == rv_iommu::MSI_DISABLED) ? (5'b0) : (6'b0)};
+                                                                    (MSITrans == rv_iommu::MSI_DISABLED) ? ({device_id_q[6:0], 5'b0}) : ({device_id_q[5:0], 6'b0})};
                                 else begin 
                                     if (!en_stage2_i)   cdw_pptr_n = {nl.ppn, process_id_q[7:0], 4'b0};
                                     else                cdw_pptr_n = {pdt_ppn_i, process_id_q[7:0], 4'b0};
@@ -504,7 +483,7 @@ module rv_iommu_cdw_pc #(
 
                         //PC.ta
                         4'b0000: begin
-                            pc_n.ta = pc_ta;
+                            pc_ta_n = pc_ta;
 
                             // "If pdte.V == 0, stop and report "PDT entry not valid" (cause = 266)"
                             if (!pc_ta.v) begin
@@ -523,7 +502,7 @@ module rv_iommu_cdw_pc #(
 
                         //PC.fsc (last DW)
                         4'b0001: begin
-                            pc_n.fsc = pc_fsc;
+                            pc_fsc_n = pc_fsc;
 
                             // Config checks
                             if ((|pc_fsc.reserved) ||
@@ -740,12 +719,29 @@ module rv_iommu_cdw_pc #(
         // MSI translation supported
         if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
 
+            // MSI Translation wires and registers
+            rv_iommu::msiptp_t              dc_msiptp_q, dc_msiptp_n;
+            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask_q, dc_msi_addr_mask_n;
+            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt_q, dc_msi_addr_patt_n;
+            
+            rv_iommu::msiptp_t              dc_msiptp;
+            rv_iommu::msi_addr_mask_t       dc_msi_addr_mask;
+            rv_iommu::msi_addr_pattern_t    dc_msi_addr_patt;
+
             always_comb begin : msi_config_checks
 
                 // Default values
                 // Wires
                 msi_check_error     = 1'b0;
                 translate_pdtp      = 1'b0;
+                dc_msiptp           = rv_iommu::msiptp_t'(mem_resp_i.r.data);
+                dc_msi_addr_mask    = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
+                dc_msi_addr_patt    = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
+
+                // Outputs
+                up_dc_content_o.msi_addr_pattern = dc_msi_addr_patt_q;
+                up_dc_content_o.msi_addr_mask    = dc_msi_addr_mask_q;
+                up_dc_content_o.msiptp           = dc_msiptp_q;
 
                 // Next state values
                 dc_msiptp_n         = dc_msiptp_q;
@@ -837,6 +833,8 @@ module rv_iommu_cdw_pc #(
             dc_iohgatp_q            <= '0;
             dc_ta_q                 <= '0;
             dc_fsc_q                <= '0;
+            pc_ta_q                 <= '0;
+            pc_fsc_q                <= '0;
             ptw_done_q              <= 1'b0;
             wait_rlast_q            <= 1'b0;
 
@@ -853,6 +851,8 @@ module rv_iommu_cdw_pc #(
             dc_iohgatp_q            <= dc_iohgatp_n;
             dc_ta_q                 <= dc_ta_n;
             dc_fsc_q                <= dc_fsc_n;
+            pc_ta_q                 <= pc_ta_n;
+            pc_fsc_q                <= pc_fsc_n;
             ptw_done_q              <= ptw_done_i;
             wait_rlast_q            <= wait_rlast_n;
         end

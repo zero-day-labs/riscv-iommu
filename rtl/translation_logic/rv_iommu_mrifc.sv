@@ -29,7 +29,7 @@
         Thus, the IOTINVAL.VMA and IOTINVAL.GVMA commands also affect this cache, and entries are tagged with IOVA, GSCID and PSCID.
 */
 
-module rv_iommu_mrifc #(
+module rv_iommu_mrifc import ariane_pkg::*; #(
     parameter int unsigned  MRIFC_ENTRIES    = 4
 )(
     input  logic            clk_i,          // Clock
@@ -334,8 +334,8 @@ module rv_iommu_mrifc #(
                     valid:      1'b1
                 };
                 // and content as well
-                content_n[i].pte_1S = up_1S_content_i;
-                content_n[i].pte_2S = up_2S_content_i;
+                content_n[i].pte_1S     = up_1S_content_i;
+                content_n[i].msi_pte    = up_msi_content_i;
             end
         end
     end

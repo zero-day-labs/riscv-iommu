@@ -73,15 +73,15 @@ module rv_iommu_tw_sv39x4 #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type (DO NOT OVERWRITE)
-    parameter type dc_t = (MSITrans == rv_iommu::MSI_DISABLED) ? (rv_iommu::dc_base_t) : (rv_iommu::dc_ext_t)
+    // DC type
+    parameter type dc_t             = logic
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
 
     // Trigger translation
-    input  logic    req_trans_i,
-    input  logic    req_dbg_i,
+    input  logic    req_trans_i,    // Normal translation
+    input  logic    req_dbg_i,      // Debug translation
 
     // Translation request data
     input  logic [23:0]                     did_i,      // device_id associated with the transaction
@@ -128,6 +128,7 @@ module rv_iommu_tw_sv39x4 #(
     // to HPM
     output logic                        iotlb_miss_o,       // IOTLB miss happened
     output logic                        ddt_walk_o,         // DDT walk triggered
+    output logic                        pdt_walk_o,         // DDT walk triggered
     output logic                        s1_ptw_o,           // first-stage PT walk triggered
     output logic                        s2_ptw_o,           // second-stage PT walk triggered
 
@@ -144,7 +145,7 @@ module rv_iommu_tw_sv39x4 #(
     input  logic                        flush_pscv_i,   // PSCID valid
     input  logic [riscv::GPPNW-1:0]     flush_vpn_i,    // IOVA to tag entries to be flushed
     input  logic [15:0]                 flush_gscid_i,  // GSCID (Guest physical address space identifier) to tag entries to be flushed
-    input  logic [19:0]                 flush_pscid_i   // PSCID (Guest virtual address space identifier) to tag entries to be flushed
+    input  logic [19:0]                 flush_pscid_i,   // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
     output logic        ignore_request_o,   // Ignore request (MRIF only)
     input  logic        msi_data_valid_i,   // MSI data sent by DMA available
@@ -164,7 +165,14 @@ module rv_iommu_tw_sv39x4 #(
 
     // To determine if current DC enables MSI translation
     logic msi_enabled;
-    assign msi_enabled = (ddtc_lu_content.msiptp.mode != 4'b0000);
+
+    // MSI address check
+    // Input IOVA (GPA) is the address of a virtual IF
+    logic iova_is_msi;
+
+    // MSI DC fields
+    logic [(rv_iommu::MSI_MASK_LEN-1):0]    msi_addr_mask;
+    logic [(rv_iommu::MSI_PATTERN_LEN-1):0] msi_addr_pattern;
 
     // To determine if request is translated or untranslated
     logic is_translated;
@@ -211,12 +219,12 @@ module rv_iommu_tw_sv39x4 #(
                                   
     // Guest page fault occurred during implicit 2nd-stage translation for 1st-stage translation
     logic   ptw_error_2S_int;
-    assign  is_implicit_o = (ptw_error_2S_int);
+    assign  is_implicit_o = ptw_error_2S_int;
 
     // HPM event indicators
     logic cdw_active, ptw_active;
     assign iotlb_miss_o = iotlb_access & (~iotlb_lu_hit);
-    assign ddt_walk_o   = cdw_active & (is_ddt_walk);
+    assign ddt_walk_o   = cdw_active;
     assign pdt_walk_o   = 1'b0;
     assign s1_ptw_o     = ptw_active & (en_1S);
     assign s2_ptw_o     = ptw_active & (en_2S);
@@ -241,6 +249,7 @@ module rv_iommu_tw_sv39x4 #(
     logic                       iotlb_lu_1S_1G;
     logic                       iotlb_lu_2S_2M;
     logic                       iotlb_lu_2S_1G;
+    logic                       iotlb_lu_is_msi;
     logic                       iotlb_lu_hit;
 
     logic                       iotlb_update;
@@ -248,6 +257,7 @@ module rv_iommu_tw_sv39x4 #(
     logic                       iotlb_up_1S_1G;
     logic                       iotlb_up_2S_2M;
     logic                       iotlb_up_2S_1G;
+    logic                       iotlb_up_is_msi;
     logic [riscv::GPPNW-1:0]    iotlb_up_vpn;
     logic [19:0]                iotlb_up_pscid;
     logic [15:0]                iotlb_up_gscid;
@@ -289,6 +299,7 @@ module rv_iommu_tw_sv39x4 #(
     assign iotlb_up_1S_1G       = (msi_update) ? (msi_up_1S_1G      )            : (ptw_up_1S_1G       );
     assign iotlb_up_2S_2M       = (msi_update) ? (1'b0              )            : (ptw_up_2S_2M       );
     assign iotlb_up_2S_1G       = (msi_update) ? (1'b0              )            : (ptw_up_2S_1G       );
+    assign iotlb_up_is_msi      = (msi_update) ? (1'b1              )            : (1'b0               );
     assign iotlb_up_vpn         = (msi_update) ? (msi_up_vpn        )            : (ptw_up_vpn         );
     assign iotlb_up_pscid       = (msi_update) ? (msi_up_pscid      )            : (ptw_up_pscid       );
     assign iotlb_up_gscid       = (msi_update) ? (msi_up_gscid      )            : (ptw_up_gscid       );
@@ -298,24 +309,16 @@ module rv_iommu_tw_sv39x4 #(
     // first-stage data bus between PTW and MSI PTW
     logic                       gpaddr_is_msi;
     logic [riscv::GPPNW-1:0]    msi_vpn;
-    logic [19:0]                msi_pscid;
-    logic [15:0]                msi_gscid;
     logic                       msi_1S_2M;
     logic                       msi_1S_1G;
     riscv::pte_t                msi_gpte;
-
-    // MSI address check
-    // Input IOVA (GPA) is the address of a virtual IF
-    logic   iova_is_msi;
-    assign  iova_is_msi = (!en_1S_i && msi_en_i && is_store_i && is_32_bit_i &&
-                            ((iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
     // Init PTW
     // Triggered when a hit occurs in the IOTLB and:
     // (i)  first-stage translation is enabled or 
     // (ii) second-stage translation is enabled and the GPA is not MSI
     logic   init_ptw;
-    assign  init_ptw = iotlb_access & ~iotlb_lu_hit & (en_1S_i | (en_2S_i & ~iova_is_msi));
+    assign  init_ptw = iotlb_access & ~iotlb_lu_hit & (en_1S | (en_2S & ~iova_is_msi));
 
     // Init MSI translation
     // Triggered when:
@@ -380,6 +383,7 @@ module rv_iommu_tw_sv39x4 #(
         .up_1S_1G_i         (iotlb_up_1S_1G     ),
         .up_2S_2M_i         (iotlb_up_2S_2M     ),
         .up_2S_1G_i         (iotlb_up_2S_1G     ),
+        .up_is_msi_i        (iotlb_up_is_msi    ),
         .up_vpn_i           (iotlb_up_vpn       ),
         .up_pscid_i         (iotlb_up_pscid     ),
         .up_gscid_i         (iotlb_up_gscid     ),
@@ -397,6 +401,7 @@ module rv_iommu_tw_sv39x4 #(
         .lu_1S_1G_o         (iotlb_lu_1S_1G     ),
         .lu_2S_2M_o         (iotlb_lu_2S_2M     ),
         .lu_2S_1G_o         (iotlb_lu_2S_1G     ),
+        .lu_is_msi_o        (iotlb_lu_is_msi    ),  // Second-stage data holds an MSI translation
         .en_1S_i            (en_1S              ),  // first-stage enabled
         .en_2S_i            (en_2S              ),  // second-stage enabled
         .lu_hit_o           (iotlb_lu_hit       )   // hit flag
@@ -425,7 +430,7 @@ module rv_iommu_tw_sv39x4 #(
         .en_2S_i                (en_2S              ),  // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store           ),  // Indicate whether this translation was triggered by a store or a load
         .is_rx_i                (is_rx              ),  // Read-for-execute
-        .is_32_bit_i            (is_32_bit          ),  // Data is 32-bit wide
+        .is_32_bit_i            (is_32_bit_i        ),  // Data is 32-bit wide
 
         // PTW AXI Master memory interface
         .mem_resp_i             (ptw_axi_resp_i     ),  // Response port from memory
@@ -449,15 +454,13 @@ module rv_iommu_tw_sv39x4 #(
         .gscid_i                (gscid              ),
 
         // MSI translation
-        .msi_en_i               (msi_enabled                                ),
-        .msi_addr_mask_i        (ddtc_lu_content.msi_addr_mask.mask         ),
-        .msi_addr_pattern_i     (ddtc_lu_content.msi_addr_pattern.pattern   ),
+        .msi_en_i               (msi_enabled        ),
+        .msi_addr_mask_i        (msi_addr_mask      ),
+        .msi_addr_pattern_i     (msi_addr_pattern   ),
 
         // Bus to send first-stage data to MSI PTW
         .gpaddr_is_msi_o        (gpaddr_is_msi      ),
         .msi_vpn_o              (msi_vpn            ),
-        .msi_pscid_o            (msi_pscid          ),
-        .msi_gscid_o            (msi_gscid          ),
         .msi_1S_2M_o            (msi_1S_2M          ),
         .msi_1S_1G_o            (msi_1S_1G          ),
         .msi_gpte_o             (msi_gpte           ),
@@ -469,11 +472,19 @@ module rv_iommu_tw_sv39x4 #(
         .bad_gpaddr_o           (bad_gpaddr_o       )   // to return the GPA in case of guest page fault
     );
 
-    //# Page Table Walker for MSI Address Translation
+    //# MSI Address Translation support
     generate
     
     // MSI Translation support enabled
     if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
+
+        assign msi_enabled      = (ddtc_lu_content.msiptp.mode != 4'b0000);
+        assign msi_addr_mask    = ddtc_lu_content.msi_addr_mask.mask;
+        assign msi_addr_pattern = ddtc_lu_content.msi_addr_pattern.pattern;
+        assign iova_is_msi      = (!en_1S && msi_enabled && is_store && is_32_bit_i &&
+                                    ((iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask) == (msi_addr_pattern & ~msi_addr_mask)));
+
+        //# MSI Page Table Walker
         rv_iommu_msiptw #(
             .MSITrans           (MSITrans  ),
             .axi_req_t          (axi_req_t ),
@@ -486,27 +497,32 @@ module rv_iommu_tw_sv39x4 #(
             .mem_resp_i         (msiptw_axi_resp_i  ),
             .mem_req_o          (msiptw_axi_req_o   ),
 
-           // Trigger MSI translation
+            // Trigger MSI translation
             .init_msi_trans_i   (init_msi_trans & ~req_dbg_i),
 
             // Ignore access (abort without faults)
             .ignore_o           (msiptw_ignore      ),
 
+            // Request IOVA
+            .req_iova_i         (iova_i             ),
+            // First-stage translation enable
+            .en_1S_i            (en_1S              ),
+            // The translation is read-for-execute
+            .is_rx_i            (is_rx              ),
+
+            // First-stage data to update IOTLB
             .vpn_i              (msi_vpn            ),
-            .pscid_i            (msi_pscid          ),
-            .gscid_i            (msi_gscid          ),
+            .pscid_i            (pscid              ),
+            .gscid_i            (gscid              ),
             .is_1S_2M_i         (msi_1S_2M          ),
             .is_1S_1G_i         (msi_1S_1G          ),
             .gpte_i             (msi_gpte           ),
-
-            // The translation is read-for-execute
-            .is_rx_i            (is_rx              ),
 
             // MSI PT base PPN
             .msiptp_ppn_i       (ddtc_lu_content.msiptp.ppn),
 
             // MSI address mask
-            .msi_addr_mask_i    (ddtc_lu_content.msi_addr_mask.mask),
+            .msi_addr_mask_i    (msi_addr_mask      ),
 
             // Generic update ports
             .vpn_o              (msi_up_vpn         ),
@@ -532,6 +548,11 @@ module rv_iommu_tw_sv39x4 #(
 
     // MSI translation support disabled
     else begin : gen_msi_support_disabled
+
+        assign msi_enabled          = 1'b0;
+        assign msi_addr_mask        = '0;
+        assign msi_addr_pattern     = '0;
+        assign iova_is_msi          = 1'b0;
 
         assign msiptw_axi_req_o     = '0;
 
@@ -562,13 +583,13 @@ module rv_iommu_tw_sv39x4 #(
     // MRIF Support enabled
     if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
         
-        // MRIF Handler
+        //# MRIF Handler
         rv_iommu_mrif_handler #(
             .axi_req_t          (axi_req_t ),
             .axi_rsp_t          (axi_rsp_t )
         ) i_rv_iommu_mrif_handler (
-            .clk_i  (clk_i),    // Clock
-            .rst_ni (rst_ni),   // Asynchronous reset active low
+            .clk_i          (clk_i),    // Clock
+            .rst_ni         (rst_ni),   // Asynchronous reset active low
 
             // Memory interface
             .mem_resp_i     (mrif_handler_axi_resp_i),
@@ -592,7 +613,7 @@ module rv_iommu_tw_sv39x4 #(
             .cause_o        (mrif_handler_cause_code)
         );
 
-        // MRIF Cache
+        //# MRIF Cache
         rv_iommu_mrifc #(
             .MRIFC_ENTRIES  (MRIFC_ENTRIES)
         ) i_rv_iommu_mrifc (
@@ -651,9 +672,10 @@ module rv_iommu_tw_sv39x4 #(
 
     //# Context Directory Walker
     rv_iommu_cdw #(
-        .MSITrans               (MSITrans           ),
-        .axi_req_t              (axi_req_t          ),
-        .axi_rsp_t              (axi_rsp_t          )
+        .MSITrans               (MSITrans   ),
+        .axi_req_t              (axi_req_t  ),
+        .axi_rsp_t              (axi_rsp_t  ),
+        .dc_t                   (dc_t       )
     ) i_rv_iommu_cdw (
         .clk_i                  (clk_i              ),  // Clock
         .rst_ni                 (rst_ni             ),  // Asynchronous reset active low
@@ -832,9 +854,9 @@ module rv_iommu_tw_sv39x4 #(
                     - (2): Transaction is read-for-execute and page has not X permissions;
                     - (3): U-mode transaction and PTE has U=0;
                 */
-                if  ((is_store && (!iotlb_lu_1S_content.w && en_1S)                                             ) ||    // (1)
-                     (is_rx && (!iotlb_lu_1S_content.x && en_1S)                                                ) ||    // (2)
-                     ((!priv_lvl_i) && !iotlb_lu_1S_content.u && en_1S                                          )       // (3)
+                if  ((is_store && (!iotlb_lu_1S_content.w && en_1S)     ) ||    // (1)
+                     (is_rx && (!iotlb_lu_1S_content.x && en_1S)        ) ||    // (2)
+                     ((!priv_lvl_i) && !iotlb_lu_1S_content.u && en_1S  )       // (3)
                     ) begin
                         if (is_store)   wrap_cause_code = rv_iommu::STORE_PAGE_FAULT;
                         else            wrap_cause_code = rv_iommu::LOAD_PAGE_FAULT;
@@ -854,9 +876,12 @@ module rv_iommu_tw_sv39x4 #(
                 //# Address Translation Found
                 else begin
                     
-                    spaddr_o = {((en_2S) ? (iotlb_lu_2S_content.ppn) : (iotlb_lu_1S_content.ppn)), iova_i[11:0]};
+                    // Start from the PPN if 2S is enabled or if the GPA is an MSI address
+                    // Otherwise, the GPPN is a PPN
+                    spaddr_o = {((en_2S || iotlb_lu_is_msi) ? (iotlb_lu_2S_content.ppn) : (iotlb_lu_1S_content.ppn)), iova_i[11:0]};
 
                     // Apply superpage cases
+                    // Superpage tags are always zero for cached MSI translations (2S)
                     if (en_1S && en_2S) begin
                         case ({iotlb_lu_1S_2M, iotlb_lu_1S_1G, iotlb_lu_2S_2M, iotlb_lu_2S_1G})
 
@@ -884,8 +909,9 @@ module rv_iommu_tw_sv39x4 #(
                     end
 
                     else begin
-                        if (iotlb_lu_2S_1G || iotlb_lu_1S_1G)   spaddr_o[29:12] = iova_i[29:12];
-                        if (iotlb_lu_2S_2M || iotlb_lu_1S_2M)   spaddr_o[20:12] = iova_i[20:12];
+                        // First-stage superpage effects are not applied if the IOTLB entry holds an MSI translation
+                        if (iotlb_lu_2S_1G || (iotlb_lu_1S_1G & ~iotlb_lu_is_msi))   spaddr_o[29:12] = iova_i[29:12];
+                        if (iotlb_lu_2S_2M || (iotlb_lu_1S_2M & ~iotlb_lu_is_msi))   spaddr_o[20:12] = iova_i[20:12];
                     end
                 end
 
@@ -898,8 +924,9 @@ module rv_iommu_tw_sv39x4 #(
                 */
             end
 
-            // Both stages are Bare and the input address does not correspond to a MSI address
-            // Input address is bypassed
+            // Both stages are Bare and the input address does not correspond to an MSI address
+            // Input address is bypassed.
+            // Only check after fetching DC and PC
             if (iotlb_access && bare_translation) begin
                 trans_valid_o   = 1'b1;
                 spaddr_o        = iova_i[riscv::PLEN-1:0];
@@ -925,7 +952,7 @@ module rv_iommu_tw_sv39x4 #(
                            (msi_write_error_i));
 
         unique case (1'b1)
-            wrap_trans_error:   cause_code_o = wrap_cause_code;
+            wrap_error:         cause_code_o = wrap_cause_code;
             cdw_error:          cause_code_o = cdw_cause_code;
             ptw_error:          cause_code_o = ptw_cause_code;
             msiptw_error:       cause_code_o = msiptw_cause_code;
