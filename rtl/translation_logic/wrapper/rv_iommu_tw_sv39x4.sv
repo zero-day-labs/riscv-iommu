@@ -913,6 +913,13 @@ module rv_iommu_tw_sv39x4 #(
                         if (iotlb_lu_2S_1G || (iotlb_lu_1S_1G & ~iotlb_lu_is_msi))   spaddr_o[29:12] = iova_i[29:12];
                         if (iotlb_lu_2S_2M || (iotlb_lu_1S_2M & ~iotlb_lu_is_msi))   spaddr_o[20:12] = iova_i[20:12];
                     end
+
+                    // Encode translated PPN acording to the size
+                    // If both stages have superpages of different sizes, we choose the smallest size
+                    if (req_dbg_i) begin
+                        if (iotlb_lu_2S_2M || iotlb_lu_1S_2M)       spaddr_o[20:12] = {1'b0, {8{1'b1}}};
+                        else if (iotlb_lu_2S_1G || iotlb_lu_1S_1G)  spaddr_o[29:12] = {1'b0, {17{1'b1}}};
+                    end
                 end
 
                 /*

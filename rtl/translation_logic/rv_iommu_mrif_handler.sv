@@ -186,7 +186,7 @@ module rv_iommu_mrif_handler #(
                         
                         // Offset within the MRIF is determined by the interrupt identity
                         pptr_n      = {mrif_addr_i, int_id_i[10:6], 4'b0};
-                        int_id_n    = int_id_i[10:0];
+                        int_id_n    = int_id_i[10:0];   // Capture MSI data (AWDATA)
                         state_n     = MEM_ACCESS;
                     end
                 end
@@ -212,16 +212,37 @@ module rv_iommu_mrif_handler #(
                     
                     // Second DW: IE
                     if (mem_resp_i.r.last) begin
+
                         // Save IE DW
                         mrif_ie_n   = mem_resp_i.r.data;
-                        state_n     = WRITE_MRIF;
-                        wr_state_n  = AW_REQ;
+
+                        // If the IP bit corresponding to the interrupt ID is already set, there is no need to write back the IP DW to the MRIF
+                        if (|(mrif_ip_q & int_id_bit)) begin
+                            
+                            // If the IE bit corresponding to the interrupt ID is not set, there is no need to send the MSI notice
+                            // IE bit set. Send MSI notice
+                            if (|(mem_resp_i.r.data & int_id_bit)) begin
+                                state_n     = WRITE_NOTICE;
+                                wr_state_n  = AW_REQ;
+                            end
+
+                            // IE bit clear. Go back to IDLE
+                            else begin
+                                state_n = IDLE;
+                            end
+                        end
+
+                        // IP bit is not set, write back the IP DW
+                        else begin
+                            state_n     = WRITE_MRIF;
+                            wr_state_n  = AW_REQ;
+                        end
                     end
 
                     // First DW: IP
                     else begin
                         // Set IP bit and save DW
-                        mrif_ip_n = mem_resp_i.r.data | int_id_bit;
+                        mrif_ip_n = mem_resp_i.r.data;
                     end
 
                     // Check for AXI errors
@@ -252,7 +273,7 @@ module rv_iommu_mrif_handler #(
 
                         mem_req_o.w_valid   = 1'b1;
                         mem_req_o.w.last    = 1'b1;
-                        mem_req_o.w.data    = mrif_ip_q;
+                        mem_req_o.w.data    = mrif_ip_q | int_id_bit;
 
                         if(mem_resp_i.w_ready) begin
                             wr_state_n  = B_RESP;
