@@ -10,8 +10,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 // See the License for the specific language governing permissions and limitations under the License.
 //
-// Author:  Manuel Rodríguez <manuel.cederog@gmail.com>
-// Date:    09/12/2023
+// Author: Manuel Rodríguez <manuel.cederog@gmail.com>
+// Date:    04/11/2022
+// Acknowledges: SSRC - Technology Innovation Institute (TII)
 //
 // Description: RISC-V IOMMU Memory-Resident Interrupt File Cache (MRIFC).
 //              Fully-associative cache to store MSI PTEs in MRIF mode and the first-stage PTEs that map GVA to them.

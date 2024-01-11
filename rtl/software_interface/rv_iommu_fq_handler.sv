@@ -12,6 +12,7 @@
 //
 // Author: Manuel Rodríguez <manuel.cederog@gmail.com>
 // Date: 16/02/2023
+// Acknowledges: SSRC - Technology Innovation Institute (TII)
 //
 // Description: RISC-V IOMMU Fault Queue (FQ) handler module.
 //              This module registers a new fault record into the FQ 

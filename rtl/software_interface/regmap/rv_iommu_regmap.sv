@@ -12,6 +12,7 @@
 //
 // Author: Manuel Rodríguez <manuel.cederog@gmail.com>
 // Date: 13/10/2022
+// Acknowledges: SSRC - Technology Innovation Institute (TII)
 //
 // Description: IOMMU memory-mapped register interface package.
 //              Defines data structures and other register-related data.
