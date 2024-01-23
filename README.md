@@ -22,27 +22,27 @@ This work is licensed under the Apache-2.0 License and the Solderpad Hardware Li
 
 ## About this Project
 
-This repository contains the SystemVerilog RTL implementation of an Input/Output Memory Management Unit (IOMMU), compliant with the [RISC-V IOMMU Specification v1.0](https://github.com/riscv-non-isa/riscv-iommu). An IOMMU performs permission checks, address translation and interrupt remapping on requests originated by bus mastering devices.
+This repository contains the SystemVerilog RTL implementation of an Input/Output Memory Management Unit (IOMMU), compliant with the [RISC-V IOMMU Specification v1.0](https://github.com/riscv-non-isa/riscv-iommu). An IOMMU performs permission checks, address translation, and interrupt remapping on requests originated by bus master devices.
 
-:warning: **Disclaimer**: This implementation is currently under development. We functionally validated the IOMMU IP within a CVA6-based platform with virtualization support. However, the IP did not undergo formal verification. Thus, it is still possible to find some bugs.
+:warning: **Disclaimer**: The IP is in constant development. We functionally validated the RISC-V IOMMU IP within a CVA6-based SoC with virtualization support. However, the IP is not formally verified. Thus, it is very likely to have bugs.
 
 The microarchitecture of the IP is illustrated in the diagram below.
 
 ![My Image](doc/iommu_design_param.png)
 
 We classify the microarchitectural components of the IOMMU based on their functions into three primary groups:
--   **Translation Logic** modules, which play a crucial role in the address translation process, enabling access to memory to locate data structures, or caching context/translation data;
+-   **Translation Logic** modules, which play a crucial role in the address translation process, enabling access to memory to locate data structures or caching context/translation data;
 -   **Software interface** modules, responsible for creating communication channels between the IOMMU hardware and software for specific purposes;
 -   **External interfaces**, used by the IOMMU to interact with other hardware subsystems within the platform. The four external interfaces are described in the [interfaces](#interfaces) section.
 
 
-Each module is tied to one or more architectural features and design parameters. In the [features](#features) section, we outline the architectural features included into our implementation, and we identify other features defined as future work for further collaborations. In the [parameters](#parameters) section, we describe the modular parameters that affect the architecture and microarchitecture of the IP.
+Each module is tied to one or more architectural features and design parameters. In the [features](#features) section, we outline the architectural features included into the IP, and we identify other features defined as future work / further collaborations. In the [parameters](#parameters) section, we describe the modular parameters that affect the architecture and microarchitecture of the IP.
 
 
 ## **Repository Structure**
 
 - **Documentation ([doc/](./doc/)):**
-In the *doc* folder you can find various diagrams and graphical resources pertaining to the internal design of the different components comprising the IOMMU IP.
+In the *doc* folder you can find various diagrams and graphical resources illustrating the internal design of the different components comprising the IOMMU IP.
 
 - **Required SV headers ([include/](./include/)):**
 SystemVerilog header files required to build the IP.
@@ -51,21 +51,21 @@ SystemVerilog header files required to build the IP.
 SystemVerilog packages used to build the IP.
 
 - **RTL source files ([rtl/](./rtl/)):**
-SystemVerilog source files that make up the IP, organized according to the hardware blocks defined for the microarchitecture.
+SystemVerilog source files that implement the IP, organized according to hardware blocks defined for the microarchitecture.
 
 - **Standalone components ([vendor/](./vendor/)):**
 The *vendor* folder holds SystemVerilog source files of all standalone RTL modules used in the IOMMU IP.
 
 ## **IOMMU Features**
 
-Our implementation does <ins>**not**</ins> include any of the PCIe features defined by the spec, and supports only little-endian memory accesses.
-The following table lists all architectural features supported by this implementation, and those that may be included in further versions.
+Current IOMMU IP does <ins>**not**</ins> include any of the PCIe features defined by the spec, and supports only little-endian memory accesses.
+The following table lists all architectural features supported by this implementation, and those that may be included in the future.
 
 | Feature | Notes | Status |
 | ------------- | ------------- | ------------- |
 | Memory-based Device Context (DC) | Support for up to 3-LVL Device Directory Table walks, using 24-bits wide *device_id* | Implemented |
 | Memory-based Process Context (PC) | Support for up to 3-LVL Process Directory Table walks, using 20-bits wide *process_id* | Implemented |
-| Address Translation Caches | DDT Cache, PDT Cache and IOTLB. All fully-associative. The IOTLB implements the Sv39/Sv39x4 virtual memory scheme | Implemented|
+| Address Translation Caches | DDT Cache, PDT Cache, and IOTLB. All fully-associative. The IOTLB implements the Sv39/Sv39x4 virtual memory scheme | Implemented|
 | Two-stage Address Translation | Sv39/Sv39x4. Includes support for 1GiB and 2MiB superpages | Implemented |
 | Command Queue and Fault/Event Queue | No support for ATS commands | Implemented |
 | MSI Translation | Basic-translate mode only | Implemented |
@@ -78,7 +78,7 @@ The following table lists all architectural features supported by this implement
 
 ## **Module Parameters**
 
-In order to create an adaptable and customizable IOMMU IP, we defined a set of design parameters, as detailed in the Table below. The purpose of these parameters is to control the incorporation of some optional features, and configure microarchitectural properties of internal IOMMU structures.
+In order to create an adaptable and customizable IOMMU IP, we defined a set of design parameters, as detailed in the Table below. The purpose of these parameters is to manage the inclusion of some optional features, and configure microarchitectural properties of internal IOMMU structures.
 
 It is worth noting that, although process context support is categorized as a mandatory feature, we have designed it to be parameterizable. This design flexibility is useful to save hardware resources in scenarios where the target platform lacks support for PCs.
 
@@ -118,9 +118,9 @@ Master interface used by modules that generate implicit memory accesses during t
 
 ### **Translation Request Interface**
 
-Slave interface to which bus mastering devices connect to issue DMA requests. A request is initiated by setting *AxVALID*, and the input IO Virtual Address is read from the *AxADDR* bus.
+Slave interface to which bus master devices connect to issue DMA requests. A request is initiated by setting *AxVALID*, and the input IO Virtual Address is read from the *AxADDR* bus.
 
-:warning: We extended this interface with IOMMU-related signals defined by the AMBA AXI specification to send additional request parameters. In particular, bus mastering devices coupled to the translation request port of the IOMMU **MUST** include the following signals in their master interface:
+:warning: We extended this interface with IOMMU-related signals defined by the AMBA AXI specification to send additional request parameters. In particular, bus master devices coupled to the translation request port of the IOMMU **MUST** include the following signals in their master interface:
 
 | Signal | Data transmitted |
 | ------------- | ------------- |
@@ -134,7 +134,7 @@ Slave interface to which bus mastering devices connect to issue DMA requests. A 
 
 ### **Translation Completion Interface**
 
-Master interface used to forward permitted requests to the system interconnect. On a successful translation, the translated address is placed in the *AxADDR* bus of this interface, and the *AxVALID* is set to continue the transaction. The R, W and B AXI channels are routed from the translation request IF without modification.
+Master interface used to forward permitted requests to the system interconnect. On a successful translation, the translated address is placed in the *AxADDR* bus of this interface, and the *AxVALID* is set to continue the transaction. The R, W, and B AXI channels are routed from the translation request IF without modification.
 
 On an error, the AXI demux connects the translation request IF to a [PULP AXI Error Slave](https://github.com/pulp-platform/axi/blob/master/src/axi_err_slv.sv), which responds the failing request with an AXI error.
 
@@ -143,7 +143,7 @@ On an error, the AXI demux connects the translation request IF to a [PULP AXI Er
 The IOMMU may be configured to generate interrupts as WSIs to request service from software. For this purpose, a set of external wires is driven by the WSI interrupt generation support module, and should be connected to a Platform-Level Interrupt Controller (e.g. PLIC/APLIC). The number of interrupt wires is defined by the N_INT_VEC parameter.
 
 
-## **IP Usage**
+## **IP Integration and Validation**
 
 The top module of the IOMMU IP is located in [rtl/riscv_iommu.sv](./rtl/riscv_iommu.sv). All module parameters are specified when instantiating this module.
 
@@ -172,7 +172,7 @@ We have developed a functional demo to illustrate the operation and advantages o
 - Linux with the RISC-V IOMMU driver developed by the RISC-V IOMMU Task Group.
 - Bao hypervisor running a baremetal application.
 
-The demo is carried out in a Genesys2 FPGA board, and we use the CVA6-based SoC described above with one DMA device and the RISC-V IOMMU IP integrated. You can find the source code and instructions to run the demo [here](https://github.com/zero-day-labs/riscv-iommu-demo).
+You can find the source code and instructions to run the demo [here](https://github.com/zero-day-labs/riscv-iommu-demo).
 
 ## **Tools and versions**
 
@@ -192,7 +192,7 @@ The demo is carried out in a Genesys2 FPGA board, and we use the CVA6-based SoC 
 
 ## **Roadmap and Contributions**
 
-This implementation still has plenty room for growth. Contributions to this project are accepted in many ways:
+This IOMMU IP still has plenty room for growth and improvments. We encourage contributions in many ways (but not limited to):
 
 - Improving the current design. Increasing efficiency, modularity, scalability, etc;
 - Identifying errors or bugs in the implementation, by means of formal verification, or through the integration of the IP in other systems;
