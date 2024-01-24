@@ -17,10 +17,20 @@
 // Description: RISC-V IOMMU Data Structures Interface Wrapper.
 
 module rv_iommu_ds_if #(
+    /// AXI AW Channel struct type
+    parameter type aw_chan_t    = logic,
+    /// AXI W Channel struct type
+    parameter type w_chan_t     = logic,
+    /// AXI B Channel struct type
+    parameter type b_chan_t     = logic,
+    /// AXI AR Channel struct type
+    parameter type ar_chan_t    = logic,
+    /// AXI R Channel struct type
+    parameter type r_chan_t     = logic,
     /// AXI Full request struct type
-    parameter type  axi_req_t       = logic,
+    parameter type  axi_req_t   = logic,
     /// AXI Full response struct type
-    parameter type  axi_rsp_t       = logic
+    parameter type  axi_rsp_t   = logic
 ) (
     input  logic        clk_i,
     input  logic        rst_ni,

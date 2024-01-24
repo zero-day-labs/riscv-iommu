@@ -433,8 +433,13 @@ module riscv_iommu #(
 
     //# Data Structures Interface
     rv_iommu_ds_if #(
-        .axi_req_t      (axi_req_t  ),
-        .axi_rsp_t      (axi_rsp_t  )
+        .aw_chan_t      ( aw_chan_t ),
+		.w_chan_t       ( w_chan_t	),
+		.b_chan_t       ( b_chan_t	),
+		.ar_chan_t      ( ar_chan_t ),
+		.r_chan_t       ( r_chan_t	),
+        .axi_req_t      ( axi_req_t ),
+        .axi_rsp_t      ( axi_rsp_t )
     ) i_rv_iommu_ds_if (
 
         .clk_i                  (clk_i),
