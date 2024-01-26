@@ -91,6 +91,10 @@ module rv_iommu_mrif_handler #(
     logic [63:0] mrif_ie_q, mrif_ie_n;
     // Interrupt ID register
     logic [10:0] int_id_q, int_id_n;
+    // Notice PPN register
+    logic [43:0] notice_ppn_q, notice_ppn_n;
+    // Notice NID register
+    logic [43:0] notice_nid_q, notice_nid_n;
 
     // To wait for last AXI beat
     logic wait_rlast_q, wait_rlast_n;
@@ -163,6 +167,7 @@ module rv_iommu_mrif_handler #(
         mrif_ip_n       = mrif_ip_q;
         mrif_ie_n       = mrif_ie_q;
         int_id_n        = int_id_q;
+        notice_ppn_n    = notice_ppn_q;
         pptr_n          = pptr_q;
 
         case (state_q)
@@ -177,17 +182,14 @@ module rv_iommu_mrif_handler #(
                     wait_rlast_n    = 1'b0;
 
                     // Validate interrupt identity
-                    if (|int_id_i[31:11]) begin
-                        ignore_o = 1'b1;  // discard transaction (without raising fault)
-                    end
-
-                    // Everything OK
-                    else begin
+                    if (!(|int_id_i[31:11])) begin
                         
                         // Offset within the MRIF is determined by the interrupt identity
-                        pptr_n      = {mrif_addr_i, int_id_i[10:6], 4'b0};
-                        int_id_n    = int_id_i[10:0];   // Capture MSI data (AWDATA)
-                        state_n     = MEM_ACCESS;
+                        pptr_n          = {mrif_addr_i, int_id_i[10:6], 4'b0};
+                        int_id_n        = int_id_i[10:0];   // Propagate MSI data (AWDATA)
+                        notice_ppn_n    = notice_ppn_i;     // Propagate notice PPN
+                        notice_nid_n    = notice_nid_i;     // Propagate notice NID
+                        state_n         = MEM_ACCESS;
                     end
                 end
             end
@@ -312,7 +314,7 @@ module rv_iommu_mrif_handler #(
                     AW_REQ: begin
 
                         mem_req_o.aw_valid                  = 1'b1;
-                        mem_req_o.aw.addr[riscv::PLEN-1:0]  = {notice_ppn_i, 12'b0};    // Notice MSI address
+                        mem_req_o.aw.addr[riscv::PLEN-1:0]  = {notice_ppn_q, 12'b0};    // Notice MSI address
                         mem_req_o.aw.size                   = 3'b010;                   // 32 bits for notice MSI
 
                         if (mem_resp_i.aw_ready) begin
@@ -326,7 +328,7 @@ module rv_iommu_mrif_handler #(
                         mem_req_o.w_valid       = 1'b1;
                         mem_req_o.w.strb        = 8'b0000_1111;
                         mem_req_o.w.last        = 1'b1;
-                        mem_req_o.w.data[31:0]  = {21'b0, notice_nid_i};
+                        mem_req_o.w.data[31:0]  = {21'b0, notice_nid_q};
 
                         if(mem_resp_i.w_ready) begin
                             wr_state_n  = B_RESP;
@@ -391,6 +393,8 @@ module rv_iommu_mrif_handler #(
             mrif_ip_q       <= mrif_ip_n;
             mrif_ie_q       <= mrif_ie_n;
             int_id_q        <= int_id_n;
+            notice_ppn_q    <= notice_ppn_n;
+            notice_nid_q    <= notice_nid_n;
         end
     end : mrif_handler_seq
     

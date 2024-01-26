@@ -57,7 +57,6 @@ module rv_iommu_translation_wrapper #(
     
     input  logic [rv_iommu::TTYP_LEN-1:0]   trans_type_i,   // transaction type
     input  logic                            priv_lvl_i,     // privilege mode associated with the transaction
-    input  logic                            is_32_bit_i,    // Data size is 32 bit
 
     // AXI ports directed to Data Structures Interface
     // CDW
@@ -153,7 +152,6 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_type_i,          // transaction type
                 .priv_lvl_i,            // privilege mode associated with the transaction
-                .is_32_bit_i,
 
                 .cdw_axi_resp_i,
                 .cdw_axi_req_o,
@@ -234,7 +232,6 @@ module rv_iommu_translation_wrapper #(
 
                 .trans_type_i,          // transaction type
                 .priv_lvl_i,            // privilege mode associated with the transaction
-                .is_32_bit_i,
 
                 .cdw_axi_resp_i,
                 .cdw_axi_req_o,

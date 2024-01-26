@@ -168,10 +168,6 @@ module riscv_iommu #(
     // Otherwise, the parameters of the faulting transaction are lost
     logic is_fq_fifo_full;
 
-    // Transaction is 32-bit sized. Used to identify MSI accesses
-    logic   is_32_bit;
-    assign  is_32_bit = (dev_tr_req_i.aw.size == 3'b10);
-
     // IOATC flush wires. CQ -> IOATCs
     logic                       flush_ddtc;
     logic                       flush_dv;
@@ -323,7 +319,7 @@ module riscv_iommu #(
                 dbg_ongoing_n = 1'b1;
                 
                 // Set translation parameters from DBG IF registers
-                iova    = dbg_if_iova.vpn.q;
+                iova    = {dbg_if_iova.vpn.q, 12'b0};
                 did     = dbg_if_ctl.did.q;
                 pv      = dbg_if_ctl.pv.q;
                 pid     = dbg_if_ctl.pid.q;
@@ -510,7 +506,6 @@ module riscv_iommu #(
         
         .trans_type_i   (ttype      ),  // Transaction type
         .priv_lvl_i     (priv       ),  // Priviledge level (S/U)
-        .is_32_bit_i    (is_32_bit  ),  // Transaction size is 32 bits
 
         // AXI ports directed to Data Structures Interface
         // CDW

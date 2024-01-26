@@ -95,7 +95,6 @@ module rv_iommu_tw_sv39x4_pc #(
     
     input  logic [rv_iommu::TTYP_LEN-1:0]   trans_type_i,   // transaction type
     input  logic                            priv_lvl_i,     // privilege mode associated with the transaction
-    input  logic                            is_32_bit_i,    // Data size is 32 bit
 
     // AXI ports directed to Data Structures Interface
     // CDW
@@ -250,7 +249,7 @@ module rv_iommu_tw_sv39x4_pc #(
     // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
     // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
     assign  report_fault_o    = (((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | 
-                                  (report_always | msi_write_error_i | (cdw_error & is_ddt_walk))) & wrap_error);
+                                  (report_always | msi_write_error_i | (cdw_error & is_ddt_walk))) & trans_error_o);
                                   
     // Guest page fault occurred during implicit 2nd-stage translation for 1st-stage translation
     logic   ptw_error_2S_int;
@@ -265,6 +264,9 @@ module rv_iommu_tw_sv39x4_pc #(
     assign s2_ptw_o     = ptw_active & (ptw_en_2S);
     assign gscid_o      = gscid;
     assign pscid_o      = pscid;
+
+    // MSI PTW is active
+    logic msiptw_active;
 
     // IOATC wires
     // DDTC
@@ -362,7 +364,7 @@ module rv_iommu_tw_sv39x4_pc #(
     // (i)  first-stage translation is enabled or 
     // (ii) second-stage translation is enabled and the GPA is not MSI
     logic   init_ptw;
-    assign  init_ptw = iotlb_access & ~iotlb_lu_hit & (en_1S | (en_2S & ~iova_is_msi));
+    assign  init_ptw = iotlb_access & ~iotlb_lu_hit & ((en_1S & ~msiptw_active & ~mrifc_lu_hit) | (en_2S & ~en_1S & ~iova_is_msi));
 
     // Init MSI translation
     // Triggered when:
@@ -502,7 +504,6 @@ module rv_iommu_tw_sv39x4_pc #(
         .en_2S_i                (ptw_en_2S          ),  // Enable signal for stage 2 translation. Defined by DC only
         .is_store_i             (is_store           ),  // Indicate whether this translation was triggered by a store or a load
         .is_rx_i                (is_rx              ),  // Read-for-execute
-        .is_32_bit_i            (is_32_bit_i        ),  // Data is 32-bit wide
 
         // PTW AXI Master memory interface
         .mem_resp_i             (ptw_axi_resp_i     ),  // Response port from memory
@@ -560,7 +561,7 @@ module rv_iommu_tw_sv39x4_pc #(
         assign msi_addr_mask    = ddtc_lu_content.msi_addr_mask.mask;
         assign msi_addr_pattern = ddtc_lu_content.msi_addr_pattern.pattern;
         /* verilator lint_off WIDTH */
-        assign iova_is_msi      = (!en_1S && msi_enabled && is_store && is_32_bit_i &&
+        assign iova_is_msi      = (!en_1S && msi_enabled && is_store &&
                                     ((iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask) == (msi_addr_pattern & ~msi_addr_mask)));
         /* verilator lint_on WIDTH */
 
@@ -579,6 +580,9 @@ module rv_iommu_tw_sv39x4_pc #(
 
             // Trigger MSI translation
             .init_msi_trans_i   (init_msi_trans & ~req_dbg_i),
+
+            // MSI PTW is active
+            .msiptw_active_o    (msiptw_active      ),
 
             // Ignore access (abort without faults)
             .ignore_o           (msiptw_ignore      ),
@@ -675,8 +679,8 @@ module rv_iommu_tw_sv39x4_pc #(
             .mem_resp_i     (mrif_handler_axi_resp_i),
             .mem_req_o      (mrif_handler_axi_req_o),
 
-            // Init MRIF processing. MSI data and MRIF cache data are valid.
-            .init_mrif_i    (msi_data_valid_i),
+            // Init MRIF processing. MSI data and MRIF cache data are valid
+            .init_mrif_i    (mrifc_lu_hit & msi_data_valid_i),
             // Abort access (discard without fault)
             .ignore_o       (mrif_handler_ignore),
 

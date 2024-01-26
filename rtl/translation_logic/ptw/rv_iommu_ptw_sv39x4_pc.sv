@@ -50,7 +50,6 @@ module rv_iommu_ptw_sv39x4_pc #(
     input  logic                    en_2S_i,        // Enable signal for second-stage translation. Defined by DC only
     input  logic                    is_store_i,     // Indicate whether this translation was triggered by a store or a load
     input  logic                    is_rx_i,        // Indicate whether the access is read-for-execute
-    input  logic                    is_32_bit_i,    // Data is 32-bit wide
 
     input  axi_rsp_t    mem_resp_i,
     output axi_req_t    mem_req_o,
@@ -161,7 +160,7 @@ module rv_iommu_ptw_sv39x4_pc #(
         if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
 
             // GPA is the address of a virtual interrupt file
-            assign gpaddr_is_msi    = (msi_en_i && is_store_i && is_32_bit_i &&
+            assign gpaddr_is_msi    = (msi_en_i && is_store_i &&
                                         ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
             // Bus to send first-stage data to MSI PTW                            

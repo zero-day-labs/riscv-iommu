@@ -51,6 +51,8 @@ module rv_iommu_msiptw #(
 
     // Trigger MSI translation
     input  logic init_msi_trans_i,
+    // MSI PTW is active
+    output logic msiptw_active_o,
     // Abort access (discard without fault)
     output logic ignore_o,
 
@@ -218,7 +220,7 @@ module rv_iommu_msiptw #(
                 flat_wait_rlast_n   = 1'b0;
                 
                 // Translation logic requested MSI translation
-                if (init_msi_trans_i) begin
+                if (init_msi_trans_i && !msiptw_active_o) begin
 
                     // "If the transaction is an Untranslated or Translated read-for-execute"
                     // "then stop and report Instruction access fault (cause = 1)."
@@ -412,6 +414,10 @@ module rv_iommu_msiptw #(
         assign mrifc_msi_content_o.nid  = {msi_pte_notice.nid_10, msi_pte_notice.nid_9_0};
         assign mrifc_msi_content_o.nppn = msi_pte_notice.nppn;
 
+        // MSI PTW active flag
+        assign msiptw_active_o = (flat_state_q != IDLE) | (mrif_state_q != MRIF_PTE);
+
+        // Error
         assign error_o = (flat_state_q == FLAT_ERROR) | (mrif_state_q == MRIF_ERROR);
         assign cause_o = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ((mrif_state_q == MRIF_ERROR) ? (mrif_cause_q) : ('0));
     
@@ -543,6 +549,9 @@ module rv_iommu_msiptw #(
         assign ignore_o         = 1'b0;
 
         assign mrifc_msi_content_o  = '0;
+
+        assign msiptw_active_o      = (flat_state_q != IDLE);
+
         assign error_o              = (flat_state_q == FLAT_ERROR);
         assign cause_o              = (flat_state_q == FLAT_ERROR) ? (flat_cause_q) : ('0);
 

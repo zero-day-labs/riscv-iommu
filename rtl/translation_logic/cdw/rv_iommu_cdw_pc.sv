@@ -758,7 +758,7 @@ module rv_iommu_cdw_pc #(
                             dc_msiptp_n = dc_msiptp;
 
                             // Config checks
-                            if ((caps_msi_flat_i && !(dc_msiptp.mode inside {4'd0, 4'd1})) ||
+                            if ((caps_msi_flat_i && |(dc_msiptp.mode & 4'b1110)) ||
                                 (|dc_msiptp.reserved)) begin
 
                                 msi_check_error = 1'b1;
