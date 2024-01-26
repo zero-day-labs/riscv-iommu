@@ -370,6 +370,12 @@ module rv_iommu_msiptw #(
             flat_wait_rlast_q   <= 1'b0;
             pptr_q              <= '0;
             flat_cause_q        <= '0;
+            vpn_q               <= '0;
+            pscid_q             <= '0;
+            gscid_q             <= '0;
+            is_1S_2M_q          <= 1'b0;
+            is_1S_1G_q          <= 1'b0;
+            gpte_q              <= '0;
         end 
         
         else begin
@@ -377,6 +383,12 @@ module rv_iommu_msiptw #(
             flat_wait_rlast_q   <= flat_wait_rlast_n;
             pptr_q              <= pptr_n;
             flat_cause_q        <= flat_cause_n;
+            vpn_q               <= vpn_n;
+            pscid_q             <= pscid_n;
+            gscid_q             <= gscid_n;
+            is_1S_2M_q          <= is_1S_2M_n;
+            is_1S_1G_q          <= is_1S_1G_n;
+            gpte_q              <= gpte_n;
         end
     end : flat_seq
 
@@ -518,13 +530,6 @@ module rv_iommu_msiptw #(
                 mrif_wait_rlast_q   <= 1'b0;
                 mrif_cause_q        <= '0;
                 mrif_addr_q         <= '0;
-                vpn_q               <= '0;
-                pscid_q             <= '0;
-                gscid_q             <= '0;
-                is_1S_2M_q          <= 1'b0;
-                is_1S_1G_q          <= 1'b0;
-                gpte_q              <= '0;
-                
             end 
             
             else begin
@@ -532,12 +537,6 @@ module rv_iommu_msiptw #(
                 mrif_wait_rlast_q   <= mrif_wait_rlast_n;
                 mrif_cause_q        <= mrif_cause_n;
                 mrif_addr_q         <= mrif_addr_n;
-                vpn_q               <= vpn_n;
-                pscid_q             <= pscid_n;
-                gscid_q             <= gscid_n;
-                is_1S_2M_q          <= is_1S_2M_n;
-                is_1S_1G_q          <= is_1S_1G_n;
-                gpte_q              <= gpte_n;
             end
         end : mrif_seq
     end : gen_mrif_support
