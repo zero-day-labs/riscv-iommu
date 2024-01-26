@@ -506,7 +506,7 @@ module rv_iommu_msiptw #(
 
                     // Check whether we have to wait for AXI transmission to end
                     if ((mrif_wait_rlast_q && mem_resp_i.r.last) || !mrif_wait_rlast_q) begin
-                        mrif_state_n = IDLE;
+                        mrif_state_n = MRIF_PTE;
                     end
             end
             endcase
