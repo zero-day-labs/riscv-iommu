@@ -86,11 +86,13 @@ It is worth noting that, although process context support is categorized as a ma
 | ------------- | ------------- | ------------- |
 |***InclPC*** | Include Process Context support | 0, 1 |
 |***IOTLB_ENTRIES***, ***DDTC_ENTRIES***, ***PDTC_ENTRIES*** | Define number of entries for all IOATCs | [1 - N] |
-| ***InclMSITrans*** | Include support for MSI translation in the address translation process | 0, 1 |
-| ***IGS*** | Define supported mechanisms for IOMMU interrupt generation | WSI, MSI, WSI & MSI |
+| ***MSITrans*** | Include support for MSI translation in the address translation process | MSI_DISABLED, MSI_FLAT_ONLY, MSI_FLAT_MRIF |
+|***MRIFC_ENTRIES*** | Define number of entries for the MRIF Cache (only if ***MSITrans = MSI_FLAT_MRIF***) | [1 - N] |
+| ***IGS*** | Define supported mechanisms for IOMMU interrupt generation | WSI_ONLY, MSI_ONLY, BOTH |
 | ***N_INT_VEC*** | Define number of interrupt vectors used by the IOMMU | [1 - 16] |
 | ***N_IOHPMCTR*** | Define number of event counters in the HPM | [0 - 31] |
-***InclBC*** | Include 4-kiB boundary check logic for AXI4 transactions | 0, 1| 
+| ***InclDBG*** | Include register-based debug interface | 0, 1 | 
+| ***InclBC*** | Include 4-kiB boundary check logic for AXI4 transactions | 0, 1 |
 
 ## **IP Interfaces**
 
@@ -192,7 +194,7 @@ You can find the source code and instructions to run the demo [here](https://git
 
 ## **Roadmap and Contributions**
 
-This IOMMU IP still has plenty room for growth and improvments. We encourage contributions in many ways (but not limited to):
+This IOMMU IP still has plenty room for growth and improvements. We encourage contributions in many ways (but not limited to):
 
 - Improving the current design. Increasing efficiency, modularity, scalability, etc;
 - Identifying errors or bugs in the implementation, by means of formal verification, or through the integration of the IP in other systems;
