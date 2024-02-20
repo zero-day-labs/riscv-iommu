@@ -808,9 +808,8 @@ module rv_iommu_tw_sv39x4_pc #(
         .req_did_i              (did_i          ),      // device ID associated with request
         .req_pid_i              (process_id     ),      // process ID associated with request
 
-        // from DDTC / PDTC, to monitor misses
-        .ddtc_access_i          (ddtc_access    ),
-        .ddtc_hit_i             (ddtc_lu_hit    ),
+        // from DDTC, to monitor misses
+        .init_cdw_i             (ddtc_access && ~ddtc_lu_hit ),
 
         .pdtc_access_i          (pdtc_access    ),
         .pdtc_hit_i             (pdtc_lu_hit    ),

@@ -724,8 +724,7 @@ module rv_iommu_tw_sv39x4 #(
         .req_did_i              (did_i          ),      // device ID associated with request
 
         // from DDTC, to monitor misses
-        .ddtc_access_i          (ddtc_access    ),
-        .ddtc_hit_i             (ddtc_lu_hit    ),
+        .init_cdw_i             (ddtc_access && ~ddtc_lu_hit ),
 
         // from regmap
         .ddtp_ppn_i             (ddtp_i.ppn.q       ),  // PPN from ddtp register
