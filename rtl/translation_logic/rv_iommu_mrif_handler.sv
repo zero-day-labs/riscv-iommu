@@ -94,7 +94,7 @@ module rv_iommu_mrif_handler #(
     // Notice PPN register
     logic [43:0] notice_ppn_q, notice_ppn_n;
     // Notice NID register
-    logic [43:0] notice_nid_q, notice_nid_n;
+    logic [10:0] notice_nid_q, notice_nid_n;
 
     // To wait for last AXI beat
     logic wait_rlast_q, wait_rlast_n;

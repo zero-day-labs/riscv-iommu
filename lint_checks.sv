@@ -57,7 +57,7 @@ module lint_checks (
 		.InclBC             ( 1'b1						),
 		.InclDBG			( 1'b1						),
 
-		.MSITrans			( rv_iommu::MSI_DISABLED	),
+		.MSITrans			( rv_iommu::MSI_FLAT_MRIF	),
 		.IGS         		( rv_iommu::BOTH			),
 		.N_INT_VEC          ( ariane_soc::IOMMUNumWires ),
 		.N_IOHPMCTR			( 16						),
@@ -80,7 +80,7 @@ module lint_checks (
 		.reg_req_t			( iommu_reg_req_t			),
 		.reg_rsp_t			( iommu_reg_rsp_t			),
 
-		.dc_t				(rv_iommu::dc_base_t		)
+		.dc_t				(rv_iommu::dc_ext_t			)
 	) i_riscv_iommu (
 
 		.clk_i				( clk_i				),
