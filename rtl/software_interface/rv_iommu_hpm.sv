@@ -296,6 +296,8 @@ module rv_iommu_hpm #(
             // Event OF flag
             iohpmevt_o[j].of.de         = 1'b0;
             iohpmevt_o[j].of.d          = 1'b1;
+
+            hpm_ip[j+1]                 = 1'b0;
             
             // Increment event counter
             if ((increment_ctr[j]) && (~iocountinh_i.hpm.q[j])) begin
@@ -316,6 +318,12 @@ module rv_iommu_hpm #(
         // Default
         edged_event_n   = edged_event_q;
         count_n         = count_q;
+
+        did_n           = did_q;
+        pid_n           = pid_q;
+        pscid_n         = pscid_q;
+        gscid_n         = gscid_q;
+        pid_v_n         = pid_v_q;
 
         for (int unsigned i = 0; i < 6; i++) begin
 
