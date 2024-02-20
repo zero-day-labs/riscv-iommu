@@ -68,8 +68,7 @@ module rv_iommu_cdw #(
     input  logic [23:0]                     req_did_i,    // device_id associated with request
 
     // from DDTC / PDTC, to monitor misses
-    input  logic                            ddtc_access_i,
-    input  logic                            ddtc_hit_i,
+    input  logic                            init_cdw_i,
 
     // from regmap
     input  logic [riscv::PPNW-1:0]  ddtp_ppn_i,     // PPN from ddtp register
@@ -157,6 +156,25 @@ module rv_iommu_cdw #(
                                 (entry_cnt_q == 3'b111) :   // extended format w/out reserved DW (64-8 = 56 bytes)
                                 (entry_cnt_q == 3'b100);    // base format 32 bytes
 
+    // Edge-triggered init control
+    logic edge_trigger_q, edge_trigger_n;
+
+    // FIFO edge-triggered push control
+    always_comb begin : cdw_init_control
+
+        // Default
+        edge_trigger_n = edge_trigger_q;
+
+        // Edged signal
+        if (!edge_trigger_q && init_cdw_i)
+            edge_trigger_n = 1'b1;
+
+        // End of edged signal
+        if (edge_trigger_q && !init_cdw_i)
+            edge_trigger_n = 1'b0;
+
+    end : cdw_init_control
+
     //# Context Directory Walker
     always_comb begin : cdw
 
@@ -241,7 +259,7 @@ module rv_iommu_cdw #(
 
                 // check for DDTC misses
                 // External logic guarantees that DDTC is looked up before PDTC
-                if (ddtc_access_i && ~ddtc_hit_i) begin
+                if (init_cdw_i && !edge_trigger_q) begin
                     
                     state_n = MEM_ACCESS;
 
@@ -605,6 +623,7 @@ module rv_iommu_cdw #(
             dc_ta_q                 <= '0;
             dc_fsc_q                <= '0;
             wait_rlast_q            <= 1'b0;
+            edge_trigger_q          <= 1'b0;
 
         end else begin
             state_q                 <= state_n;
@@ -618,6 +637,7 @@ module rv_iommu_cdw #(
             dc_ta_q                 <= dc_ta_n;
             dc_fsc_q                <= dc_fsc_n;
             wait_rlast_q            <= wait_rlast_n;
+            edge_trigger_q          <= edge_trigger_n;
         end
     end
 
