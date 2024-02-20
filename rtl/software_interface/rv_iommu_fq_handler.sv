@@ -144,7 +144,10 @@ module rv_iommu_fq_handler #(
     logic [19:0]                        pid;          
     logic                               is_supervisor;
     logic                               is_guest_pf;  
-    logic                               is_implicit;  
+    logic                               is_implicit;
+
+    // FIFO edge-triggered push control
+    logic edge_trigger_q, edge_trigger_n;
 
     // NOTE:    data is pushed into the FIFO when event_valid_i is set. Thus, this signal must be set 
     //          only one cycle after a fault/event occurred. Since it is directly driven by AXVALID, the
@@ -162,12 +165,28 @@ module rv_iommu_fq_handler #(
         .empty_o    ( is_empty        ),
         .usage_o    (                 ),
         .data_i     ( {trans_type_i, cause_code_i, iova_i, gpaddr_i, did_i, pv_i, pid_i, is_supervisor_i, is_guest_pf_i, is_implicit_i}),
-        .push_i     ( event_valid_i   ),
+        .push_i     ( event_valid_i & !edge_trigger_q ),
         .data_o     ( {trans_type, cause_code, iova, gpaddr, did, pv, pid, is_supervisor, is_guest_pf, is_implicit} ),
         .pop_i      ( is_idle ) // W transaction has finished
     );
 
-    //# Combinational logic
+    // FIFO edge-triggered push control
+    always_comb begin : fifo_push_control
+
+        // Default
+        edge_trigger_n = edge_trigger_q;
+
+        // Edged signal
+        if (!edge_trigger_q && event_valid_i)
+            edge_trigger_n = 1'b1;
+
+        // End of edged signal
+        if (edge_trigger_q && !event_valid_i)
+            edge_trigger_n = 1'b0;
+
+    end : fifo_push_control
+
+    // Fault Queue handler FSM
     always_comb begin : rv_iommu_fq_handler
         
         // Default values
@@ -229,6 +248,7 @@ module rv_iommu_fq_handler #(
         fq_pptr_n   = fq_pptr_q;
         fq_entry_n  = fq_entry_q;
         wr_cnt_n    = wr_cnt_q;
+        fq_en_n     = fq_en_q;
 
         case (state_q)
 
@@ -248,7 +268,7 @@ module rv_iommu_fq_handler #(
                         fq_en_n     = 1'b1;
                     end
                 
-                    else if (event_valid_i || !is_empty) begin
+                    else if ((event_valid_i & !edge_trigger_q) || !is_empty) begin
 
                         state_n     = WRITE;
                         wr_state_n  = AW_REQ;
@@ -384,21 +404,23 @@ module rv_iommu_fq_handler #(
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (~rst_ni) begin
             // Reset values
-            state_q     <= IDLE;
-            wr_state_q  <= AW_REQ;
-            fq_pptr_q   <= '0;
-            fq_entry_q  <= '0;
-            fq_en_q     <= 1'b0;
-            wr_cnt_q    <= '0;
+            state_q         <= IDLE;
+            wr_state_q      <= AW_REQ;
+            fq_pptr_q       <= '0;
+            fq_entry_q      <= '0;
+            fq_en_q         <= 1'b0;
+            wr_cnt_q        <= '0;
+            edge_trigger_q  <= 1'b0;
         end
 
         else begin
-            state_q     <= state_n;
-            wr_state_q  <= wr_state_n;
-            fq_pptr_q   <= fq_pptr_n;
-            fq_entry_q  <= fq_entry_n;
-            fq_en_q     <= fq_en_n;
-            wr_cnt_q    <= wr_cnt_n;
+            state_q         <= state_n;
+            wr_state_q      <= wr_state_n;
+            fq_pptr_q       <= fq_pptr_n;
+            fq_entry_q      <= fq_entry_n;
+            fq_en_q         <= fq_en_n;
+            wr_cnt_q        <= wr_cnt_n;
+            edge_trigger_q  <= edge_trigger_n;
         end
     end
 
