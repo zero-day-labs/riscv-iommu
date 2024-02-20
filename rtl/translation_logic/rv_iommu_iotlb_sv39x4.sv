@@ -119,6 +119,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
         lu_1S_1G_o      = 1'b0;
         lu_2S_2M_o      = 1'b0;               
         lu_2S_1G_o      = 1'b0;
+        lu_is_msi_o     = 1'b0;
         match_pscid     = '{default: 0};
         match_gscid     = '{default: 0};
         match_stage     = '{default: 0};
