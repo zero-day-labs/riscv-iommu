@@ -153,6 +153,25 @@ module rv_iommu_ptw_sv39x4_pc #(
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
 
+    // Edge-triggered init control
+    logic edge_trigger_q, edge_trigger_n;
+
+    // FIFO edge-triggered push control
+    always_comb begin : ptw_init_control
+
+        // Default
+        edge_trigger_n = edge_trigger_q;
+
+        // Edged signal
+        if (!edge_trigger_q && init_ptw_i)
+            edge_trigger_n = 1'b1;
+
+        // End of edged signal
+        if (edge_trigger_q && !init_ptw_i)
+            edge_trigger_n = 1'b0;
+
+    end : ptw_init_control
+
     // MSI translation support
     generate
 
@@ -315,6 +334,7 @@ module rv_iommu_ptw_sv39x4_pc #(
         gpaddr_n                = gpaddr_q;
         cause_n                 = cause_q;
         cdw_implicit_access_n   = cdw_implicit_access_q;
+        pf_excep_n              = pf_excep_q;
 
         case (state_q)
 
@@ -329,7 +349,7 @@ module rv_iommu_ptw_sv39x4_pc #(
                 pf_excep_n          = 1'b0;
 
                 // check for possible IOTLB miss
-                if (init_ptw_i || cdw_implicit_access_i) begin
+                if ((init_ptw_i && !edge_trigger_q) || cdw_implicit_access_i) begin
 
                     state_n = MEM_ACCESS;
 
@@ -716,6 +736,7 @@ module rv_iommu_ptw_sv39x4_pc #(
             cause_q                 <= '0;
             cdw_implicit_access_q   <= 1'b0;
             pf_excep_q              <= 1'b0;
+            edge_trigger_q          <= 1'b0;
 
         end else begin
             state_q                 <= state_n;
@@ -733,6 +754,7 @@ module rv_iommu_ptw_sv39x4_pc #(
             cause_q                 <= cause_n;
             cdw_implicit_access_q   <= cdw_implicit_access_n;
             pf_excep_q              <= pf_excep_n;
+            edge_trigger_q          <= edge_trigger_n;
         end
     end
 
