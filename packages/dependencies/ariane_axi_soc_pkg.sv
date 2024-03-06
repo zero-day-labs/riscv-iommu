@@ -39,9 +39,9 @@ package ariane_axi_soc;
     typedef logic [UserWidth-1:0] user_t;
 
     // AXI DVM extension
-    typedef logic [23:0] mmu_sid_t;
-    typedef logic        mmu_ssidv_t;
-    typedef logic [19:0] mmu_ssid_t;
+    typedef logic [23:0] iommu_sid_t;
+    typedef logic        iommu_ssidv_t;
+    typedef logic [19:0] iommu_ssid_t;
 
     // AW Channel
     typedef struct packed {
@@ -89,10 +89,10 @@ package ariane_axi_soc;
         axi_pkg::region_t region;
         axi_pkg::atop_t   atop;
         user_t            user;
-        mmu_sid_t         stream_id;
-        mmu_ssidv_t       ss_id_valid;
-        mmu_ssid_t        substream_id;
-    } aw_chan_mmu_t;
+        iommu_sid_t         stream_id;
+        iommu_ssidv_t       ss_id_valid;
+        iommu_ssid_t        substream_id;
+    } aw_chan_iommu_t;
 
     // W Channel - AXI4 doesn't define a wid
     typedef struct packed {
@@ -159,10 +159,10 @@ package ariane_axi_soc;
         axi_pkg::qos_t    qos;
         axi_pkg::region_t region;
         user_t            user;
-        mmu_sid_t         stream_id;
-        mmu_ssidv_t       ss_id_valid;
-        mmu_ssid_t        substream_id;
-    } ar_chan_mmu_t;
+        iommu_sid_t         stream_id;
+        iommu_ssidv_t       ss_id_valid;
+        iommu_ssid_t        substream_id;
+    } ar_chan_iommu_t;
 
     // R Channel
     typedef struct packed {
@@ -227,15 +227,15 @@ package ariane_axi_soc;
 
     // AXI DVM extension for SMMU
     typedef struct packed {
-        aw_chan_mmu_t   aw;
+        aw_chan_iommu_t   aw;
         logic           aw_valid;
         w_chan_t        w;
         logic           w_valid;
         logic           b_ready;
-        ar_chan_mmu_t   ar;
+        ar_chan_iommu_t   ar;
         logic           ar_valid;
         logic           r_ready;
-    } req_mmu_t;
+    } req_iommu_t;
 
 endpackage
 

@@ -74,8 +74,8 @@ module rv_iommu_tw_sv39x4 #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type
-    parameter type dc_t             = logic
+    // DC width
+    parameter int DC_WIDTH          = -1
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
@@ -158,11 +158,6 @@ module rv_iommu_tw_sv39x4 #(
     logic [19:0] pscid;
     logic [riscv::PPNW-1:0] iohgatp_ppn, iosatp_ppn;
 
-    // To check whether first and second-stage translation modes are Bare
-    logic first_stage_is_bare, second_stage_is_bare;
-    assign first_stage_is_bare  = (ddtc_lu_content.fsc.mode == 4'b0000);
-    assign second_stage_is_bare = (ddtc_lu_content.iohgatp.mode == 4'b0000);
-
     // To determine if current DC enables MSI translation
     logic msi_enabled;
 
@@ -211,11 +206,6 @@ module rv_iommu_tw_sv39x4 #(
     // PTW error
     logic mrif_handler_error;
     logic [(rv_iommu::CAUSE_LEN-1):0]  mrif_handler_cause_code;
-
-    // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
-    // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
-    assign  report_fault_o    = (((ddtc_lu_hit & !ddtc_lu_content.tc.dtf) | 
-                                  (report_always | msi_write_error_i | cdw_error)) & trans_error_o);
                                   
     // Guest page fault occurred during implicit 2nd-stage translation for 1st-stage translation
     logic   ptw_error_2S_int;
@@ -237,12 +227,15 @@ module rv_iommu_tw_sv39x4 #(
     // IOATC wires
     // DDTC
     logic                       ddtc_access;
-    dc_t                        ddtc_lu_content;
+    logic [(DC_WIDTH-1):0]      ddtc_lu_content;
     logic                       ddtc_lu_hit;
 
     logic                       ddtc_update;
     logic [23:0]                ddtc_up_did;
-    dc_t                        ddtc_up_content;
+    logic [(DC_WIDTH-1):0]      ddtc_up_content;
+
+    rv_iommu::dc_base_t         dc_base;
+    assign dc_base = rv_iommu::dc_base_t'(ddtc_lu_content);
 
     // IOTLB
     logic                       iotlb_access;
@@ -266,6 +259,16 @@ module rv_iommu_tw_sv39x4 #(
     logic [15:0]                iotlb_up_gscid;
     riscv::pte_t                iotlb_up_1S_content;
     riscv::pte_t                iotlb_up_2S_content;
+
+    // To check whether first and second-stage translation modes are Bare
+    logic first_stage_is_bare, second_stage_is_bare;
+    assign first_stage_is_bare  = (dc_base.fsc.mode == 4'b0000);
+    assign second_stage_is_bare = (dc_base.iohgatp.mode == 4'b0000);
+
+    // To indicate whether the occurring fault has to be reported according to DC.tc.DTF and the fault source
+    // If DC.tc.DTF=1, only faults occurred before finding the corresponding DC should be reported
+    assign  report_fault_o    = (((ddtc_lu_hit & !dc_base.tc.dtf) | 
+                                  (report_always | msi_write_error_i | cdw_error)) & trans_error_o);
 
     // Update bus from PTW to IOTLB
     logic                       ptw_update;
@@ -341,8 +344,8 @@ module rv_iommu_tw_sv39x4 #(
 
     //# Device Directory Table Cache
     rv_iommu_ddtc #(
-        .DDTC_ENTRIES       (DDTC_ENTRIES),
-        .dc_t               (dc_t        )
+        .DDTC_ENTRIES       (DDTC_ENTRIES   ),
+        .DC_WIDTH           (DC_WIDTH       )
     ) i_rv_iommu_ddtc (
         .clk_i              (clk_i          ),  // Clock
         .rst_ni             (rst_ni         ),  // Asynchronous reset active low
@@ -481,9 +484,12 @@ module rv_iommu_tw_sv39x4 #(
     // MSI Translation support enabled
     if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
 
-        assign msi_enabled      = (ddtc_lu_content.msiptp.mode != 4'b0000);
-        assign msi_addr_mask    = ddtc_lu_content.msi_addr_mask.mask;
-        assign msi_addr_pattern = ddtc_lu_content.msi_addr_pattern.pattern;
+        rv_iommu::dc_ext_t dc_ext;
+        assign dc_ext = rv_iommu::dc_ext_t'(ddtc_lu_content);
+
+        assign msi_enabled      = (dc_ext.msiptp.mode != 4'b0000);
+        assign msi_addr_mask    = dc_ext.msi_addr_mask.mask;
+        assign msi_addr_pattern = dc_ext.msi_addr_pattern.pattern;
         assign iova_is_msi      = (!en_1S && msi_enabled && is_store &&
                                     ((iova_i[(riscv::GPLEN-1):12] & ~msi_addr_mask) == (msi_addr_pattern & ~msi_addr_mask)));
 
@@ -525,7 +531,7 @@ module rv_iommu_tw_sv39x4 #(
             .gpte_i             (msi_gpte           ),
 
             // MSI PT base PPN
-            .msiptp_ppn_i       (ddtc_lu_content.msiptp.ppn),
+            .msiptp_ppn_i       (dc_ext.msiptp.ppn),
 
             // MSI address mask
             .msi_addr_mask_i    (msi_addr_mask      ),
@@ -681,7 +687,7 @@ module rv_iommu_tw_sv39x4 #(
         .MSITrans               (MSITrans   ),
         .axi_req_t              (axi_req_t  ),
         .axi_rsp_t              (axi_rsp_t  ),
-        .dc_t                   (dc_t       )
+        .DC_WIDTH               (DC_WIDTH   )
     ) i_rv_iommu_cdw (
         .clk_i                  (clk_i              ),  // Clock
         .rst_ni                 (rst_ni             ),  // Asynchronous reset active low
@@ -793,7 +799,7 @@ module rv_iommu_tw_sv39x4 #(
         if (ddtc_lu_hit) begin
 
             // "If any of the following conditions hold then stop and report "Transaction type disallowed" (cause = 260)."
-            if ((is_translated || is_pcie_tr_req) && !ddtc_lu_content.tc.en_ats) begin
+            if ((is_translated || is_pcie_tr_req) && !dc_base.tc.en_ats) begin
 
                 wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
                 wrap_error      = 1'b1;
@@ -806,7 +812,7 @@ module rv_iommu_tw_sv39x4 #(
                 if (is_translated) begin
 
                     // When DC.tc.T2GPA = 0, translated requests are performed using an SPA. Translation process is complete
-                    if (!ddtc_lu_content.tc.t2gpa) begin
+                    if (!dc_base.tc.t2gpa) begin
                         trans_valid_o   = 1'b1;
                         spaddr_o        = iova_i[riscv::PLEN-1:0];
                     end
@@ -815,9 +821,9 @@ module rv_iommu_tw_sv39x4 #(
                     else begin
                         // Stage 1 Bare
                         en_2S           = ~second_stage_is_bare;
-                        gscid           = ddtc_lu_content.iohgatp.gscid;
+                        gscid           = dc_base.iohgatp.gscid;
                         // PSCID not used since Stage 1 is Bare
-                        iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
+                        iohgatp_ppn     = dc_base.iohgatp.ppn;
                         // iosatp not used since Stage 1 is Bare
                         iotlb_access    = 1'b1;
                     end
@@ -827,13 +833,13 @@ module rv_iommu_tw_sv39x4 #(
                 else begin
                     
                     // No Process Context
-                    if (!ddtc_lu_content.tc.pdtv) begin
+                    if (!dc_base.tc.pdtv) begin
                         en_1S           = ~first_stage_is_bare;
                         en_2S           = ~second_stage_is_bare;
-                        gscid           = ddtc_lu_content.iohgatp.gscid;
-                        pscid           = ddtc_lu_content.ta.pscid;
-                        iohgatp_ppn     = ddtc_lu_content.iohgatp.ppn;
-                        iosatp_ppn      = ddtc_lu_content.fsc.ppn;
+                        gscid           = dc_base.iohgatp.gscid;
+                        pscid           = dc_base.ta.pscid;
+                        iohgatp_ppn     = dc_base.iohgatp.ppn;
+                        iosatp_ppn      = dc_base.fsc.ppn;
                         iotlb_access    = 1'b1;
                     end
 

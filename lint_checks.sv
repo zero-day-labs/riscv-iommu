@@ -29,7 +29,7 @@ module lint_checks (
 	input  logic rst_ni,
 
 	// Translation Request Interface (Slave)
-	input  ariane_axi_soc::req_mmu_t    dev_tr_req_i,
+	input  ariane_axi_soc::req_iommu_t  dev_tr_req_i,
 	output ariane_axi_soc::resp_t   	dev_tr_resp_o,
 
 	// Translation Completion Interface (Master)
@@ -76,11 +76,9 @@ module lint_checks (
 		.axi_rsp_t			( ariane_axi_soc::resp_t	),
 		.axi_req_slv_t		( ariane_axi_soc::req_slv_t	),
 		.axi_rsp_slv_t		( ariane_axi_soc::resp_slv_t),
-		.axi_req_mmu_t		( ariane_axi_soc::req_mmu_t ),
+		.axi_req_iommu_t	( ariane_axi_soc::req_iommu_t),
 		.reg_req_t			( iommu_reg_req_t			),
-		.reg_rsp_t			( iommu_reg_rsp_t			),
-
-		.dc_t				(rv_iommu::dc_ext_t			)
+		.reg_rsp_t			( iommu_reg_rsp_t			)
 	) i_riscv_iommu (
 
 		.clk_i				( clk_i				),

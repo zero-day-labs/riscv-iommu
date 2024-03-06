@@ -37,8 +37,11 @@ module rv_iommu_translation_wrapper #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type
-    parameter type dc_t             = logic
+    /*** DO NOT OVERRIDE ***/
+    // DC width
+    parameter int DC_WIDTH          = (MSITrans == rv_iommu::MSI_DISABLED) ? 
+                                      ($bits(rv_iommu::dc_base_t))         : 
+                                      ($bits(rv_iommu::dc_ext_t))
 ) (
     input  logic    clk_i,
     input  logic    rst_ni,
@@ -127,15 +130,15 @@ module rv_iommu_translation_wrapper #(
         if (InclPC) begin : gen_pc_support
 
             rv_iommu_tw_sv39x4_pc #(
-                .IOTLB_ENTRIES      (IOTLB_ENTRIES  ),
-                .DDTC_ENTRIES       (DDTC_ENTRIES   ),
-                .PDTC_ENTRIES       (PDTC_ENTRIES   ),
-                .MRIFC_ENTRIES      (MRIFC_ENTRIES  ),
-                .MSITrans           (MSITrans       ),
+                .IOTLB_ENTRIES  (IOTLB_ENTRIES  ),
+                .DDTC_ENTRIES   (DDTC_ENTRIES   ),
+                .PDTC_ENTRIES   (PDTC_ENTRIES   ),
+                .MRIFC_ENTRIES  (MRIFC_ENTRIES  ),
+                .MSITrans       (MSITrans       ),
 
-                .axi_req_t          (axi_req_t      ),
-                .axi_rsp_t          (axi_rsp_t      ),
-                .dc_t               (dc_t           )
+                .axi_req_t      (axi_req_t      ),
+                .axi_rsp_t      (axi_rsp_t      ),
+                .DC_WIDTH       (DC_WIDTH       )
             ) i_rv_iommu_tw_sv39x4_pc (
                 .clk_i,
                 .rst_ni,
@@ -217,7 +220,7 @@ module rv_iommu_translation_wrapper #(
 
                 .axi_req_t      (axi_req_t      ),
                 .axi_rsp_t      (axi_rsp_t      ),
-                .dc_t           (dc_t           )
+                .DC_WIDTH       (DC_WIDTH       )
             ) i_rv_iommu_tw_sv39x4 (
                 .clk_i,
                 .rst_ni,

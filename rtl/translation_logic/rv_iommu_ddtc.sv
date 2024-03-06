@@ -18,31 +18,32 @@
 //              Fully-associative cache to store Device Contexts.
 
 module rv_iommu_ddtc #(
-    parameter int unsigned  DDTC_ENTRIES    = 4,
-    parameter type dc_t                     = logic
+    // Number of DDTC entries
+    parameter int unsigned  DDTC_ENTRIES        = 4,
+    // DC width
+    parameter int DC_WIDTH                      = -1
 )(
-    input  logic            clk_i,          // Clock
-    input  logic            rst_ni,         // Asynchronous reset active low
+    input  logic                    clk_i,          // Clock
+    input  logic                    rst_ni,         // Asynchronous reset active low
 
     // Flush signals
-    input  logic            flush_i,        // IODIR.INVAL_DDT
-    input  logic            flush_dv_i,     // device_id valid
-    input  logic [23:0]     flush_did_i,    // device_id to be flushed
+    input  logic                    flush_i,        // IODIR.INVAL_DDT
+    input  logic                    flush_dv_i,     // device_id valid
+    input  logic [23:0]             flush_did_i,    // device_id to be flushed
 
     // Update signals
-    input  logic            update_i,       // update flag
-    input  logic [23:0]     up_did_i,       // device ID to be inserted
-    input  dc_t             up_content_i,   // DC to be inserted
+    input  logic                    update_i,       // update flag
+    input  logic [23:0]             up_did_i,       // device ID to be inserted
+    input  logic [(DC_WIDTH-1):0]   up_content_i,   // DC to be inserted
 
     // Lookup signals
-    input  logic            lookup_i,       // lookup flag
-    input  logic [23:0]     lu_did_i,       // device_id to look for 
-    output dc_t             lu_content_o,   // DC
-    output logic            lu_hit_o        // hit flag
+    input  logic                    lookup_i,       // lookup flag
+    input  logic [23:0]             lu_did_i,       // device_id to look for 
+    output logic [(DC_WIDTH-1):0]   lu_content_o,   // DC
+    output logic                    lu_hit_o        // hit flag
 );
 
-    //* Tags to identify DDTC entries
-    // 24-bits device_id may be divided into up to three levels
+    //# Tags to identify DDTC entries
     struct packed {
         logic [23:0]    device_id;  // device_id 
         logic           valid;      // valid bit
@@ -50,7 +51,7 @@ module rv_iommu_ddtc #(
 
     //* DDTC entries: Device Contexts
     struct packed {
-        dc_t dc;
+        logic [(DC_WIDTH-1):0] dc;
     } [DDTC_ENTRIES-1:0] content_q, content_n;
 
     logic [DDTC_ENTRIES-1:0] lu_hit;     // to replacement logic
@@ -62,9 +63,9 @@ module rv_iommu_ddtc #(
     always_comb begin : lookup
 
         // default assignment
-        lu_hit         = '{default: 0};
-        lu_hit_o       = 1'b0;
-        lu_content_o   = '{default: 0};
+        lu_hit          = '{default: 0};
+        lu_hit_o        = 1'b0;
+        lu_content_o    = '{default: 0};
 
         // To guarantee that hit signal is only set when we want to access the cache
         if (lookup_i) begin
@@ -116,7 +117,7 @@ module rv_iommu_ddtc #(
 
             // normal replacement
             // only valid entries can be cached
-            else if (update_i && replace_en[i] && up_content_i.tc.v) begin
+            else if (update_i && replace_en[i] && up_content_i[0]) begin
                 
                 // update tags
                 tags_n[i] = '{

@@ -30,8 +30,8 @@ module rv_iommu_cdw #(
     /// AXI Full response struct type
     parameter type  axi_rsp_t       = logic,
 
-    // DC type
-    parameter type dc_t             = logic,
+    // DC width
+    parameter int DC_WIDTH          = -1,
 
     // AR burst size (DO NOT OVERRIDE)
     parameter logic [7:0] ar_len    = ((MSITrans != rv_iommu::MSI_DISABLED) ? (8'd6) : (8'd3))
@@ -60,15 +60,15 @@ module rv_iommu_cdw #(
     output axi_req_t    mem_req_o,
 
     // Update logic
-    output  logic                           update_dc_o,
-    output  logic [23:0]                    up_did_o,
-    output  dc_t                            up_dc_content_o,
+    output  logic                   update_dc_o,
+    output  logic [23:0]            up_did_o,
+    output  logic [(DC_WIDTH-1):0]  up_dc_content_o,
 
     // CDC tags
-    input  logic [23:0]                     req_did_i,    // device_id associated with request
+    input  logic [23:0]             req_did_i,    // device_id associated with request
 
     // from DDTC / PDTC, to monitor misses
-    input  logic                            init_cdw_i,
+    input  logic                    init_cdw_i,
 
     // from regmap
     input  logic [riscv::PPNW-1:0]  ddtp_ppn_i,     // PPN from ddtp register
@@ -86,11 +86,6 @@ module rv_iommu_cdw #(
 
     // DDTC / PDTC Update
     assign up_did_o = device_id_q;
-
-    assign up_dc_content_o.tc = dc_tc_q;
-    assign up_dc_content_o.iohgatp = dc_iohgatp_q;
-    assign up_dc_content_o.ta = dc_ta_q;
-    assign up_dc_content_o.fsc = dc_fsc_q;
 
     // Cast read port to corresponding data structure
     rv_iommu::tc_t          dc_tc;
@@ -516,6 +511,9 @@ module rv_iommu_cdw #(
         // MSI translation supported
         if (MSITrans != rv_iommu::MSI_DISABLED) begin : gen_msi_support
 
+            // Update wires
+            rv_iommu::dc_ext_t              up_dc_content;
+
             // MSI Translation wires and registers
             rv_iommu::msiptp_t              dc_msiptp_q, dc_msiptp_n;
             rv_iommu::msi_addr_mask_t       dc_msi_addr_mask_q, dc_msi_addr_mask_n;
@@ -534,10 +532,16 @@ module rv_iommu_cdw #(
                 dc_msi_addr_mask    = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
                 dc_msi_addr_patt    = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
 
+                up_dc_content.tc               = dc_tc_q;
+                up_dc_content.iohgatp          = dc_iohgatp_q;
+                up_dc_content.ta               = dc_ta_q;
+                up_dc_content.fsc              = dc_fsc_q;
+                up_dc_content.msi_addr_pattern = dc_msi_addr_patt_q;
+                up_dc_content.msi_addr_mask    = dc_msi_addr_mask_q;
+                up_dc_content.msiptp           = dc_msiptp_q;
+
                 // Outputs
-                up_dc_content_o.msi_addr_pattern = dc_msi_addr_patt_q;
-                up_dc_content_o.msi_addr_mask    = dc_msi_addr_mask_q;
-                up_dc_content_o.msiptp           = dc_msiptp_q;
+                up_dc_content_o = up_dc_content;
 
                 // Next state values
                 dc_msiptp_n         = dc_msiptp_q;
@@ -605,7 +609,15 @@ module rv_iommu_cdw #(
         // MSI translation NOT supported
         else begin : gen_msi_support_disabled
 
-            
+            // Output wires
+            rv_iommu::dc_base_t up_dc_content;
+            assign up_dc_content_o = up_dc_content;
+
+            assign up_dc_content.tc         = dc_tc_q;
+            assign up_dc_content.iohgatp    = dc_iohgatp_q;
+            assign up_dc_content.ta         = dc_ta_q;
+            assign up_dc_content.fsc        = dc_fsc_q;
+
         end : gen_msi_support_disabled
     endgenerate
 
