@@ -1,47 +1,48 @@
-/* Copyright 2018 ETH Zurich and University of Bologna.
- * Copyright and related rights are licensed under the Solderpad Hardware
- * License, Version 0.51 (the “License”); you may not use this file except in
- * compliance with the License.  You may obtain a copy of the License at
- * http://solderpad.org/licenses/SHL-0.51. Unless required by applicable law
- * or agreed to in writing, software, hardware and materials distributed under
- * this License is distributed on an “AS IS” BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- *
- * File:   ariane_axi_soc_pkg.sv
- * Author: Florian Zaruba <zarubaf@iis.ee.ethz.ch>
- * Date:   17.8.2018
- *
- * Description: Contains Ariane's AXI ports on SoC, does not contain user ports
- */
+// Copyright © 2023 Manuel Rodríguez & Zero-Day Labs, Lda.
+// SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 
- `ifndef ARIANE_AXI_SOC
- `define ARIANE_AXI_SOC
+// Licensed under the Solderpad Hardware License v 2.1 (the “License”); 
+// you may not use this file except in compliance with the License, 
+// or, at your option, the Apache License version 2.0. 
+// You may obtain a copy of the License at https://solderpad.org/licenses/SHL-2.1/.
+// Unless required by applicable law or agreed to in writing, 
+// any work distributed under the License is distributed on an “AS IS” BASIS, 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+// See the License for the specific language governing permissions and limitations under the License.
+//
+// Author: Manuel Rodríguez <manuel.cederog@gmail.com>
+// Date: 24/04/2024
+//
+// Description: Auiliary package with constants and typedefs for linting.
 
- `include "ariane_soc_pkg.sv"
+ `ifndef LINT_WRAPPER
+ `define LINT_WRAPPER
+
  `include "axi_pkg.sv"
 
-package ariane_axi_soc;
+package lint_wrapper;
 
-    // used in axi_adapter.sv
-    typedef enum logic { SINGLE_REQ, CACHE_LINE_REQ } ad_req_t;
+    localparam UserWidth    = 1;
+    localparam AddrWidth    = 64;
+    localparam DataWidth    = 64;
+    localparam StrbWidth    = DataWidth / 8;
+    localparam IdWidth      = 4;
+    localparam IdWidthSlv   = 6;
 
-    localparam UserWidth = ariane_pkg::AXI_USER_WIDTH;
-    localparam AddrWidth = 64;
-    localparam DataWidth = 64;
-    localparam StrbWidth = DataWidth / 8;
-
-    typedef logic [ariane_soc::IdWidth-1:0]      id_t;
-    typedef logic [ariane_soc::IdWidthSlave-1:0] id_slv_t;
-    typedef logic [AddrWidth-1:0] addr_t;
-    typedef logic [DataWidth-1:0] data_t;
-    typedef logic [StrbWidth-1:0] strb_t;
-    typedef logic [UserWidth-1:0] user_t;
+    typedef logic [IdWidth-1:0]     id_t;
+    typedef logic [IdWidthSlv-1:0]  id_slv_t;
+    typedef logic [AddrWidth-1:0]   addr_t;
+    typedef logic [DataWidth-1:0]   data_t;
+    typedef logic [StrbWidth-1:0]   strb_t;
+    typedef logic [UserWidth-1:0]   user_t;
 
     // AXI DVM extension
-    typedef logic [23:0] iommu_sid_t;
-    typedef logic        iommu_ssidv_t;
-    typedef logic [19:0] iommu_ssid_t;
+    localparam DevIDWidth   = 24;
+    localparam ProcIDWidth  = 20;
+
+    typedef logic [DevIDWidth-1:0]  iommu_sid_t;
+    typedef logic                   iommu_ssidv_t;
+    typedef logic [ProcIDWidth-1:0] iommu_ssid_t;
 
     // AW Channel
     typedef struct packed {

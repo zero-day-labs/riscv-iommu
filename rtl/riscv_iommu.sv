@@ -40,9 +40,9 @@ module riscv_iommu #(
     // Interrupt Generation Support
     parameter rv_iommu::igs_t       IGS         = rv_iommu::WSI_ONLY,
     // Number of interrupt vectors supported
-    parameter int unsigned      N_INT_VEC       = 16,
+    parameter int unsigned          N_INT_VEC   = 16,
     // Number of Performance monitoring event counters (set to zero to disable HPM)
-    parameter int unsigned      N_IOHPMCTR      = 0,     // max 31
+    parameter int unsigned          N_IOHPMCTR  = 0,     // max 31
 
     /// AXI Bus Addr width.
     parameter int   ADDR_WIDTH      = -1,

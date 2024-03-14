@@ -55,18 +55,18 @@ module rv_iommu_prog_if #(
 );
 
     REG_BUS #(
-        .ADDR_WIDTH ( 32 ),
-        .DATA_WIDTH ( 32 )
+        .ADDR_WIDTH ( ADDR_WIDTH ),
+        .DATA_WIDTH ( 32         )
     ) iommu_reg_bus (clk_i);
 
-    logic         penable;
-    logic         pwrite;
-    logic [31:0]  paddr;
-    logic         psel;
-    logic [31:0]  pwdata;
-    logic [31:0]  prdata;
-    logic         pready;
-    logic         pslverr;
+    logic                       penable;
+    logic                       pwrite;
+    logic [(ADDR_WIDTH-1):0]    paddr;
+    logic                       psel;
+    logic [31:0]                pwdata;
+    logic [31:0]                prdata;
+    logic                       pready;
+    logic                       pslverr;
 
     // AXI4 to APB IF
     axi2apb_64_32 #(
@@ -76,7 +76,7 @@ module rv_iommu_prog_if #(
         .AXI4_ID_WIDTH      ( ID_WIDTH    ),
         .AXI4_USER_WIDTH    ( USER_WIDTH  ),
         .BUFF_DEPTH_SLAVE   ( 2           ),
-        .APB_ADDR_WIDTH     ( 32          )
+        .APB_ADDR_WIDTH     ( ADDR_WIDTH  )
     ) i_axi2apb_64_32_iommu (
         .ACLK      ( clk_i          ),
         .ARESETn   ( rst_ni         ),

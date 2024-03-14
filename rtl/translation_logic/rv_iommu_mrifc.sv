@@ -30,7 +30,7 @@
         Thus, the IOTINVAL.VMA and IOTINVAL.GVMA commands also affect this cache, and entries are tagged with IOVA, GSCID and PSCID.
 */
 
-module rv_iommu_mrifc import ariane_pkg::*; #(
+module rv_iommu_mrifc #(
     parameter int unsigned  MRIFC_ENTRIES    = 4
 )(
     input  logic            clk_i,          // Clock
@@ -193,7 +193,7 @@ module rv_iommu_mrifc import ariane_pkg::*; #(
             gvaddr_1G_match[i] = (gvaddr_vpn2_match[i] && tags_q[i].is_1S_1G);
 
             // construct GPA's PPN according to first-stage pte data
-            gppn[i] = make_gppn(tags_q[i].en_1S, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte_1S);
+            gppn[i] = rv_iommu::make_gppn(tags_q[i].en_1S, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte_1S);
             
             // check if given GPA matches with any tag
             gpaddr_gppn0_match[i] = (flush_vpn_i[8:0] == gppn[i][8:0]);

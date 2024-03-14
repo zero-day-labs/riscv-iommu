@@ -446,9 +446,60 @@ package rv_iommu;
     //#  IOMMU functions
     //--------------------------
 
+    // Checks if final translation page size is 1G when H-extension is enabled
+    // Adapted from MMU function in ariane_pkg
+    function automatic logic is_trans_1G(input logic S1_en, input logic S2_en,
+                                        input logic is_1S_1G, input logic is_2S_1G);
+        return (((is_1S_1G && S1_en) || !S1_en) && ((is_2S_1G && S2_en) || !S2_en));
+    endfunction : is_trans_1G
+
+    // Checks if final translation page size is 2M when H-extension is enabled
+    // Adapted from MMU function in ariane_pkg
+    function automatic logic is_trans_2M(input logic S1_en, input logic S2_en,
+                                        input logic is_1S_1G, input logic is_1S_2M,
+                                        input logic is_2S_1G, input logic is_2S_2M);
+        return  (S1_en && S2_en) ? 
+                    ((is_1S_2M && (is_2S_1G || is_2S_2M)) || (is_2S_2M && (is_1S_1G || is_1S_2M))) :
+                    ((is_1S_2M && S1_en) || (is_2S_2M && S2_en));
+    endfunction : is_trans_2M
+
+    // Computes the paddr based on the page size, ppn and offset
+    // Adapted from MMU function in ariane_pkg
+    function automatic logic [(riscv::GPLEN-1):0] make_gpaddr(
+        input logic S1_en, input logic is_1G, input logic is_2M,
+        input logic [(riscv::VLEN-1):0] vaddr, input riscv::pte_t pte);
+        logic [(riscv::GPLEN-1):0] gpaddr;
+        if (S1_en) begin
+        gpaddr = {pte.ppn[(riscv::GPPNW-1):0], vaddr[11:0]};
+        // Giga page
+        if (is_1G) gpaddr[29:12] = vaddr[29:12];
+        // Mega page
+        if (is_2M) gpaddr[20:12] = vaddr[20:12];
+        end else begin
+        gpaddr = vaddr[(riscv::GPLEN-1):0];
+        end
+        return gpaddr;
+    endfunction : make_gpaddr
+
+    // Computes the final gppn based on the guest physical address
+    // Adapted from MMU function in ariane_pkg
+    function automatic logic [(riscv::GPPNW-1):0] make_gppn(input logic S1_en, input logic is_1G,
+                                                            input logic is_2M, input logic [28:0] vpn,
+                                                            input riscv::pte_t pte);
+        logic [(riscv::GPPNW-1):0] gppn;
+        if (S1_en) begin
+        gppn = pte.ppn[(riscv::GPPNW-1):0];
+        if (is_2M) gppn[8:0] = vpn[8:0];
+        if (is_1G) gppn[17:0] = vpn[17:0];
+        end else begin
+        gppn = vpn;
+        end
+        return gppn;
+    endfunction : make_gppn
+
     // Extract Interrupt File number from GPA
     // The resulting IF number is used to index the corresponding MSI PTE in memory.
-    function logic [(riscv::GPPNW-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
+    function automatic logic [(riscv::GPPNW-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [(MSI_MASK_LEN-1):0] mask);
         logic [(riscv::GPPNW-1):0] masked_gpaddr, imsic_num;
         int unsigned i;
 

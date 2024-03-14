@@ -16,7 +16,7 @@ module apb_to_reg (
 
   input  logic          penable_i,
   input  logic          pwrite_i,
-  input  logic [31:0]   paddr_i,
+  input  logic [63:0]   paddr_i,
   input  logic          psel_i,
   input  logic [31:0]   pwdata_i,
   output logic [31:0]   prdata_o,

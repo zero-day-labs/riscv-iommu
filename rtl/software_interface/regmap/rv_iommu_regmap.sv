@@ -19,7 +19,6 @@
 //              This module was developed using LowRISC `reggen` tool.
 
 module rv_iommu_regmap #(
-  parameter int 			        ADDR_WIDTH = 32,
   parameter int 			        DATA_WIDTH = 32,
 
   // MSI translation support
@@ -2656,7 +2655,7 @@ module rv_iommu_regmap #(
 
   // Debug Register IF
   generate
-  if (InclDBG) begin : gen_dbg_if
+  if (InclDBG) begin : gen_dbg_if_addr_hit
     
     assign addr_hit[144] = (reg_addr == IOMMU_TR_REQ_IOVA_OFFSET_L);
     assign addr_hit[145] = (reg_addr == IOMMU_TR_REQ_IOVA_OFFSET_H);
@@ -2664,9 +2663,9 @@ module rv_iommu_regmap #(
     assign addr_hit[147] = (reg_addr == IOMMU_TR_REQ_CTL_OFFSET_H);
     assign addr_hit[148] = (reg_addr == IOMMU_TR_RESPONSE_OFFSET_L);
     assign addr_hit[149] = (reg_addr == IOMMU_TR_RESPONSE_OFFSET_H);
-  end : gen_dbg_if
+  end : gen_dbg_if_addr_hit
   
-  else begin : gen_dbg_if_disabled
+  else begin : gen_dbg_if_disabled_addr_hit
     
     assign addr_hit[144] = 1'b0;
     assign addr_hit[145] = 1'b0;
@@ -2674,7 +2673,7 @@ module rv_iommu_regmap #(
     assign addr_hit[147] = 1'b0;
     assign addr_hit[148] = 1'b0;
     assign addr_hit[149] = 1'b0;
-  end : gen_dbg_if_disabled
+  end : gen_dbg_if_disabled_addr_hit
   endgenerate
 
   assign addr_hit[150] = (reg_addr == IOMMU_ICVEC_OFFSET_L);
@@ -2722,7 +2721,7 @@ module rv_iommu_regmap #(
 
   // Debug register IF
   generate
-  if (InclDBG) begin : gen_dbg_if
+  if (InclDBG) begin : gen_dbg_if_wr_err
     
     assign wr_err[144] = (addr_hit[144] & (|(IOMMU_PERMIT[24] & ~reg_be)));
     assign wr_err[145] = (addr_hit[145] & (|(IOMMU_PERMIT[25] & ~reg_be)));
@@ -2730,9 +2729,9 @@ module rv_iommu_regmap #(
     assign wr_err[147] = (addr_hit[147] & (|(IOMMU_PERMIT[27] & ~reg_be)));
     assign wr_err[148] = (addr_hit[148] & (|(IOMMU_PERMIT[28] & ~reg_be)));
     assign wr_err[149] = (addr_hit[149] & (|(IOMMU_PERMIT[29] & ~reg_be)));
-  end : gen_dbg_if
+  end : gen_dbg_if_wr_err
   
-  else begin : gen_dbg_if_disabled
+  else begin : gen_dbg_if_disabled_wr_err
     
     assign wr_err[144] = 1'b0;
     assign wr_err[145] = 1'b0;
@@ -2740,7 +2739,7 @@ module rv_iommu_regmap #(
     assign wr_err[147] = 1'b0;
     assign wr_err[148] = 1'b0;
     assign wr_err[149] = 1'b0;
-  end : gen_dbg_if_disabled
+  end : gen_dbg_if_disabled_wr_err
   endgenerate
   
 
@@ -2977,7 +2976,7 @@ module rv_iommu_regmap #(
   // Debug Register IF
   generate
 
-    if (InclDBG) begin : gen_dbg_if
+    if (InclDBG) begin : gen_dbg_if_write_logic
       
       assign tr_req_iova_vpn_l_we = addr_hit[144] & reg_we & !reg_error;
       assign tr_req_iova_vpn_l_wd = reg_wdata[31:12];
@@ -3018,9 +3017,9 @@ module rv_iommu_regmap #(
 
       assign tr_req_ctl_did_we = addr_hit[147] & reg_we & !reg_error;
       assign tr_req_ctl_did_wd = reg_wdata[31:8];
-    end : gen_dbg_if
+    end : gen_dbg_if_write_logic
     
-    else begin : gen_dbg_if_disabled
+    else begin : gen_dbg_if_disabled_write_logic
 
       assign tr_req_iova_vpn_l_we = 1'b0;
       assign tr_req_iova_vpn_l_wd = '0;
@@ -3040,7 +3039,7 @@ module rv_iommu_regmap #(
       assign tr_req_ctl_pv_wd = '0;
       assign tr_req_ctl_did_we = 1'b0;
       assign tr_req_ctl_did_wd = '0;  
-    end : gen_dbg_if_disabled
+    end : gen_dbg_if_disabled_write_logic
     
   endgenerate
 

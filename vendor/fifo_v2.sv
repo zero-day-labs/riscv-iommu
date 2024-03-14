@@ -45,7 +45,9 @@ module fifo_v2 #(
         assign alm_empty_o = 1'b0; // that signal does not make any sense in a FIFO of depth 0
     end else begin
         assign alm_full_o   = (usage >= ALM_FULL_TH[ADDR_DEPTH-1:0]);
+        /* verilator lint_off CMPCONST */
         assign alm_empty_o  = (usage <= ALM_EMPTY_TH[ADDR_DEPTH-1:0]);
+        /* verilator lint_on CMPCONST */
     end
 
     fifo_v3 #(

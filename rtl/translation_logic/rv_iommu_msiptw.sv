@@ -57,7 +57,7 @@ module rv_iommu_msiptw #(
     output logic ignore_o,
 
     // Request IOVA
-    input  logic [riscv::GPLEN-1:0]     req_iova_i,
+    input  logic [riscv::VLEN-1:0]      req_iova_i,
     // First-stage translation enable
     input  logic                        en_1S_i,
     // The translation is read-for-execute
@@ -508,7 +508,9 @@ module rv_iommu_msiptw #(
                     if ((mrif_wait_rlast_q && mem_resp_i.r.last) || !mrif_wait_rlast_q) begin
                         mrif_state_n = MRIF_PTE;
                     end
-            end
+                end
+
+                default: mrif_state_n = MRIF_PTE;
             endcase
 
             // Check for AXI transmission errors

@@ -168,6 +168,7 @@ module rv_iommu_mrif_handler #(
         mrif_ie_n       = mrif_ie_q;
         int_id_n        = int_id_q;
         notice_ppn_n    = notice_ppn_q;
+        notice_nid_n    = notice_nid_q;
         pptr_n          = pptr_q;
 
         case (state_q)

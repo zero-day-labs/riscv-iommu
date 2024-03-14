@@ -247,16 +247,15 @@ module rv_iommu_sw_if_wrapper #(
 
     //# Register map module
     rv_iommu_regmap #(
-        .ADDR_WIDTH     (32         ),
-        .DATA_WIDTH     (32         ),
-        .MSITrans       (MSITrans   ),
-        .IGS            (IGS        ),
-        .N_INT_VEC      (N_INT_VEC  ),
-        .N_IOHPMCTR     (N_IOHPMCTR ),
-        .InclPC         (InclPC     ),
-        .InclDBG        (InclDBG    ),
-        .reg_req_t      (reg_req_t  ),
-        .reg_rsp_t      (reg_rsp_t  )
+        .DATA_WIDTH     ( 32         ),
+        .MSITrans       ( MSITrans   ),
+        .IGS            ( IGS        ),
+        .N_INT_VEC      ( N_INT_VEC  ),
+        .N_IOHPMCTR     ( N_IOHPMCTR ),
+        .InclPC         ( InclPC     ),
+        .InclDBG        ( InclDBG    ),
+        .reg_req_t      ( reg_req_t  ),
+        .reg_rsp_t      ( reg_rsp_t  )
     ) i_rv_iommu_regmap (
         .clk_i      (clk_i),
         .rst_ni     (rst_ni),
