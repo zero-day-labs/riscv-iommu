@@ -21,7 +21,7 @@
 //              by Florian Zaruba and David Schaffenrath to the Sv39x4 standard.
 //              Each entry groups first-stage and second-stage PTE data. Second-stage data may be an MSI mapping.
 
-module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
+module rv_iommu_iotlb_sv39x4 #(
     parameter int unsigned IOTLB_ENTRIES = 4
 )(
     input  logic                    clk_i,            // Clock
@@ -139,19 +139,19 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
                 // If second-stage is active, only GSCID matches will indicate entry match
                 match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
 
-                is_1G[i] = is_trans_1G( en_1S_i,
-                                        en_2S_i,
-                                        tags_q[i].is_1S_1G,
-                                        tags_q[i].is_2S_1G
-                                    );
+                is_1G[i] = rv_iommu::is_trans_1G(   en_1S_i,
+                                                    en_2S_i,
+                                                    tags_q[i].is_1S_1G,
+                                                    tags_q[i].is_2S_1G
+                                                );
 
-                is_2M[i] = is_trans_2M( en_1S_i,
-                                        en_2S_i,
-                                        tags_q[i].is_1S_1G,
-                                        tags_q[i].is_1S_2M,
-                                        tags_q[i].is_2S_1G,
-                                        tags_q[i].is_2S_2M
-                                    );
+                is_2M[i] = rv_iommu::is_trans_2M(   en_1S_i,
+                                                    en_2S_i,
+                                                    tags_q[i].is_1S_1G,
+                                                    tags_q[i].is_1S_2M,
+                                                    tags_q[i].is_2S_1G,
+                                                    tags_q[i].is_2S_2M
+                                                );
 
                 // Check enabled stages
                 match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
@@ -218,7 +218,7 @@ module rv_iommu_iotlb_sv39x4 import ariane_pkg::*; #(
             vaddr_1G_match[i] = (vaddr_vpn2_match[i] && tags_q[i].is_1S_1G);
 
             // construct GPA's PPN according to first-stage pte data
-            gppn[i] = make_gppn(tags_q[i].en_1S, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte_1S);
+            gppn[i] = rv_iommu::make_gppn(tags_q[i].en_1S, tags_q[i].is_1S_1G, tags_q[i].is_1S_2M, {tags_q[i].vpn2,tags_q[i].vpn1,tags_q[i].vpn0}, content_q[i].pte_1S);
             
             // check if given GPA matches with any tag
             gpaddr_gppn0_match[i] = (flush_vpn_i[8:0] == gppn[i][8:0]);
