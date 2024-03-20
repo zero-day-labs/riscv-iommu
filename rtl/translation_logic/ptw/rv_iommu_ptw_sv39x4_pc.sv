@@ -205,7 +205,7 @@ module rv_iommu_ptw_sv39x4_pc #(
     always_comb begin : iotlb_update
         
         // vpn to be updated in the IOTLB
-        up_vpn_o = {{41-riscv::SVX{1'b0}}, iova_q[riscv::SVX-1:12]};
+        up_vpn_o = iova_q[riscv::SVX-1:12];
 
         up_1S_2M_o = 1'b0;
         up_1S_1G_o = 1'b0;
