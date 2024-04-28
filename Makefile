@@ -17,8 +17,13 @@
 #
 # Description:  Makefile to perform lint checks in the RISC-V IOMMU IP using verilator
 
-WARN_FLAGS += -Wno-UNOPTFLAT
+WARN_FLAGS :=
 WARN_FLAGS += -Wno-LATCH
+
+COMP_FLAGS :=
+# COMP_FLAGS += --cc
+COMP_FLAGS += --lint-only
+# COMP_FLAGS += --report-unoptflat
 
 INC += -I./packages/dependencies
 INC += -I./packages/rv_iommu
@@ -37,7 +42,7 @@ INC += -I./rtl/ext_interfaces
 all: lint
 
 lint:
-	verilator --lint-only lint_checks.sv ${INC} ${WARN_FLAGS}
+	verilator ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS}
 
-lint_log:
-	verilator --lint-only lint_checks.sv ${INC} ${WARN_FLAGS} 2> verilator_log.txt
+lint2log:
+	verilator ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS} 2> verilator.log

@@ -64,6 +64,7 @@ module rv_iommu_mrifc #(
     input  logic                    en_1S_i,            // first-stage enabled
     input  logic                    en_2S_i,            // second-stage enabled
     output logic                    lu_hit_o,           // hit flag
+    output logic                    lu_miss_o,          // miss flag
     output riscv::pte_t             lu_1S_content_o,    // first-stage PTE
     output rv_iommu::mrifc_entry_t  lu_msi_content_o    // MSI PTE
 );
@@ -116,38 +117,36 @@ module rv_iommu_mrifc #(
 
         // Output signals
         lu_hit_o            = 1'b0;
+        lu_miss_o           = lookup_i;
         lu_1S_content_o     = '{default: 0};
         lu_msi_content_o    = '{default: 0};
 
-        // To guarantee that hit signal is only set when we want to access the cache
-        if (lookup_i) begin
+        for (int unsigned i = 0; i < MRIFC_ENTRIES; i++) begin
+            
+            // PSCID check is skipped for lookups with first-stage disabled
+            // If first-stage is enabled, only PSCID matches and global entries match
+            match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte_1S.g) && en_1S_i) || !en_1S_i;
 
-            for (int unsigned i = 0; i < MRIFC_ENTRIES; i++) begin
+            // GSCID check is skipped for lookups with second-stage disabled
+            // If second-stage is active, only GSCID matches will indicate entry match
+            match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
+
+            // Check enabled stages
+            match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
+            
+            // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
+            if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == tags_q[i].vpn2)) begin
                 
-                // PSCID check is skipped for lookups with first-stage disabled
-                // If first-stage is enabled, only PSCID matches and global entries match
-                match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte_1S.g) && en_1S_i) || !en_1S_i;
-
-                // GSCID check is skipped for lookups with second-stage disabled
-                // If second-stage is active, only GSCID matches will indicate entry match
-                match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
-
-                // Check enabled stages
-                match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
-                
-                // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
-                if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == tags_q[i].vpn2)) begin
+                // 1G match | 2M match | 4k match
+                if ((tags_q[i].is_1S_1G && tags_q[i].en_1S) || 
+                    ((vpn1 == tags_q[i].vpn1) && 
+                        ((tags_q[i].is_1S_2M && tags_q[i].en_1S) || vpn0 == tags_q[i].vpn0))) begin
                     
-                    // 1G match | 2M match | 4k match
-                    if ((tags_q[i].is_1S_1G && tags_q[i].en_1S) || 
-                        ((vpn1 == tags_q[i].vpn1) && 
-                            ((tags_q[i].is_1S_2M && tags_q[i].en_1S) || vpn0 == tags_q[i].vpn0))) begin
-                        
-                        lu_1S_content_o     = content_q[i].pte_1S;
-                        lu_msi_content_o    = content_q[i].msi_pte;
-                        lu_hit_o            = 1'b1;
-                        lu_hit[i]           = 1'b1;
-                    end
+                    lu_1S_content_o     = content_q[i].pte_1S;
+                    lu_msi_content_o    = content_q[i].msi_pte;
+                    lu_hit_o            = lookup_i;
+                    lu_miss_o           = 1'b0;
+                    lu_hit[i]           = 1'b1;
                 end
             end
         end

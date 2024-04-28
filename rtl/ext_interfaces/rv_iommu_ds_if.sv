@@ -107,10 +107,10 @@ module rv_iommu_ds_if #(
     always_comb begin
         w_select = '0;
         unique case (ds_req_o.aw.id)   // Selected AWID
-            4'b0000:    w_select = 2'd0; // CQ
-            4'b0001:    w_select = 2'd1; // FQ
-            4'b0010:    w_select = 2'd2; // MSI IG
-            4'b0011:    w_select = 2'd3; // MRIF Handler
+            0:          w_select = 2'd0; // CQ
+            1:          w_select = 2'd1; // FQ
+            2:          w_select = 2'd2; // MSI IG
+            3:          w_select = 2'd3; // MRIF Handler
             default:    w_select = 2'd0; // CQ
         endcase
     end
@@ -170,12 +170,12 @@ module rv_iommu_ds_if #(
     always_comb begin
         r_select = 0;
         unique case (ds_resp_i.r.id)
-            4'b0000:                        r_select = 0;   // PTW
-            4'b0001:                        r_select = 1;   // CDW
-            4'b0010:                        r_select = 2;   // CQ
-            4'b0011:                        r_select = 3;   // MSIPTW
-            4'b0100:                        r_select = 4;   // MRIF Handler
-            default:                        r_select = 0;
+            0:          r_select = 0;   // PTW
+            1:          r_select = 1;   // CDW
+            2:          r_select = 2;   // CQ
+            3:          r_select = 3;   // MSIPTW
+            4:          r_select = 4;   // MRIF Handler
+            default:    r_select = 0;
         endcase
     end
 
@@ -200,10 +200,10 @@ module rv_iommu_ds_if #(
     always_comb begin
         b_select = 0;
         unique case (ds_resp_i.b.id)
-            4'b0000:    b_select = 0;   // CQ
-            4'b0001:    b_select = 1;   // FQ
-            4'b0010:    b_select = 2;   // MSI IG
-            4'b0011:    b_select = 3;   // MRIF Handler
+            0:          b_select = 0;   // CQ
+            1:          b_select = 1;   // FQ
+            2:          b_select = 2;   // MSI IG
+            3:          b_select = 3;   // MRIF Handler
             default:    b_select = 0;   // CQ
         endcase
     end
@@ -217,5 +217,45 @@ module rv_iommu_ds_if #(
         .oup_valid_o ( {mrif_handler_resp_o.b_valid, msi_ig_resp_o.b_valid, fq_resp_o.b_valid, cq_resp_o.b_valid} ),
         .oup_ready_i ( {mrif_handler_req_i.b_ready, msi_ig_req_i.b_ready, fq_req_i.b_ready, cq_req_i.b_ready} )
     );
-    
+
+    //# Unused signals
+    // Read-only modules
+    assign ptw_resp_o.aw_ready  = 1'b0;
+    assign ptw_resp_o.w_ready   = 1'b0;
+    assign ptw_resp_o.b_valid   = 1'b0;
+    assign ptw_resp_o.b.id      = '0;
+    assign ptw_resp_o.b.resp    = axi_pkg::RESP_SLVERR;
+    assign ptw_resp_o.b.user    = '0;
+
+    assign cdw_resp_o.aw_ready  = 1'b0;
+    assign cdw_resp_o.w_ready   = 1'b0;
+    assign cdw_resp_o.b_valid   = 1'b0;
+    assign cdw_resp_o.b.id      = '0;
+    assign cdw_resp_o.b.resp    = axi_pkg::RESP_SLVERR;
+    assign cdw_resp_o.b.user    = '0;
+
+    assign msiptw_resp_o.aw_ready   = 1'b0;
+    assign msiptw_resp_o.w_ready    = 1'b0;
+    assign msiptw_resp_o.b_valid    = 1'b0;
+    assign msiptw_resp_o.b.id       = '0;
+    assign msiptw_resp_o.b.resp     = axi_pkg::RESP_SLVERR;
+    assign msiptw_resp_o.b.user     = '0;
+
+    // Write-only modules
+    assign fq_resp_o.ar_ready   = 1'b0;
+    assign fq_resp_o.r_valid    = 1'b0;
+    assign fq_resp_o.r.id       = '0;
+    assign fq_resp_o.r.data     = '0;
+    assign fq_resp_o.r.resp     = axi_pkg::RESP_SLVERR;
+    assign fq_resp_o.r.last     = 1'b0;
+    assign fq_resp_o.r.user     = '0;
+
+    assign msi_ig_resp_o.ar_ready   = 1'b0;
+    assign msi_ig_resp_o.r_valid    = 1'b0;
+    assign msi_ig_resp_o.r.id       = '0;
+    assign msi_ig_resp_o.r.data     = '0;
+    assign msi_ig_resp_o.r.resp     = axi_pkg::RESP_SLVERR;
+    assign msi_ig_resp_o.r.last     = 1'b0;
+    assign msi_ig_resp_o.r.user     = '0;
+
 endmodule

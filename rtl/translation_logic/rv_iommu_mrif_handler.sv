@@ -114,44 +114,44 @@ module rv_iommu_mrif_handler #(
         // Output signals
         // AXI signals
         // AW
-        mem_req_o.aw.id                     = 4'b0011;
-        mem_req_o.aw.addr[riscv::PLEN-1:0]  = pptr_q;                  // Variable: MRIF and notice MSI
-        mem_req_o.aw.len                    = 8'b0;                    // One beat
-        mem_req_o.aw.size                   = 3'b011;                  // Variable: 64 bits for MRIF IP DW, 32 bits for notice MSI
-        mem_req_o.aw.burst                  = axi_pkg::BURST_INCR;
-        mem_req_o.aw.lock                   = '0;
-        mem_req_o.aw.cache                  = '0;
-        mem_req_o.aw.prot                   = '0;
-        mem_req_o.aw.qos                    = '0;
-        mem_req_o.aw.region                 = '0;
-        mem_req_o.aw.atop                   = '0;
-        mem_req_o.aw.user                   = '0;
+        mem_req_o.aw.id     = 4'b0011;
+        mem_req_o.aw.addr   = {{riscv::XLEN-riscv::PLEN{1'b0}}, pptr_q};    // Variable: MRIF and notice MSI
+        mem_req_o.aw.len    = 8'b0;                                         // One beat
+        mem_req_o.aw.size   = 3'b011;                                       // Variable: 64 bits for MRIF IP DW, 32 bits for notice MSI
+        mem_req_o.aw.burst  = axi_pkg::BURST_INCR;
+        mem_req_o.aw.lock   = '0;
+        mem_req_o.aw.cache  = '0;
+        mem_req_o.aw.prot   = '0;
+        mem_req_o.aw.qos    = '0;
+        mem_req_o.aw.region = '0;
+        mem_req_o.aw.atop   = '0;
+        mem_req_o.aw.user   = '0;
 
         mem_req_o.aw_valid   = 1'b0;
 
         // W
-        mem_req_o.w.data     = '0;
-        mem_req_o.w.strb     = '1;
-        mem_req_o.w.last     = '0;
-        mem_req_o.w.user     = '0;
+        mem_req_o.w.data    = '0;
+        mem_req_o.w.strb    = '1;
+        mem_req_o.w.last    = '0;
+        mem_req_o.w.user    = '0;
 
-        mem_req_o.w_valid    = 1'b0;
+        mem_req_o.w_valid   = 1'b0;
 
         // B
-        mem_req_o.b_ready    = 1'b0;
+        mem_req_o.b_ready   = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0100;
-        mem_req_o.ar.addr[riscv::PLEN-1:0]  = pptr_q;               // Physical address to access
-        mem_req_o.ar.len                    = 8'b1;                 // Two beats
-        mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst                  = axi_pkg::BURST_INCR;  // Incremental addresses
-        mem_req_o.ar.lock                   = '0;
-        mem_req_o.ar.cache                  = '0;
-        mem_req_o.ar.prot                   = '0;
-        mem_req_o.ar.qos                    = '0;
-        mem_req_o.ar.region                 = '0;
-        mem_req_o.ar.user                   = '0;
+        mem_req_o.ar.id     = 4'b0100;
+        mem_req_o.ar.addr   = {{riscv::XLEN-riscv::PLEN{1'b0}}, pptr_q};    // Physical address to access
+        mem_req_o.ar.len    = 8'b1;                                         // Two beats
+        mem_req_o.ar.size   = 3'b011;                                       // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst  = axi_pkg::BURST_INCR;                          // Incremental addresses
+        mem_req_o.ar.lock   = '0;
+        mem_req_o.ar.cache  = '0;
+        mem_req_o.ar.prot   = '0;
+        mem_req_o.ar.qos    = '0;
+        mem_req_o.ar.region = '0;
+        mem_req_o.ar.user   = '0;
 
         mem_req_o.ar_valid  = 1'b0;
 

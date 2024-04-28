@@ -44,6 +44,8 @@ package lint_wrapper;
     typedef logic                   iommu_ssidv_t;
     typedef logic [ProcIDWidth-1:0] iommu_ssid_t;
 
+    localparam NumIRQWires  = 4;
+
     // AW Channel
     typedef struct packed {
         id_t              id;
@@ -119,7 +121,7 @@ package lint_wrapper;
 
     // AR Channel
     typedef struct packed {
-        id_t             id;
+        id_t              id;
         addr_t            addr;
         axi_pkg::len_t    len;
         axi_pkg::size_t   size;

@@ -16,8 +16,6 @@
 //
 // Description: RISC-V IOMMU Top Module.
 
-/* verilator lint_off WIDTH */
-
 module riscv_iommu #(
     // Number of IOTLB entries
     parameter int unsigned  IOTLB_ENTRIES       = 4,
@@ -94,7 +92,7 @@ module riscv_iommu #(
     input  axi_rsp_t        ds_resp_i,
     output axi_req_t        ds_req_o,
 
-    // Programming Interface (Slave) (AXI4 + ATOP => Reg IF)
+    // Programming Interface (Slave)
     input  axi_req_slv_t    prog_req_i,
     output axi_rsp_slv_t    prog_resp_o,
 
@@ -242,45 +240,45 @@ module riscv_iommu #(
 
     // Connect the aux AXI bus to the translation request interface
     // AW
-    assign axi_aux_req.aw_valid                 = resume_aw_q;
+    assign axi_aux_req.aw_valid     = resume_aw_q;
 
-    assign axi_aux_req.aw.id                    = dev_tr_req_i.aw.id;
-    assign axi_aux_req.aw.addr[riscv::PLEN-1:0] = spaddr;                   // translated address
-    assign axi_aux_req.aw.len                   = dev_tr_req_i.aw.len;
-    assign axi_aux_req.aw.size                  = dev_tr_req_i.aw.size;
-    assign axi_aux_req.aw.burst                 = dev_tr_req_i.aw.burst;
-    assign axi_aux_req.aw.lock                  = dev_tr_req_i.aw.lock;
-    assign axi_aux_req.aw.cache                 = dev_tr_req_i.aw.cache;
-    assign axi_aux_req.aw.prot                  = dev_tr_req_i.aw.prot;
-    assign axi_aux_req.aw.qos                   = dev_tr_req_i.aw.qos;
-    assign axi_aux_req.aw.region                = dev_tr_req_i.aw.region;
-    assign axi_aux_req.aw.atop                  = dev_tr_req_i.aw.atop;
-    assign axi_aux_req.aw.user                  = dev_tr_req_i.aw.user;
+    assign axi_aux_req.aw.id        = dev_tr_req_i.aw.id;
+    assign axi_aux_req.aw.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr};    // translated address
+    assign axi_aux_req.aw.len       = dev_tr_req_i.aw.len;
+    assign axi_aux_req.aw.size      = dev_tr_req_i.aw.size;
+    assign axi_aux_req.aw.burst     = dev_tr_req_i.aw.burst;
+    assign axi_aux_req.aw.lock      = dev_tr_req_i.aw.lock;
+    assign axi_aux_req.aw.cache     = dev_tr_req_i.aw.cache;
+    assign axi_aux_req.aw.prot      = dev_tr_req_i.aw.prot;
+    assign axi_aux_req.aw.qos       = dev_tr_req_i.aw.qos;
+    assign axi_aux_req.aw.region    = dev_tr_req_i.aw.region;
+    assign axi_aux_req.aw.atop      = dev_tr_req_i.aw.atop;
+    assign axi_aux_req.aw.user      = dev_tr_req_i.aw.user;
 
     // W
-    assign axi_aux_req.w                        = dev_tr_req_i.w;
-    assign axi_aux_req.w_valid                  = dev_tr_req_i.w_valid;
+    assign axi_aux_req.w            = dev_tr_req_i.w;
+    assign axi_aux_req.w_valid      = dev_tr_req_i.w_valid;
 
     // B
-    assign axi_aux_req.b_ready                  = dev_tr_req_i.b_ready;
+    assign axi_aux_req.b_ready      = dev_tr_req_i.b_ready;
 
     // AR
-    assign axi_aux_req.ar_valid                 = resume_ar_q;
+    assign axi_aux_req.ar_valid     = resume_ar_q;
 
-    assign axi_aux_req.ar.id                    = dev_tr_req_i.ar.id;
-    assign axi_aux_req.ar.addr[riscv::PLEN-1:0] = spaddr;                   // translated address
-    assign axi_aux_req.ar.len                   = dev_tr_req_i.ar.len;
-    assign axi_aux_req.ar.size                  = dev_tr_req_i.ar.size;
-    assign axi_aux_req.ar.burst                 = dev_tr_req_i.ar.burst;
-    assign axi_aux_req.ar.lock                  = dev_tr_req_i.ar.lock;
-    assign axi_aux_req.ar.cache                 = dev_tr_req_i.ar.cache;
-    assign axi_aux_req.ar.prot                  = dev_tr_req_i.ar.prot;
-    assign axi_aux_req.ar.qos                   = dev_tr_req_i.ar.qos;
-    assign axi_aux_req.ar.region                = dev_tr_req_i.ar.region;
-    assign axi_aux_req.ar.user                  = dev_tr_req_i.ar.user;
+    assign axi_aux_req.ar.id        = dev_tr_req_i.ar.id;
+    assign axi_aux_req.ar.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr};    // translated address
+    assign axi_aux_req.ar.len       = dev_tr_req_i.ar.len;
+    assign axi_aux_req.ar.size      = dev_tr_req_i.ar.size;
+    assign axi_aux_req.ar.burst     = dev_tr_req_i.ar.burst;
+    assign axi_aux_req.ar.lock      = dev_tr_req_i.ar.lock;
+    assign axi_aux_req.ar.cache     = dev_tr_req_i.ar.cache;
+    assign axi_aux_req.ar.prot      = dev_tr_req_i.ar.prot;
+    assign axi_aux_req.ar.qos       = dev_tr_req_i.ar.qos;
+    assign axi_aux_req.ar.region    = dev_tr_req_i.ar.region;
+    assign axi_aux_req.ar.user      = dev_tr_req_i.ar.user;
 
     // R
-    assign axi_aux_req.r_ready                  = dev_tr_req_i.r_ready;
+    assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
 
     // Select transaction parameters source: TR request / DBG IF
     // Priority is given to normal translations
@@ -308,8 +306,8 @@ module riscv_iommu #(
             dbg_if_resp.ppn.de      = 1'b0;
 
             // To indicate completion
-            dbg_if_ctl_busy.go.d    = 1'b0;
-            dbg_if_ctl_busy.go.de   = 1'b0;
+            dbg_if_ctl_busy.busy.d  = 1'b0;
+            dbg_if_ctl_busy.busy.de = 1'b0;
 
             dbg_ongoing_n           = dbg_ongoing_q;
 
@@ -343,7 +341,7 @@ module riscv_iommu #(
                     dbg_if_resp.ppn.de      = 1'b1;
 
                     // Clear busy register to indicate completion
-                    dbg_if_ctl_busy.go.de   = 1'b1;
+                    dbg_if_ctl_busy.busy.de = 1'b1;
 
                     // Clear control flag
                     dbg_ongoing_n           = 1'b0;
@@ -396,8 +394,8 @@ module riscv_iommu #(
         assign dbg_if_resp.s.de         = 1'b0;
         assign dbg_if_resp.ppn.de       = 1'b0;
 
-        assign dbg_if_ctl_busy.go.d     = 1'b0;
-        assign dbg_if_ctl_busy.go.de    = 1'b0;
+        assign dbg_if_ctl_busy.busy.d   = 1'b0;
+        assign dbg_if_ctl_busy.busy.de  = 1'b0;
 
         assign dbg_ongoing_q            = 1'b0;
         assign dbg_ongoing_n            = 1'b0;
@@ -941,8 +939,8 @@ module riscv_iommu #(
         if (~rst_ni) begin
             resume_aw_q         <= 1'b0;
             resume_ar_q         <= 1'b0;
-            demux_aw_select_q   <= 1'b0;
-            demux_ar_select_q   <= 1'b0;
+            demux_aw_select_q   <= '0;
+            demux_ar_select_q   <= '0;
             request_type_q      <= IDLE;
         end
 
@@ -977,5 +975,3 @@ module riscv_iommu #(
     //pragma translate_on
     
 endmodule
-
-/* verilator lint_off WIDTH */

@@ -18,8 +18,6 @@
 //              This module fetches, decodes and executes commands
 //              issued by software into the CQ
 
-/* verilator lint_off WIDTH */
-
 module rv_iommu_cq_handler #(
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
@@ -50,7 +48,7 @@ module rv_iommu_cq_handler #(
     input  logic                    cmd_ill_i,
     input  logic                    fence_w_ip_i, 
 
-    output logic                    error_wen_o,            // To enable write of corresponding error bit to regmap
+    output logic                    error_wen_o,        // To enable write of corresponding error bit to regmap
     output logic                    cq_mf_o,            // Set when a memory fault occurred during CQ access
     output logic                    cmd_to_o,           // The execution of a command lead to a timeout //! Future work for PCIe ATS
     output logic                    cmd_ill_o,          // Illegal or unsupported command was fetched from CQ
@@ -147,18 +145,18 @@ module rv_iommu_cq_handler #(
         // Default values
         // AXI parameters
         // AW
-        mem_req_o.aw.id                     = 4'b0000;
-        mem_req_o.aw.addr[riscv::PLEN-1:0]  = cq_pptr_q;
-        mem_req_o.aw.len                    = 8'b0;
-        mem_req_o.aw.size                   = 3'b010;
-        mem_req_o.aw.burst                  = axi_pkg::BURST_FIXED;
-        mem_req_o.aw.lock                   = '0;
-        mem_req_o.aw.cache                  = '0;
-        mem_req_o.aw.prot                   = '0;
-        mem_req_o.aw.qos                    = '0;
-        mem_req_o.aw.region                 = '0;
-        mem_req_o.aw.atop                   = '0;
-        mem_req_o.aw.user                   = '0;
+        mem_req_o.aw.id         = 4'b0000;
+        mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, cq_pptr_q};
+        mem_req_o.aw.len        = 8'b0;
+        mem_req_o.aw.size       = 3'b010;
+        mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
+        mem_req_o.aw.lock       = '0;
+        mem_req_o.aw.cache      = '0;
+        mem_req_o.aw.prot       = '0;
+        mem_req_o.aw.qos        = '0;
+        mem_req_o.aw.region     = '0;
+        mem_req_o.aw.atop       = '0;
+        mem_req_o.aw.user       = '0;
 
         mem_req_o.aw_valid      = 1'b0;                 // IOMMU may write to memory when executing IOFENCE.C
 
@@ -174,52 +172,52 @@ module rv_iommu_cq_handler #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0010;              
-        mem_req_o.ar.addr[riscv::PLEN-1:0]  = cq_pptr_q;            // Physical address to access
-        mem_req_o.ar.len                    = 8'd1;                 // CQ entries are 16-bytes wide (2 beats)
-        mem_req_o.ar.size                   = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst                  = axi_pkg::BURST_INCR;  // Incremental start address
-        mem_req_o.ar.lock                   = '0;
-        mem_req_o.ar.cache                  = '0;
-        mem_req_o.ar.prot                   = '0;
-        mem_req_o.ar.qos                    = '0;
-        mem_req_o.ar.region                 = '0;
-        mem_req_o.ar.user                   = '0;
+        mem_req_o.ar.id         = 4'b0010;              
+        mem_req_o.ar.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, cq_pptr_q}; // Physical address to access
+        mem_req_o.ar.len        = 8'd1;                                         // CQ entries are 16-bytes wide (2 beats)
+        mem_req_o.ar.size       = 3'b011;                                       // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst      = axi_pkg::BURST_INCR;                          // Incremental start address
+        mem_req_o.ar.lock       = '0;
+        mem_req_o.ar.cache      = '0;
+        mem_req_o.ar.prot       = '0;
+        mem_req_o.ar.qos        = '0;
+        mem_req_o.ar.region     = '0;
+        mem_req_o.ar.user       = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
 
         // R
         mem_req_o.r_ready       = 1'b0;                 // to signal read completion
 
-        flush_vma_o         = 1'b0;
-        flush_gvma_o        = 1'b0;
-        flush_av_o          = 1'b0;
-        flush_gv_o          = 1'b0;
-        flush_pscv_o        = 1'b0;
-        flush_vpn_o         = '0;
-        flush_gscid_o       = '0;
-        flush_pscid_o       = '0;
+        flush_vma_o             = 1'b0;
+        flush_gvma_o            = 1'b0;
+        flush_av_o              = 1'b0;
+        flush_gv_o              = 1'b0;
+        flush_pscv_o            = 1'b0;
+        flush_vpn_o             = '0;
+        flush_gscid_o           = '0;
+        flush_pscid_o           = '0;
 
-        flush_ddtc_o        = 1'b0;
-        flush_dv_o          = 1'b0;
-        flush_did_o         = '0;
-        flush_pdtc_o        = 1'b0;
-        flush_pv_o          = 1'b0;
-        flush_pid_o         = '0;
+        flush_ddtc_o            = 1'b0;
+        flush_dv_o              = 1'b0;
+        flush_did_o             = '0;
+        flush_pdtc_o            = 1'b0;
+        flush_pv_o              = 1'b0;
+        flush_pid_o             = '0;
 
-        error_wen_o         = 1'b0;
+        error_wen_o             = 1'b0;
 
-        cq_head_o           = cq_head_i;
-        cq_mf_o             = cq_mf_i;
-        cmd_ill_o           = cmd_ill_i;
-        cmd_to_o            = cmd_to_i;
-        fence_w_ip_o        = fence_w_ip_i;
+        cq_head_o               = cq_head_i;
+        cq_mf_o                 = cq_mf_i;
+        cmd_ill_o               = cmd_ill_i;
+        cmd_to_o                = cmd_to_i;
+        fence_w_ip_o            = fence_w_ip_i;
 
-        state_n             = state_q;
-        wr_state_n          = wr_state_q;
-        cq_pptr_n           = cq_pptr_q;
-        cq_en_n             = cq_en_q;
-        cmd_n               = cmd_q;
+        state_n                 = state_q;
+        wr_state_n              = wr_state_q;
+        cq_pptr_n               = cq_pptr_q;
+        cq_en_n                 = cq_en_q;
+        cmd_n                   = cmd_q;
 
         case (state_q)
 
@@ -243,7 +241,7 @@ module rv_iommu_cq_handler #(
                     else if (cq_tail_i != masked_head) begin
 
                         // Set pptr with the paddr of the next entry
-                        cq_pptr_n = {cq_base_ppn_i, 12'b0} | {masked_head, 4'b0};
+                        cq_pptr_n = {cq_base_ppn_i, 12'b0} | ({{riscv::PLEN-32{1'b0}}, masked_head} << 4);
                         state_n = FETCH;
                     end
                 end
@@ -508,5 +506,3 @@ module rv_iommu_cq_handler #(
     end
     
 endmodule
-
-/* verilator lint_on WIDTH */

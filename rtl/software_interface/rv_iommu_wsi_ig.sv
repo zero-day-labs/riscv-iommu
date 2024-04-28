@@ -30,28 +30,26 @@ module rv_iommu_wsi_ig #(
     input  logic        wsi_en_i,
 
     // Interrupt pending bits
-    input  logic [(N_INT_SRCS-1):0]  intp_i,
+    input  logic [(N_INT_SRCS-1):0] intp_i,
 
     // Interrupt vectors
-    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_INT_SRCS],
+    input  logic [3:0]              intv_i[N_INT_SRCS],
 
     // interrupt wires
-    output logic [(N_INT_VEC-1):0]      wsi_wires_o
+    output logic [(N_INT_VEC-1):0]  wsi_wires_o
 );
 
     always_comb begin : wsi_support
             
-        /* verilator lint_off WIDTH */
         wsi_wires_o = '0;
 
         // If WSI generation supported and enabled
         if (wsi_en_i) begin
 
             for (int unsigned i = 0; i < N_INT_SRCS; i++) begin
-                wsi_wires_o[intv_i[i]] = intp_i[i];
+                wsi_wires_o[intv_i[i][(LOG2_INTVEC-1):0]] = intp_i[i];
             end
         end
-        /* verilator lint_on WIDTH */
     end
     
 endmodule

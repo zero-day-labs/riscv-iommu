@@ -135,6 +135,10 @@ module rv_iommu_sw_if_wrapper #(
     assign fctl_o           = reg2hw.fctl;
     assign ddtp_o           = reg2hw.ddtp;
 
+    // We keep ddtp.busy low as the IOMMU does not perform any operation when ddtp is written
+    assign hw2reg.ddtp.busy.d   = 1'b0;
+    assign hw2reg.ddtp.busy.de  = 1'b1;
+
     // Debug Interface registers
     assign dbg_if_iova_o        = reg2hw.tr_req_iova;
     assign dbg_if_ctl_o         = reg2hw.tr_req_ctl;
@@ -144,6 +148,7 @@ module rv_iommu_sw_if_wrapper #(
     // WE signal for cqcsr/fqcsr error bits
     logic   cq_error_wen;
     logic   fq_error_wen;
+    logic   hpm_ip;
 
     // To indicate if the IOMMU supports and uses WSI as interrupt generation mechanism
     logic   wsi_en;
@@ -170,17 +175,19 @@ module rv_iommu_sw_if_wrapper #(
     assign  hw2reg.fqcsr.fqof.de        = fq_error_wen;
     assign  hw2reg.fqcsr.fqon.de        = 1'b1;
     assign  hw2reg.fqcsr.busy.de        = 1'b1;
-    assign  hw2reg.ipsr.cip.de          = hw2reg.ipsr.cip.d;
-    assign  hw2reg.ipsr.fip.de          = hw2reg.ipsr.fip.d;
-    assign  hw2reg.ipsr.pmip.de         = hw2reg.ipsr.pmip.d;
+    // WE bits for ipsr are always set
+    assign  hw2reg.ipsr.cip.de          = cq_error_wen;
+    assign  hw2reg.ipsr.fip.de          = fq_error_wen;
+    assign  hw2reg.ipsr.pmip.d          = hpm_ip;
+    assign  hw2reg.ipsr.pmip.de         = hpm_ip;
 
     // Interrupt vectors
     // Priority is defined by the order of the vector: The lower the index, the higher the priority
-    logic [(LOG2_INTVEC-1):0]   intv[3];
+    logic [3:0] intv[3];
     assign intv = '{
-        reg2hw.icvec.civ.q[(LOG2_INTVEC-1):0],  // CQ
-        reg2hw.icvec.fiv.q[(LOG2_INTVEC-1):0],  // FQ
-        reg2hw.icvec.pmiv.q[(LOG2_INTVEC-1):0]  // HPM
+        reg2hw.icvec.civ.q,  // CQ
+        reg2hw.icvec.fiv.q,  // FQ
+        reg2hw.icvec.pmiv.q  // HPM
     };
 
     // MSI config table registers wires
@@ -331,7 +338,6 @@ module rv_iommu_sw_if_wrapper #(
         .mem_req_o              (cq_axi_req_o     )
     );
 
-    /* verilator lint_off WIDTH */
     //# Fault/Event Queue
     rv_iommu_fq_handler #(
         .axi_req_t      (axi_req_t  ),
@@ -367,7 +373,7 @@ module rv_iommu_sw_if_wrapper #(
         .event_valid_i          (report_fault_i     ),  // a fault/event has occurred
         .trans_type_i           ((msi_write_error) ? ('0) : (trans_type_i)),                            // transaction type
         .cause_code_i           (cause_code_i),         // Fault code as defined by IOMMU and Priv Spec
-        .iova_i                 ((msi_write_error) ? (msi_ig_axi_req_o.aw.addr[55:2]) : (iova_i)),            // to report if transaction has an IOVA
+        .iova_i                 ((msi_write_error) ? (msi_ig_axi_req_o.aw.addr) : (iova_i)),            // to report if transaction has an IOVA
         .gpaddr_i               (bad_gpaddr_i       ),  // to report bits [63:2] of the GPA in case of a Guest Page Fault
         .did_i                  (did_i              ),  // device_id associated with the transaction
         .pv_i                   (pv_i               ),  // to indicate if transaction has a valid process_id
@@ -382,7 +388,6 @@ module rv_iommu_sw_if_wrapper #(
 
         .is_full_o              (is_fq_fifo_full_o)
     );
-    /* verilator lint_on WIDTH */
 
     //# MSI Interrupt Generation
     generate
@@ -460,17 +465,40 @@ module rv_iommu_sw_if_wrapper #(
             .iohpmctr_o     (hw2reg.iohpmctr[N_IOHPMCTR-1:0]),  // event counters value
             .iohpmevt_o     (hw2reg.iohpmevt[N_IOHPMCTR-1:0]),  // event configuration registers
 
-            .hpm_ip_o       (hw2reg.ipsr.pmip.d)    // HPM IP bit. WE driven by itself
+            .hpm_ip_o       (hpm_ip)    // HPM IP bit.
         );
+
+        // Hardwire unused fields to zero
+        for (genvar i = N_IOHPMCTR; i < 31; i++) begin
+
+            assign hw2reg.iohpmctr[i].counter.d     = '0;
+            assign hw2reg.iohpmctr[i].counter.de    = 1'b0;
+
+            assign hw2reg.iohpmevt[i].of.d          = 1'b0;
+            assign hw2reg.iohpmevt[i].of.de         = 1'b0;
+        end
     end : gen_hpm
 
     else begin : gen_hpm_disabled
 
         // hardwire outputs to 0
-        assign hw2reg.iohpmcycles   = '0;
-        assign hw2reg.iohpmctr      = '0;
-        assign hw2reg.iohpmevt      = '0;
-        assign hw2reg.ipsr.pmip.d   = '0;
+        assign hw2reg.iohpmcycles.counter.d     = '0;
+        assign hw2reg.iohpmcycles.counter.de    = 1'b0;
+
+        assign hw2reg.iohpmcycles.of.d          = '0;
+        assign hw2reg.iohpmcycles.of.de         = 1'b0;
+
+        for (genvar i = 0; i < 31; i++) begin
+
+            assign hw2reg.iohpmctr[i].counter.d     = '0;
+            assign hw2reg.iohpmctr[i].counter.de    = 1'b0;
+
+            assign hw2reg.iohpmevt[i].of.d          = 1'b0;
+            assign hw2reg.iohpmevt[i].of.de         = 1'b0;
+        end
+
+        assign hpm_ip   = '0;
+
     end : gen_hpm_disabled
     endgenerate
 

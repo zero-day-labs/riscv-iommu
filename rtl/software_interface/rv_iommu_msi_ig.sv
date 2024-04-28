@@ -50,7 +50,7 @@ module rv_iommu_msi_ig #(
     input  logic [(N_INT_SRCS-1):0]     intp_i,
 
     // Interrupt vectors
-    input  logic [(LOG2_INTVEC-1):0]    intv_i[N_INT_SRCS],
+    input  logic [3:0]    intv_i[N_INT_SRCS],
 
     // MSI config table
     input  logic [53:0] msi_addr_x_i[16],
@@ -90,7 +90,7 @@ module rv_iommu_msi_ig #(
     } int_idx;
 
     // Interrupt source selector
-    logic [(LOG2_INTVEC-1):0]   intv_q, intv_n;
+    logic [3:0]   intv_q, intv_n;
 
     // Pending interrupts
     logic [(N_INT_VEC-1):0]     pending_q, pending_n;
@@ -100,9 +100,8 @@ module rv_iommu_msi_ig #(
         // Default values
         // AXI parameters
         // AW
-        /* verilator lint_off WIDTH */
         mem_req_o.aw.id         = 4'b0010;
-        mem_req_o.aw.addr       = {msi_addr_x_i[intv_q], 2'b0};
+        mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, msi_addr_x_i[intv_q], 2'b0};
         mem_req_o.aw.len        = 8'd0;         // MSI writes only 32 bits
         mem_req_o.aw.size       = 3'b010;       // 4-bytes beat
         mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
@@ -117,8 +116,7 @@ module rv_iommu_msi_ig #(
         mem_req_o.aw_valid      = 1'b0;
 
         // W
-        mem_req_o.w.data        = msi_data_x_i[intv_q];
-        /* verilator lint_on WIDTH */
+        mem_req_o.w.data        = {32'b0, msi_data_x_i[intv_q]};
         mem_req_o.w.strb        = 8'b0000_1111;
         mem_req_o.w.last        = 1'b0;
         mem_req_o.w.user        = '0;
@@ -161,16 +159,14 @@ module rv_iommu_msi_ig #(
 
                 // If MSI IG is not enabled, do nothing
                 if (msi_ig_enabled_i) begin
-                    
-                    /* verilator lint_off WIDTH */
 
                     for (int unsigned i = 0; i < N_INT_SRCS; i++) begin
 
                         //# Prioritize pending messages
-                        if (pending_q[intv_i[i]] && !msi_vec_masked_x_i[intv_i[i]]) begin
+                        if (pending_q[intv_i[i][(LOG2_INTVEC-1):0]] && !msi_vec_masked_x_i[intv_i[i]]) begin
                             intv_n                  = intv_i[i];
-                            pending_n[intv_i[i]]    = 1'b0;
-                            state_n                 = WRITE;
+                            pending_n[intv_i[i][(LOG2_INTVEC-1):0]] = 1'b0;
+                            state_n                                 = WRITE;
                             break;  // Use break to set priority
                         end
 
@@ -183,13 +179,13 @@ module rv_iommu_msi_ig #(
 
                             // IP bit was set in the last cycle, send MSI if vector is not masked
                             if (!msi_vec_masked_x_i[intv_i[i]]) begin
-                                intv_n      = intv_i[i];
-                                state_n     = WRITE;
+                                intv_n  = intv_i[i];
+                                state_n = WRITE;
                             end
 
                             // if vector is masked, then save request
                             else begin
-                                pending_n[intv_i[i]]    = 1'b1;
+                                pending_n[intv_i[i][(LOG2_INTVEC-1):0]] = 1'b1;
                             end
 
                             break;  // Use break to set priority

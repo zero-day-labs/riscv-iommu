@@ -25,6 +25,8 @@
 
 `include "cf_math_pkg.sv"
 
+/* verilator lint_off UNOPTFLAT */
+
 module lzc #(
   /// The width of the input vector.
   parameter int unsigned WIDTH = 2,
@@ -113,3 +115,5 @@ module lzc #(
   end : gen_lzc
 
 endmodule : lzc
+
+/* verilator lint_on UNOPTFLAT */

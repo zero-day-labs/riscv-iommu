@@ -32,8 +32,6 @@
         # is_implicit = ptw_error_stage2_int_o | (flush_cdw_o & ~is_ddt_walk)
 */
 
-/* verilator lint_off WIDTH */
-
 module rv_iommu_fq_handler #(
     /// AXI Full request struct type
     parameter type  axi_req_t       = logic,
@@ -192,18 +190,18 @@ module rv_iommu_fq_handler #(
         // Default values
         // AXI parameters
         // AW
-        mem_req_o.aw.id                     = 4'b0001;
-        mem_req_o.aw.addr[riscv::PLEN-1:0]  = fq_pptr_q;
-        mem_req_o.aw.len                    = 8'd3;         // FQ records are 32-bytes wide
-        mem_req_o.aw.size                   = 3'b011;
-        mem_req_o.aw.burst                  = axi_pkg::BURST_INCR;
-        mem_req_o.aw.lock                   = '0;
-        mem_req_o.aw.cache                  = '0;
-        mem_req_o.aw.prot                   = '0;
-        mem_req_o.aw.qos                    = '0;
-        mem_req_o.aw.region                 = '0;
-        mem_req_o.aw.atop                   = '0;
-        mem_req_o.aw.user                   = '0;
+        mem_req_o.aw.id         = 4'b0001;
+        mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, fq_pptr_q};
+        mem_req_o.aw.len        = 8'd3;         // FQ records are 32-bytes wide
+        mem_req_o.aw.size       = 3'b011;
+        mem_req_o.aw.burst      = axi_pkg::BURST_INCR;
+        mem_req_o.aw.lock       = '0;
+        mem_req_o.aw.cache      = '0;
+        mem_req_o.aw.prot       = '0;
+        mem_req_o.aw.qos        = '0;
+        mem_req_o.aw.region     = '0;
+        mem_req_o.aw.atop       = '0;
+        mem_req_o.aw.user       = '0;
 
         mem_req_o.aw_valid      = 1'b0;
 
@@ -308,7 +306,7 @@ module rv_iommu_fq_handler #(
                             end
 
                         // Set pptr with the paddr of the next entry
-                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({masked_tail, 5'b0});
+                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{riscv::PLEN-32{1'b0}}, masked_tail} << 5);
 
                         // If a fault that must be reported occurs and the FQ is full, set fq_of and signal error
                         if (fq_tail_i == fq_head_i - 1) begin
@@ -370,11 +368,12 @@ module rv_iommu_fq_handler #(
                             
                             mem_req_o.b_ready   = 1'b1;
                             fq_ip_o             = fq_ie_i;  // When a new record is written and fie is set, set ipsr.fip
+                            error_wen_o         = 1'b1;
+                            
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
                                 // AXI error
                                 state_n         = ERROR;
                                 fq_mf_o         = 1'b1;
-                                error_wen_o     = 1'b1;
                             end
 
                             // After writing FQ record we can go back to IDLE
@@ -425,5 +424,3 @@ module rv_iommu_fq_handler #(
     end
 
 endmodule
-
-/* verilator lint_on WIDTH */

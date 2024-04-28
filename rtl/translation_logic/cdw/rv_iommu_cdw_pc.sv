@@ -18,8 +18,6 @@
 //              Supports Process Contexts. Parameterized MSI translation support
 //              This module walks memory to locate DCs, PCs, and updates the corresponding cache.
 
-//# Disabled verilator_lint_off WIDTH
-
 module rv_iommu_cdw_pc #(
 
     // MSI translation support
@@ -260,18 +258,18 @@ module rv_iommu_cdw_pc #(
         mem_req_o.b_ready       = 1'b0;
 
         // AR
-        mem_req_o.ar.id                     = 4'b0001;                         
-        mem_req_o.ar.addr[riscv::PLEN-1:0]  = cdw_pptr_q;                       // Physical address to access
+        mem_req_o.ar.id         = 4'b0001;                         
+        mem_req_o.ar.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, cdw_pptr_q};    // Physical address to access
         // Number of beats per burst (1 for non-leaf entries, 2 for PC, 7 for DC)
-        mem_req_o.ar.len                    = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (ar_len) : (8'd1)) : (8'd0);
-        mem_req_o.ar.size                   = 3'b011;                           // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst                  = axi_pkg::BURST_INCR;              // Incremental start address
-        mem_req_o.ar.lock                   = '0;
-        mem_req_o.ar.cache                  = '0;
-        mem_req_o.ar.prot                   = '0;
-        mem_req_o.ar.qos                    = '0;
-        mem_req_o.ar.region                 = '0;
-        mem_req_o.ar.user                   = '0;
+        mem_req_o.ar.len        = (is_last_cdw_lvl) ? ((is_ddt_walk_q) ? (ar_len) : (8'd1)) : (8'd0);
+        mem_req_o.ar.size       = 3'b011;                                           // 64 bits (8 bytes) per beat
+        mem_req_o.ar.burst      = axi_pkg::BURST_INCR;                              // Incremental start address
+        mem_req_o.ar.lock       = '0;
+        mem_req_o.ar.cache      = '0;
+        mem_req_o.ar.prot       = '0;
+        mem_req_o.ar.qos        = '0;
+        mem_req_o.ar.region     = '0;
+        mem_req_o.ar.user       = '0;
 
         mem_req_o.ar_valid      = 1'b0;                 // to init a request
 
@@ -316,7 +314,7 @@ module rv_iommu_cdw_pc #(
 
                 // check for DDTC misses
                 // External logic guarantees that DDTC is looked up before PDTC
-                if (init_cdw_i) begin
+                if (init_cdw_i && !edge_trigger_q) begin
                     
                     is_ddt_walk_n = 1'b1;
                     state_n = MEM_ACCESS;
@@ -391,10 +389,6 @@ module rv_iommu_cdw_pc #(
                         // Must be first translated with second-stage translation
                         3'b100: begin
                             state_n = GUEST_TR;
-                        end
-
-                        default: begin
-                            state_n = IDLE;
                         end
                     endcase
                 end
@@ -755,13 +749,14 @@ module rv_iommu_cdw_pc #(
                 dc_msi_addr_mask    = rv_iommu::msi_addr_mask_t'(mem_resp_i.r.data);
                 dc_msi_addr_patt    = rv_iommu::msi_addr_pattern_t'(mem_resp_i.r.data);
 
-                up_dc_content.tc               = dc_tc_q;
-                up_dc_content.iohgatp          = dc_iohgatp_q;
-                up_dc_content.ta               = dc_ta_q;
-                up_dc_content.fsc              = dc_fsc_q;
-                up_dc_content.msi_addr_pattern = dc_msi_addr_patt_q;
-                up_dc_content.msi_addr_mask    = dc_msi_addr_mask_q;
-                up_dc_content.msiptp           = dc_msiptp_q;
+                up_dc_content.tc                = dc_tc_q;
+                up_dc_content.iohgatp           = dc_iohgatp_q;
+                up_dc_content.ta                = dc_ta_q;
+                up_dc_content.fsc               = dc_fsc_q;
+                up_dc_content.msi_addr_pattern  = dc_msi_addr_patt_q;
+                up_dc_content.msi_addr_mask     = dc_msi_addr_mask_q;
+                up_dc_content.msiptp            = dc_msiptp_q;
+                up_dc_content.reserved          = '0;
 
                 // Outputs
                 up_dc_content_o = up_dc_content;
@@ -892,4 +887,3 @@ module rv_iommu_cdw_pc #(
     end
 
 endmodule
-//# Disabled verilator_lint_on WIDTH

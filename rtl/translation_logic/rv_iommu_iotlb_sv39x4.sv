@@ -63,6 +63,7 @@ module rv_iommu_iotlb_sv39x4 #(
     output logic                    lu_2S_1G_o,
     output logic                    lu_is_msi_o,        // MSI translation
     output logic                    lu_hit_o,           // hit flag
+    output logic                    lu_miss_o,          // miss flag
     output riscv::pte_t             lu_1S_content_o,    // first-stage PTE (GPA PPN)
     output riscv::pte_t             lu_2S_content_o     // second-stage PTE (SPA PPN)
 );
@@ -113,6 +114,7 @@ module rv_iommu_iotlb_sv39x4 #(
         // default assignment
         lu_hit          = '{default: 0};
         lu_hit_o        = 1'b0;
+        lu_miss_o       = lookup_i;
         lu_1S_content_o = '{default: 0};
         lu_2S_content_o = '{default: 0};
         lu_1S_2M_o      = 1'b0;        
@@ -126,51 +128,48 @@ module rv_iommu_iotlb_sv39x4 #(
         is_1G           = '{default: 0};
         is_2M           = '{default: 0};
 
-        // Hit flag may be set only when we want to access the IOTLB
-        if (lookup_i) begin
+        for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
+        
+            // PSCID check is skipped for lookups with first-stage disabled
+            // If first-stage is enabled, only PSCID matches and global entries match
+            match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte_1S.g) && en_1S_i) || !en_1S_i;
 
-            for (int unsigned i = 0; i < IOTLB_ENTRIES; i++) begin
+            // GSCID check is skipped for lookups with second-stage disabled
+            // If second-stage is active, only GSCID matches will indicate entry match
+            match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
+
+            is_1G[i] = rv_iommu::is_trans_1G(   en_1S_i,
+                                                en_2S_i,
+                                                tags_q[i].is_1S_1G,
+                                                tags_q[i].is_2S_1G
+                                            );
+
+            is_2M[i] = rv_iommu::is_trans_2M(   en_1S_i,
+                                                en_2S_i,
+                                                tags_q[i].is_1S_1G,
+                                                tags_q[i].is_1S_2M,
+                                                tags_q[i].is_2S_1G,
+                                                tags_q[i].is_2S_2M
+                                            );
+
+            // Check enabled stages
+            match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
             
-                // PSCID check is skipped for lookups with first-stage disabled
-                // If first-stage is enabled, only PSCID matches and global entries match
-                match_pscid[i] = (((lu_pscid_i == tags_q[i].pscid) || content_q[i].pte_1S.g) && en_1S_i) || !en_1S_i;
-
-                // GSCID check is skipped for lookups with second-stage disabled
-                // If second-stage is active, only GSCID matches will indicate entry match
-                match_gscid[i] = (lu_gscid_i == tags_q[i].gscid && en_2S_i) || !en_2S_i;
-
-                is_1G[i] = rv_iommu::is_trans_1G(   en_1S_i,
-                                                    en_2S_i,
-                                                    tags_q[i].is_1S_1G,
-                                                    tags_q[i].is_2S_1G
-                                                );
-
-                is_2M[i] = rv_iommu::is_trans_2M(   en_1S_i,
-                                                    en_2S_i,
-                                                    tags_q[i].is_1S_1G,
-                                                    tags_q[i].is_1S_2M,
-                                                    tags_q[i].is_2S_1G,
-                                                    tags_q[i].is_2S_2M
-                                                );
-
-                // Check enabled stages
-                match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
+            // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
+            if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
                 
-                // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
-                if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
-                    
-                    // 1G match | 2M match | 4k match
-                    if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
-                        lu_1S_2M_o      = tags_q[i].is_1S_2M;        
-                        lu_1S_1G_o      = tags_q[i].is_1S_1G;
-                        lu_2S_2M_o      = tags_q[i].is_2S_2M;               
-                        lu_2S_1G_o      = tags_q[i].is_2S_1G;
-                        lu_is_msi_o     = tags_q[i].is_msi;
-                        lu_1S_content_o = content_q[i].pte_1S;
-                        lu_2S_content_o = content_q[i].pte_2S;
-                        lu_hit_o        = 1'b1;
-                        lu_hit[i]       = 1'b1;
-                    end
+                // 1G match | 2M match | 4k match
+                if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
+                    lu_1S_2M_o      = tags_q[i].is_1S_2M;        
+                    lu_1S_1G_o      = tags_q[i].is_1S_1G;
+                    lu_2S_2M_o      = tags_q[i].is_2S_2M;               
+                    lu_2S_1G_o      = tags_q[i].is_2S_1G;
+                    lu_is_msi_o     = tags_q[i].is_msi;
+                    lu_1S_content_o = content_q[i].pte_1S;
+                    lu_2S_content_o = content_q[i].pte_2S;
+                    lu_hit_o        = lookup_i;
+                    lu_miss_o       = 1'b0;
+                    lu_hit[i]       = 1'b1;
                 end
             end
         end

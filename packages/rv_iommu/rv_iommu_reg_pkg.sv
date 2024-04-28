@@ -25,6 +25,8 @@ package rv_iommu_reg_pkg;
   // Typedefs for registers //
   ////////////////////////////
 
+  // Reg -> Hardware: Registers driven by SW
+
   typedef struct packed {
     struct packed {
       logic [7:0]  q;
@@ -117,9 +119,6 @@ package rv_iommu_reg_pkg;
       logic [3:0]  q;
     } iommu_mode;
     struct packed {
-      logic        q;
-    } busy;
-    struct packed {
       logic [43:0] q;
     } ppn;
   } iommu_reg2hw_ddtp_reg_t;
@@ -177,12 +176,6 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic        q;
     } fence_w_ip;
-    struct packed {
-      logic        q;
-    } cqon;
-    struct packed {
-      logic        q;
-    } busy;
   } iommu_reg2hw_cqcsr_reg_t;
 
   typedef struct packed {
@@ -198,12 +191,6 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic        q;
     } fqof;
-    struct packed {
-      logic        q;
-    } fqon;
-    struct packed {
-      logic        q;
-    } busy;
   } iommu_reg2hw_fqcsr_reg_t;
 
   typedef struct packed {
@@ -216,9 +203,6 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic        q;
     } pmip;
-    struct packed {
-      logic        q;
-    } pip;
   } iommu_reg2hw_ipsr_reg_t;
 
   typedef struct packed {
@@ -304,21 +288,6 @@ package rv_iommu_reg_pkg;
 
   typedef struct packed {
     struct packed {
-      logic         q;
-    } fault;
-    struct packed {
-      logic [1:0]   q;
-    } pbmt;
-    struct packed {
-      logic         q;
-    } s;
-    struct packed {
-      logic [43:0]  q;
-    } ppn;
-  } iommu_reg2hw_tr_response_reg_t;
-
-  typedef struct packed {
-    struct packed {
       logic [3:0]  q;
     } civ;
     struct packed {
@@ -327,9 +296,6 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic [3:0]  q;
     } pmiv;
-    struct packed {
-      logic [3:0]  q;
-    } piv;
   } iommu_reg2hw_icvec_reg_t;
 
   typedef struct packed {
@@ -350,48 +316,14 @@ package rv_iommu_reg_pkg;
     } m;
   } iommu_reg2hw_msi_vec_ctl_reg_t;
 
-
-
-  typedef struct packed {
-    struct packed {
-      logic        d;
-      logic        de;
-    } be;
-    struct packed {
-      logic        d;
-      logic        de;
-    } wsi;
-    struct packed {
-      logic        d;
-      logic        de;
-    } gxl;
-  } iommu_hw2reg_fctl_reg_t;
+// Hardware -> Reg: Registers driven by internal IOMMU HW
 
   typedef struct packed {
-    struct packed {
-      logic [3:0]  d;
-      logic        de;
-    } iommu_mode;
     struct packed {
       logic        d;
       logic        de;
     } busy;
-    struct packed {
-      logic [43:0] d;
-      logic        de;
-    } ppn;
   } iommu_hw2reg_ddtp_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [4:0]  d;
-      logic        de;
-    } log2sz_1;
-    struct packed {
-      logic [43:0] d;
-      logic        de;
-    } ppn;
-  } iommu_hw2reg_cqb_reg_t;
 
   typedef struct packed {
     logic [31:0] d;
@@ -401,38 +333,9 @@ package rv_iommu_reg_pkg;
   typedef struct packed {
     logic [31:0] d;
     logic        de;
-  } iommu_hw2reg_cqt_reg_t;
-
-  typedef struct packed {
-    struct packed {
-      logic [4:0]  d;
-      logic        de;
-    } log2sz_1;
-    struct packed {
-      logic [43:0] d;
-      logic        de;
-    } ppn;
-  } iommu_hw2reg_fqb_reg_t;
-
-  typedef struct packed {
-    logic [31:0] d;
-    logic        de;
-  } iommu_hw2reg_fqh_reg_t;
-
-  typedef struct packed {
-    logic [31:0] d;
-    logic        de;
   } iommu_hw2reg_fqt_reg_t;
 
   typedef struct packed {
-    struct packed {
-      logic        d;
-      logic        de;
-    } cqen;
-    struct packed {
-      logic        d;
-      logic        de;
-    } cie;
     struct packed {
       logic        d;
       logic        de;
@@ -460,14 +363,6 @@ package rv_iommu_reg_pkg;
   } iommu_hw2reg_cqcsr_reg_t;
 
   typedef struct packed {
-    struct packed {
-      logic        d;
-      logic        de;
-    } fqen;
-    struct packed {
-      logic        d;
-      logic        de;
-    } fie;
     struct packed {
       logic        d;
       logic        de;
@@ -499,10 +394,6 @@ package rv_iommu_reg_pkg;
       logic        d;
       logic        de;
     } pmip;
-    struct packed {
-      logic        d;
-      logic        de;
-    } pip;
   } iommu_hw2reg_ipsr_reg_t;
 
   typedef struct packed {
@@ -534,7 +425,7 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic        d;
       logic        de;
-    } go;
+    } busy;
   } iommu_hw2reg_tr_req_ctl_reg_t;
 
   typedef struct packed {
@@ -576,7 +467,6 @@ package rv_iommu_reg_pkg;
     iommu_reg2hw_iohpmevt_reg_t [30:0] iohpmevt;
     iommu_reg2hw_tr_req_iova_reg_t tr_req_iova;
     iommu_reg2hw_tr_req_ctl_reg_t tr_req_ctl;
-    iommu_reg2hw_tr_response_reg_t tr_response;
     iommu_reg2hw_icvec_reg_t icvec; // [1439:1424]
     iommu_reg2hw_msi_addr_reg_t [15:0] msi_addr; // [1423:1368]
     iommu_reg2hw_msi_data_reg_t [15:0] msi_data; // [1367:1336]
@@ -585,13 +475,8 @@ package rv_iommu_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    iommu_hw2reg_fctl_reg_t             fctl; // [1787:1782]
     iommu_hw2reg_ddtp_reg_t             ddtp; // [1781:1730]
-    iommu_hw2reg_cqb_reg_t              cqb; // [1729:1679]
     iommu_hw2reg_cqh_reg_t              cqh; // [1678:1646]
-    iommu_hw2reg_cqt_reg_t              cqt; // [1645:1613]
-    iommu_hw2reg_fqb_reg_t              fqb; // [1612:1562]
-    iommu_hw2reg_fqh_reg_t              fqh; // [1561:1529]
     iommu_hw2reg_fqt_reg_t              fqt; // [1528:1496]
     iommu_hw2reg_cqcsr_reg_t            cqcsr; // [1495:1480]
     iommu_hw2reg_fqcsr_reg_t            fqcsr; // [1479:1468]
