@@ -1,0 +1,78 @@
+# Copyright © 2023 Manuel Rodríguez & Zero-Day Labs, Lda.
+# SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
+
+# Licensed under the Solderpad Hardware License v 2.1 (the “License”); 
+# you may not use this file except in compliance with the License, 
+# or, at your option, the Apache License version 2.0. 
+# You may obtain a copy of the License at https://solderpad.org/licenses/SHL-2.1/.
+# Unless required by applicable law or agreed to in writing, 
+# any work distributed under the License is distributed on an “AS IS” BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and limitations under the License.
+#
+# Author: Manuel Rodríguez <manuel.cederog@gmail.com>
+# Date: 02/03/2024
+# Acknowledges: SSRC - Technology Innovation Institute (TII)
+#
+# Description: RISC-V IOMMU Bender package descriptor.
+
+package:
+  name: riscv-iommu
+  authors:
+    - "Manuel Rodríguez <manuel.cederog@gmail.com>"
+
+dependencies:
+  common_cells: { git: "https://github.com/pulp-platform/common_cells.git", version: 1.30.0 }
+  axi: { git: "https://github.com/pulp-platform/axi.git", version: 0.39.2 }
+  register_interface: { git: "git@github.com:AlSaqr-platform/register_interface.git", version:  0.4.3 }
+
+sources:
+  # Source files grouped in levels. Files in level 0 have no dependencies on files in this
+  # package. Files in level 1 only depend on files in level 0, files in level 2 on files in
+  # levels 1 and 0, etc. Files within a level are ordered alphabetically.
+  # Level 0
+  - vendor/fifo_v2.sv
+  - vendor/fifo.sv
+  - vendor/axi_single_slice.sv
+  - vendor/axi_r_buffer.sv
+  - vendor/axi_aw_buffer.sv
+  - vendor/axi_w_buffer.sv
+  - vendor/axi_b_buffer.sv
+  - vendor/axi_ar_buffer.sv
+  - vendor/axi2apb_64_32.sv
+  - packages/rv_iommu/rv_iommu_field_pkg.sv
+  - packages/rv_iommu/rv_iommu_pkg.sv
+  - packages/rv_iommu/rv_iommu_reg_pkg.sv
+  - rtl/ext_interfaces/rv_iommu_axi4_bc.sv
+  - rtl/ext_interfaces/rv_iommu_ds_if.sv
+  - rtl/ext_interfaces/rv_iommu_prog_if.sv
+  # Level 1
+  - rtl/software_interface/regmap/rv_iommu_field_arb.sv
+  - rtl/software_interface/rv_iommu_cq_handler.sv
+  - rtl/software_interface/rv_iommu_fq_handler.sv
+  - rtl/software_interface/rv_iommu_hpm.sv
+  - rtl/software_interface/rv_iommu_msi_ig.sv
+  - rtl/software_interface/rv_iommu_wsi_ig.sv
+  - rtl/translation_logic/rv_iommu_ddtc.sv
+  - rtl/translation_logic/rv_iommu_iotlb_sv39x4.sv
+  - rtl/translation_logic/rv_iommu_mrif_handler.sv
+  - rtl/translation_logic/rv_iommu_mrifc.sv
+  - rtl/translation_logic/rv_iommu_msiptw.sv
+  - rtl/translation_logic/rv_iommu_pdtc.sv
+  - rtl/translation_logic/cdw/rv_iommu_cdw.sv
+  - rtl/translation_logic/cdw/rv_iommu_cdw_pc.sv
+  - rtl/translation_logic/ptw/rv_iommu_ptw_sv39x4.sv
+  - rtl/translation_logic/ptw/rv_iommu_ptw_sv39x4_pc.sv
+  # Level 2
+  - rtl/software_interface/regmap/rv_iommu_field.sv
+  - rtl/translation_logic/wrapper/rv_iommu_tw_sv39x4.sv
+  - rtl/translation_logic/wrapper/rv_iommu_tw_sv39x4_pc.sv
+  # Level 3
+  - rtl/software_interface/regmap/rv_iommu_regmap.sv
+  - rtl/translation_logic/wrapper/rv_iommu_translation_wrapper.sv
+  # Level 4
+  - rtl/software_interface/wrapper/rv_iommu_sw_if_wrapper.sv
+  # Level 5
+  - rtl/riscv_iommu.sv
+      
+
