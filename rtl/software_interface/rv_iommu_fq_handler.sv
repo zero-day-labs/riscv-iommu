@@ -129,7 +129,7 @@ module rv_iommu_fq_handler #(
 
     // Signal to indicate that the FQ is currently writing a new record
     logic is_idle;
-    assign is_idle = (state_q == IDLE);
+    assign is_idle = (wr_state_q == B_RESP);
     logic is_empty;
 
     // Wires to connect FIFO output
@@ -369,6 +369,8 @@ module rv_iommu_fq_handler #(
                             mem_req_o.b_ready   = 1'b1;
                             fq_ip_o             = fq_ie_i;  // When a new record is written and fie is set, set ipsr.fip
                             error_wen_o         = 1'b1;
+
+                            wr_state_n          = AW_REQ;   // reset WR FSM
                             
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
                                 // AXI error
