@@ -10,18 +10,21 @@
 //
 // Florian Zaruba <zarubaf@iis.ee.ethz.ch>
 
-module apb_to_reg (
-  input  logic          clk_i,
-  input  logic          rst_ni,
+module apb_to_reg #(
+  parameter int unsigned DataWidth = 32,
+  parameter int unsigned AddrWidth = 32
+) (
+  input  logic                 clk_i,
+  input  logic                 rst_ni,
 
-  input  logic          penable_i,
-  input  logic          pwrite_i,
-  input  logic [63:0]   paddr_i,
-  input  logic          psel_i,
-  input  logic [31:0]   pwdata_i,
-  output logic [31:0]   prdata_o,
-  output logic          pready_o,
-  output logic          pslverr_o,
+  input  logic                 penable_i,
+  input  logic                 pwrite_i,
+  input  logic [AddrWidth-1:0] paddr_i,
+  input  logic                 psel_i,
+  input  logic [DataWidth-1:0] pwdata_i,
+  output logic [DataWidth-1:0] prdata_o,
+  output logic                 pready_o,
+  output logic                 pslverr_o,
 
   REG_BUS.out  reg_o
 );
