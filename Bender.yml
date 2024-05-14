@@ -40,6 +40,7 @@ sources:
   - vendor/axi_b_buffer.sv
   - vendor/axi_ar_buffer.sv
   - vendor/axi2apb_64_32.sv
+  - vendor/apb_to_reg.sv
   - packages/rv_iommu/rv_iommu_field_pkg.sv
   - packages/rv_iommu/rv_iommu_pkg.sv
   - packages/rv_iommu/rv_iommu_reg_pkg.sv

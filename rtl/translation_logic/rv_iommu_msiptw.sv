@@ -398,6 +398,8 @@ module rv_iommu_msiptw #(
         end
     end : flat_seq
 
+    //# MSI-MRIF
+
     // States
     typedef enum logic[1:0] {
        MRIF_PTE,         // 00
