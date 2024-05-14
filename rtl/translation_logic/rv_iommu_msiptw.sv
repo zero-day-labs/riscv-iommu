@@ -398,6 +398,8 @@ module rv_iommu_msiptw #(
         end
     end : flat_seq
 
+    //# MSI-MRIF
+
     // States
     typedef enum logic[1:0] {
        MRIF_PTE,         // 00
@@ -405,14 +407,11 @@ module rv_iommu_msiptw #(
        MRIF_ERROR        // 10
     } state_mrif_t;
 
-    //# MSI-MRIF
-    generate
+    state_mrif_t mrif_state_q, mrif_state_n;
 
+    generate
     // MRIF support enabled
     if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
-
-        
-        state_mrif_t mrif_state_q, mrif_state_n;
 
         // Read ports
         rv_iommu::msi_pte_mrif_t msi_pte_mrif;
