@@ -10,9 +10,9 @@
 //
 // Florian Zaruba <zarubaf@iis.ee.ethz.ch>
 
-module apb_to_reg #(
+module apb2reg #(
   parameter int unsigned DataWidth = 32,
-  parameter int unsigned AddrWidth = 32
+  parameter int unsigned AddrWidth = 64
 ) (
   input  logic                 clk_i,
   input  logic                 rst_ni,
