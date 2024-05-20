@@ -42,7 +42,7 @@ INC += -I./rtl/ext_interfaces
 all: lint
 
 lint:
-	verilator ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS}
+	verilator-5.022 ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS}
 
 lint2log:
-	verilator ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS} 2> verilator.log
+	verilator-5.022 ${COMP_FLAGS} lint_checks.sv ${INC} ${WARN_FLAGS} 2> verilator.log

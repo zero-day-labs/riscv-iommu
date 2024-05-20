@@ -697,17 +697,33 @@ module riscv_iommu #(
     end : gen_axi4_bc_disabled
     endgenerate
 
+    //# Transaction completion routing
+    // Bus to ignore (discard) requests
+    axi_req_t   ignore_req;
+    axi_rsp_t   ignore_rsp;
+
     // Connect slaves to AXI demux
     // Depends on MRIF support
     generate
-    // Generate transaction ignoring mechanism
     if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
 
-        // Bus to ignore (discard) requests
-        axi_req_t   ignore_req;
-        axi_rsp_t   ignore_rsp;
+        // Generate transaction ignoring mechanism
+        rv_iommu_ign_slv #(
+            .AxiIdWidth     ( ID_WIDTH           ),
+            .Resp           ( axi_pkg::RESP_OKAY ),
+            .RespWidth      ( 32'd64             ),
+            .RespData       ( 64'h0              ),
+            .axi_req_t      ( axi_req_t          ),
+            .axi_rsp_t      ( axi_rsp_t          )
+        ) i_rv_iommu_ign_slv (
+            .clk_i          ( clk_i              ),
+            .rst_ni         ( rst_ni             ),
+            .ignore_req_i   ( ignore_req         ),
+            .ignore_resp_o  ( ignore_rsp         )
+        );
 
-        // AXI Success / Abort / Error AXI demux
+        // AXI demux
+        // Success / Abort / Error
         axi_demux #(
             .AxiIdWidth     (ID_WIDTH       ),
             // AXI channel structs
@@ -739,28 +755,16 @@ module riscv_iommu #(
             .mst_resps_i    ( {ignore_rsp, dev_comp_resp_i, error_rsp} )   // { 2: ignore slave (MRIF), 1: comp IF, 0: error slave }
         );
 
-        axi_err_slv #(
-            .AxiIdWidth   (ID_WIDTH           ),
-            .req_t        (axi_req_t          ),
-            .resp_t       (axi_rsp_t          ),
-            .Resp         (axi_pkg::RESP_OKAY ),  // this slave responds with OKAY to continue MRIF transactions
-            .RespWidth    (DATA_WIDTH         ),  // data response width, gets zero extended or truncated to r.data.
-            .RespData     (64'h0              ),  // return zero for reads
-            .ATOPs        (1'b1),                 // Activate support for ATOPs.
-            .MaxTrans     (1)                     // Maximum # of accepted transactions before stalling
-        ) i_iommu_axi_ignore_slv (
-            .clk_i        (clk_i      ),
-            .rst_ni       (rst_ni     ),
-            .test_i       (1'b0       ),
-            .slv_req_i    (ignore_req ),
-            .slv_resp_o   (ignore_rsp )
-        );
     end : gen_mrif_support
 
     // Do not generate transaction ignoring mechanism
     else begin : gen_mrif_support_disabled
 
-        // AXI Success / Error AXI demux
+        assign ignore_req       = '0;
+        assign ignore_rsp       = '0;
+
+        // AXI demux
+        // Success / Error
         axi_demux #(
             .AxiIdWidth     (ID_WIDTH       ),
             // AXI channel structs
