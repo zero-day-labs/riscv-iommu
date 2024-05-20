@@ -774,11 +774,10 @@ module riscv_iommu #(
             .ar_chan_t      ( ar_chan_t     ),
             .r_chan_t       ( r_chan_t      ),
             // AXI request/response
-            .req_t          ( axi_req_t     ),
-            .resp_t         ( axi_rsp_t     ),
+            .axi_req_t      ( axi_req_t     ),
+            .axi_resp_t     ( axi_rsp_t     ),
             .NoMstPorts     ( 2             ),  // MRIF supports adds ignoring mechanism
             .AxiLookBits    ( ID_WIDTH      ),  // Assuming same value as AXI ID width
-            .FallThrough    ( 1'b0          ),
             .SpillAw        ( 1'b0          ),
             .SpillW         ( 1'b0          ),
             .SpillB         ( 1'b0          ),

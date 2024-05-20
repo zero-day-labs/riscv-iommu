@@ -3545,6 +3545,6 @@ module rv_iommu_regmap #(
   assign unused_be = ^reg_be;
 
   // Assertions for Register Interface
-  // `ASSERT(en2addrHit, (reg_we || reg_re) |-> $onehot0(addr_hit))
+  `ASSERT(en2addrHit, (reg_we || reg_re) |-> $onehot0(addr_hit))
 
 endmodule
