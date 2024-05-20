@@ -26,6 +26,9 @@ dependencies:
   axi: { git: "https://github.com/pulp-platform/axi.git", version: 0.39.2 }
   register_interface: { git: "git@github.com:AlSaqr-platform/register_interface.git", version:  0.4.3 }
 
+export_include_dirs:
+  - include
+
 sources:
   # Source files grouped in levels. Files in level 0 have no dependencies on files in this
   # package. Files in level 1 only depend on files in level 0, files in level 2 on files in
