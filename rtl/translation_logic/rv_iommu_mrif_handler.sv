@@ -383,6 +383,8 @@ module rv_iommu_mrif_handler #(
             mrif_ip_q       <= '0;
             mrif_ie_q       <= '0;
             int_id_q        <= '0;
+            notice_ppn_q    <= '0;
+            notice_nid_q    <= '0;
         end 
         
         else begin

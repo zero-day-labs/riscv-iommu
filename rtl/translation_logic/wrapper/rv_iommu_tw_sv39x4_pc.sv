@@ -622,6 +622,7 @@ module rv_iommu_tw_sv39x4_pc #(
         
         assign msiptw_axi_req_o     = '0;
 
+        assign msiptw_active        = 1'b0;
         assign msiptw_ignore        = 1'b0;
 
         assign msi_up_vpn           = '0;
