@@ -69,7 +69,6 @@ module rv_iommu_regmap #(
   logic [STRB_WIDTH-1:0] 	reg_be;
   logic [DATA_WIDTH-1:0]  reg_rdata;
   logic           			  reg_error;
-  logic           			  reg_ready;
 
   logic addrmiss;
   logic [215:0] wr_err;
@@ -3006,8 +3005,8 @@ module rv_iommu_regmap #(
 
       assign tr_req_iova_vpn_l_we = 1'b0;
       assign tr_req_iova_vpn_l_wd = '0;
-      assign tr_req_iova_vpn_l_we = 1'b0;
-      assign tr_req_iova_vpn_l_wd = '0;
+      assign tr_req_iova_vpn_h_we = 1'b0;
+      assign tr_req_iova_vpn_h_wd = '0;
       assign tr_req_ctl_go_we = 1'b0;
       assign tr_req_ctl_go_wd = '0;
       assign tr_req_ctl_priv_we = 1'b0;
