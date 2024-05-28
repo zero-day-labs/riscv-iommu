@@ -617,6 +617,8 @@ module rv_iommu_cdw #(
             assign up_dc_content.ta         = dc_ta_q;
             assign up_dc_content.fsc        = dc_fsc_q;
 
+            assign msi_check_error     = 1'b0;
+
         end : gen_msi_support_disabled
     endgenerate
 

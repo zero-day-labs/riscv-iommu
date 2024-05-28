@@ -622,6 +622,7 @@ module rv_iommu_tw_sv39x4_pc #(
         
         assign msiptw_axi_req_o     = '0;
 
+        assign msiptw_active        = 1'b0;
         assign msiptw_ignore        = 1'b0;
 
         assign msi_up_vpn           = '0;
@@ -1069,7 +1070,6 @@ module rv_iommu_tw_sv39x4_pc #(
     //# Error routing
     always_comb begin : error_routing
 
-        cause_code_o    = '0;
         trans_error_o   =  ((wrap_error)         |
                            (cdw_error)          |
                            (ptw_error)          |
@@ -1084,6 +1084,7 @@ module rv_iommu_tw_sv39x4_pc #(
             msiptw_error:       cause_code_o = msiptw_cause_code;
             mrif_handler_error: cause_code_o = mrif_handler_cause_code;
             msi_write_error_i:  cause_code_o = rv_iommu::MSI_ST_ACCESS_FAULT;
+            default:            cause_code_o = '0;
         endcase
     end : error_routing
 
