@@ -204,10 +204,9 @@ module rv_iommu_msi_ig #(
 
             // Write MSI to the corresponding address
             WRITE: begin
-                case (wr_state_q)
 
                     // Send request to AW Channel
-                    AW_REQ: begin
+                    if (wr_state_q == AW_REQ) begin
                         mem_req_o.aw_valid  = 1'b1;
 
                         if (mem_resp_i.aw_ready) begin
@@ -215,8 +214,8 @@ module rv_iommu_msi_ig #(
                         end
                     end
 
+                    else if (wr_state_q == W_DATA) begin
                     // Send data through W channel
-                    W_DATA: begin
                         mem_req_o.w_valid   = 1'b1;
                         mem_req_o.w.last    = 1'b1;
 
@@ -226,9 +225,9 @@ module rv_iommu_msi_ig #(
                     end
 
                     // Check response code
-                    B_RESP: begin
-                        if (mem_resp_i.b_valid) begin
-                            
+                    else if (wr_state_q == B_RESP) begin
+                       if (mem_resp_i.b_valid) begin
+
                             mem_req_o.b_ready   = 1'b1;
                             state_n             = IDLE;
                             wr_state_n  = AW_REQ;
@@ -241,9 +240,8 @@ module rv_iommu_msi_ig #(
                             end
                         end
                     end
-
-                    default: state_n = IDLE;
-                endcase
+                    else
+                        state_n = IDLE;
             end
 
             // We may receive an AXI or access error when writing
