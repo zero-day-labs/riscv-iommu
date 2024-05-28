@@ -319,13 +319,6 @@ package rv_iommu_reg_pkg;
 // Hardware -> Reg: Registers driven by internal IOMMU HW
 
   typedef struct packed {
-    struct packed {
-      logic        d;
-      logic        de;
-    } busy;
-  } iommu_hw2reg_ddtp_reg_t;
-
-  typedef struct packed {
     logic [31:0] d;
     logic        de;
   } iommu_hw2reg_cqh_reg_t;
@@ -475,7 +468,6 @@ package rv_iommu_reg_pkg;
 
   // HW -> register type
   typedef struct packed {
-    iommu_hw2reg_ddtp_reg_t             ddtp; // [1781:1730]
     iommu_hw2reg_cqh_reg_t              cqh; // [1678:1646]
     iommu_hw2reg_fqt_reg_t              fqt; // [1528:1496]
     iommu_hw2reg_cqcsr_reg_t            cqcsr; // [1495:1480]

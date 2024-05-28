@@ -94,6 +94,7 @@ module rv_iommu_sw_if_wrapper #(
     output logic [19:0]                 flush_pscid_o,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
     
     // Request data
+    input  logic                            in_flight_i,        // The IOMMU is currently processing a transaction
     input  logic [rv_iommu::TTYP_LEN-1:0]   trans_type_i,       // transaction type
     input  logic [23:0]                     did_i,              // device_id associated with the transaction
     input  logic                            pv_i,               // to indicate if transaction has a valid process_id
@@ -134,10 +135,6 @@ module rv_iommu_sw_if_wrapper #(
     assign capabilities_o   = reg2hw.capabilities;
     assign fctl_o           = reg2hw.fctl;
     assign ddtp_o           = reg2hw.ddtp;
-
-    // We keep ddtp.busy low as the IOMMU does not perform any operation when ddtp is written
-    assign hw2reg.ddtp.busy.d   = 1'b0;
-    assign hw2reg.ddtp.busy.de  = 1'b1;
 
     // Debug Interface registers
     assign dbg_if_iova_o        = reg2hw.tr_req_iova;
@@ -264,16 +261,17 @@ module rv_iommu_sw_if_wrapper #(
         .reg_req_t      ( reg_req_t  ),
         .reg_rsp_t      ( reg_rsp_t  )
     ) i_rv_iommu_regmap (
-        .clk_i      (clk_i),
-        .rst_ni     (rst_ni),
+        .clk_i          ( clk_i         ),
+        .rst_ni         ( rst_ni        ),
 
-        .reg_req_i  (regmap_req_i),
-        .reg_rsp_o  (regmap_resp_o),
+        .reg_req_i      ( regmap_req_i  ),
+        .reg_rsp_o      ( regmap_resp_o ),
 
-        .reg2hw     (reg2hw),
-        .hw2reg     (hw2reg),
+        .reg2hw         ( reg2hw        ),
+        .hw2reg         ( hw2reg        ),
         
-        .devmode_i  (1'b0)
+        .devmode_i      ( 1'b0          ),
+        .in_flight_i    ( in_flight_i   )
     );
 
     //# Command Queue

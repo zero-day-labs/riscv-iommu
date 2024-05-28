@@ -539,8 +539,9 @@ module rv_iommu_cdw_pc #(
 
                             // Config checks
                             if ((|dc_tc.reserved_1) || (|dc_tc.reserved_2) || 
-                                (!dc_tc.en_ats && (dc_tc.t2gpa || dc_tc.en_pri || dc_tc.prpr)) ||
-                                (!caps_t2gpa_i && dc_tc.t2gpa) ||
+                                (!caps_ats_i && (dc_tc.en_ats || dc_tc.en_pri || dc_tc.prpr)) ||
+                                (!dc_tc.en_ats && (dc_tc.t2gpa || dc_tc.en_pri)) ||
+                                (!dc_tc.en_pri && dc_tc.prpr) ||
                                 (!dc_tc.pdtv && dc_tc.dpe) ||
                                 (!caps_amo_hwad_i && (dc_tc.sade || dc_tc.gade)) ||
                                 (fctl_be_i != dc_tc.sbe) ||

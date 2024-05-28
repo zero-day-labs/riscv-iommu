@@ -40,8 +40,8 @@ module rv_iommu_regmap #(
   // DO NOT MODIFY MANUALLY
   parameter int unsigned 	STRB_WIDTH = (DATA_WIDTH / 8)
   ) (
-  input logic clk_i,
-  input logic rst_ni,
+  input  logic clk_i,
+  input  logic rst_ni,
   // From SW
   input  reg_req_t 						reg_req_i,
   output reg_rsp_t 						reg_rsp_o,
@@ -49,8 +49,8 @@ module rv_iommu_regmap #(
   output rv_iommu_reg_pkg::iommu_reg2hw_t 	reg2hw, // Write
   input  rv_iommu_reg_pkg::iommu_hw2reg_t 	hw2reg, // Read
 
-  // Config
-  input logic devmode_i // If 1, explicit error return for unmapped register access
+  input  logic devmode_i,   // If 1, explicit error return for unmapped register access
+  input  logic in_flight_i  // The IOMMU is currently processing a translation
 );
 
   import rv_iommu_reg_pkg::* ;
@@ -124,29 +124,33 @@ module rv_iommu_regmap #(
   logic 		    capabilities_pd20_qs;
 
   // fctl
-  logic 		fctl_be_qs;
-//   logic fctl_be_wd;
-//   logic fctl_be_we;
-  logic 		fctl_wsi_qs;
-  logic 		fctl_wsi_wd;
-  logic 		fctl_wsi_we;
-  logic 		fctl_gxl_qs;
-  logic 		fctl_gxl_wd;
-  logic 		fctl_gxl_we;
+  logic 		    fctl_be_qs;
+  logic 		    fctl_wsi_qs;
+  logic 		    fctl_wsi_wd;
+  logic 		    fctl_wsi_we;
+  logic 		    fctl_gxl_qs;
+  logic 		    fctl_gxl_wd;
+  logic 		    fctl_gxl_we;
 
-  // ddtp (low)
+  // ddtp
   logic [3:0] 	ddtp_iommu_mode_qs;
   logic [3:0] 	ddtp_iommu_mode_wd;
   logic 		    ddtp_iommu_mode_we;
+  logic         ddtp_busy_d;
+  logic         ddtp_busy_de;
   logic 		    ddtp_busy_qs;
   logic [21:0] 	ddtp_ppn_l_qs;
   logic [21:0] 	ddtp_ppn_l_wd;
   logic 		    ddtp_ppn_l_we;
-
-  // ddtp (high)
   logic [21:0] 	ddtp_ppn_h_qs;
   logic [21:0] 	ddtp_ppn_h_wd;
   logic 		    ddtp_ppn_h_we;
+
+  logic         write_l_n, write_l_q;
+  logic         write_h_n, write_h_q;
+  logic [3:0]   ddtp_iommu_mode_n, ddtp_iommu_mode_q;
+  logic [21:0]  ddtp_ppn_l_n, ddtp_ppn_l_q;
+  logic [21:0]  ddtp_ppn_h_n, ddtp_ppn_h_q;
 
   // cqb (low)
   logic [4:0] 	cqb_log2sz_1_qs;
@@ -191,50 +195,50 @@ module rv_iommu_regmap #(
   logic [31:0] 	fqt_qs;
 
   // cqcsr
-  logic 		cqcsr_cqen_qs;
-  logic 		cqcsr_cqen_wd;
-  logic 		cqcsr_cqen_we;
-  logic 		cqcsr_cie_qs;
-  logic 		cqcsr_cie_wd;
-  logic 		cqcsr_cie_we;
-  logic 		cqcsr_cqmf_qs;
-  logic 		cqcsr_cqmf_wd;
-  logic 		cqcsr_cqmf_we;
-  logic 		cqcsr_cmd_to_qs;
-  logic 		cqcsr_cmd_to_wd;
-  logic 		cqcsr_cmd_to_we;
-  logic 		cqcsr_cmd_ill_qs;
-  logic 		cqcsr_cmd_ill_wd;
-  logic 		cqcsr_cmd_ill_we;
-  logic 		cqcsr_fence_w_ip_qs;
-  logic 		cqcsr_fence_w_ip_wd;
-  logic 		cqcsr_fence_w_ip_we;
-  logic 		cqcsr_cqon_qs;
-  logic 		cqcsr_busy_qs;
+  logic 		    cqcsr_cqen_qs;
+  logic 		    cqcsr_cqen_wd;
+  logic 		    cqcsr_cqen_we;
+  logic 		    cqcsr_cie_qs;
+  logic 		    cqcsr_cie_wd;
+  logic 		    cqcsr_cie_we;
+  logic 		    cqcsr_cqmf_qs;
+  logic 		    cqcsr_cqmf_wd;
+  logic 		    cqcsr_cqmf_we;
+  logic 		    cqcsr_cmd_to_qs;
+  logic 		    cqcsr_cmd_to_wd;
+  logic 		    cqcsr_cmd_to_we;
+  logic 		    cqcsr_cmd_ill_qs;
+  logic 		    cqcsr_cmd_ill_wd;
+  logic 		    cqcsr_cmd_ill_we;
+  logic 		    cqcsr_fence_w_ip_qs;
+  logic 		    cqcsr_fence_w_ip_wd;
+  logic 		    cqcsr_fence_w_ip_we;
+  logic 		    cqcsr_cqon_qs;
+  logic 		    cqcsr_busy_qs;
 
   // fqcsr
-  logic 		fqcsr_fqen_qs;
-  logic 		fqcsr_fqen_wd;
-  logic 		fqcsr_fqen_we;
-  logic 		fqcsr_fie_qs;
-  logic 		fqcsr_fie_wd;
-  logic 		fqcsr_fie_we;
-  logic 		fqcsr_fqmf_qs;
-  logic 		fqcsr_fqmf_wd;
-  logic 		fqcsr_fqmf_we;
-  logic 		fqcsr_fqof_qs;
-  logic 		fqcsr_fqof_wd;
-  logic 		fqcsr_fqof_we;
-  logic 		fqcsr_fqon_qs;
-  logic 		fqcsr_busy_qs;
+  logic 		    fqcsr_fqen_qs;
+  logic 		    fqcsr_fqen_wd;
+  logic 		    fqcsr_fqen_we;
+  logic 		    fqcsr_fie_qs;
+  logic 		    fqcsr_fie_wd;
+  logic 		    fqcsr_fie_we;
+  logic 		    fqcsr_fqmf_qs;
+  logic 		    fqcsr_fqmf_wd;
+  logic 		    fqcsr_fqmf_we;
+  logic 		    fqcsr_fqof_qs;
+  logic 		    fqcsr_fqof_wd;
+  logic 		    fqcsr_fqof_we;
+  logic 		    fqcsr_fqon_qs;
+  logic 		    fqcsr_busy_qs;
 
   // iocountinh
-  logic 		              iocountinh_cy_qs;
-  logic 		              iocountinh_cy_wd;
-  logic 		              iocountinh_cy_we;
-  logic [31-1:0]	        iocountinh_hpm_qs;
-  logic [31-1:0]	        iocountinh_hpm_wd;
-  logic 		              iocountinh_hpm_we;
+  logic 		    iocountinh_cy_qs;
+  logic 		    iocountinh_cy_wd;
+  logic 		    iocountinh_cy_we;
+  logic [30:0]	iocountinh_hpm_qs;
+  logic [30:0]	iocountinh_hpm_wd;
+  logic 		    iocountinh_hpm_we;
 
   // iohpmcycles (low)
   logic [31:0]	iohpmcycles_counter_l_qs;
@@ -493,11 +497,15 @@ module rv_iommu_regmap #(
     assign capabilities_hpm_qs = 1'h0;
   end
 
-
   //   F[dbg]: 31:31
-  assign reg2hw.capabilities.dbg.q = 1'h0;
-  assign capabilities_dbg_qs = 1'h0;
-
+  if (InclDBG) begin
+    assign reg2hw.capabilities.dbg.q = 1'h1;
+    assign capabilities_dbg_qs = 1'h1;
+  end
+  else begin
+    assign reg2hw.capabilities.dbg.q = 1'h0;
+    assign capabilities_dbg_qs = 1'h0;
+  end
 
   //   F[pas]: 37:32
   assign reg2hw.capabilities.pas.q = 6'h38;
@@ -622,8 +630,8 @@ module rv_iommu_regmap #(
     .wd     ('0  ),
 
     // from internal hardware
-    .de     ('0),
-    .d      ('0),
+    .de     (ddtp_busy_de),
+    .d      (ddtp_busy_d),
     .ds     (),
 
     // to internal hardware
@@ -2767,17 +2775,115 @@ module rv_iommu_regmap #(
   assign fctl_gxl_we = addr_hit[2] & reg_we & !reg_error;
   assign fctl_gxl_wd = reg_wdata[2];
 
-  // ddtp (low)
-  // Only values less or equal than 4 can be written to ddtp.iommu_mode
-  assign ddtp_iommu_mode_we = addr_hit[3] & reg_we & !reg_error & (reg_wdata[3:0] <= 4);
-  assign ddtp_iommu_mode_wd = reg_wdata[3:0];
+  // Writes to the ddtp register must be committed to both register halves at the same time
+  // and only if the IOMMU has no in-flight transactions
+  always_comb begin : ddtp_write_comb
 
-  assign ddtp_ppn_l_we = addr_hit[3] & reg_we & !reg_error;
-  assign ddtp_ppn_l_wd = reg_wdata[31:10];
+    ddtp_iommu_mode_we  = 1'b0;
+    ddtp_iommu_mode_wd  = ddtp_iommu_mode_q;
+    ddtp_ppn_l_we       = 1'b0;
+    ddtp_ppn_l_wd       = ddtp_ppn_l_q;
+    ddtp_ppn_h_we       = 1'b0;
+    ddtp_ppn_h_wd       = ddtp_ppn_h_q;
 
-  // ddtp (high)
-  assign ddtp_ppn_h_we = addr_hit[4] & reg_we & !reg_error;
-  assign ddtp_ppn_h_wd = reg_wdata[21:0];
+    write_l_n           = write_l_q;
+    write_h_n           = write_h_q;
+    ddtp_iommu_mode_n   = ddtp_iommu_mode_q;
+    ddtp_ppn_l_n        = ddtp_ppn_l_q;
+    ddtp_ppn_h_n        = ddtp_ppn_h_q;
+
+    ddtp_busy_de        = 1'b0;
+    ddtp_busy_d         = 1'b0;
+
+    // The IOMMU is not processing a transaction and there is data to be written
+    // Commit the write
+    if (!in_flight_i && write_h_q && write_l_q) begin
+      write_l_n           = 1'b0;
+      write_h_n           = 1'b0;
+
+      ddtp_iommu_mode_we  = 1'b1;
+      ddtp_ppn_l_we       = 1'b1;
+      ddtp_ppn_h_we       = 1'b1;
+
+      // Clear busy bit
+      ddtp_busy_de      = 1'b1;
+    end
+    
+    // SW is trying to write to any of the halves of ddtp
+    // First word
+    if (((addr_hit[3] && (reg_wdata[3:0] <= 4)) || addr_hit[4]) && reg_we && !reg_error) begin
+
+      // Low half
+      if (addr_hit[3] && !write_h_q) begin
+        write_l_n         = 1'b1;
+        ddtp_iommu_mode_n = reg_wdata[3:0];
+        ddtp_ppn_l_n      = reg_wdata[31:10];
+      end
+      // High half
+      else if (addr_hit[4] && !write_l_q) begin
+        write_h_n         = 1'b1;
+        ddtp_ppn_h_n      = reg_wdata[21:0];
+      end
+
+      // Second word
+      if ((addr_hit[4] && write_l_q) || (addr_hit[3] && write_h_q)) begin
+
+        // Check whether the IOMMU has in-flight transactions
+        if (in_flight_i) begin
+          // Wait for all in-flight transactions to finish
+          // Set busy bit
+          ddtp_busy_de      = 1'b1;
+          ddtp_busy_d       = 1'b1;
+
+          if (addr_hit[4]) begin
+            write_h_n     = 1'b1;
+            ddtp_ppn_h_n  = reg_wdata[21:0];
+          end
+          else begin
+            write_l_n         = 1'b1;
+            ddtp_iommu_mode_n = reg_wdata[3:0];
+            ddtp_ppn_l_n      = reg_wdata[31:10];
+          end
+        end
+
+        // There are no in-flight transactions. We can modify ddtp
+        else begin
+          write_l_n             = 1'b0;
+          write_h_n             = 1'b0;
+
+          ddtp_iommu_mode_we    = 1'b1;
+          ddtp_ppn_l_we         = 1'b1;
+          ddtp_ppn_h_we         = 1'b1;
+
+          if (addr_hit[4]) begin
+            ddtp_ppn_h_wd       = reg_wdata[21:0];
+          end
+          else begin
+            ddtp_iommu_mode_wd  = reg_wdata[3:0];
+            ddtp_ppn_l_wd       = reg_wdata[31:10];
+          end
+        end
+      end
+    end
+  end : ddtp_write_comb
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : ddtp_write_ff
+
+        if (~rst_ni) begin
+          write_l_q         <= 1'b0;
+          write_h_q         <= 1'b0;
+          ddtp_iommu_mode_q <= '0;
+          ddtp_ppn_l_q      <= '0;
+          ddtp_ppn_h_q      <= '0;
+
+        end else begin
+          write_l_q         <= write_l_n;
+          write_h_q         <= write_h_n;
+          ddtp_iommu_mode_q <= ddtp_iommu_mode_n;
+          ddtp_ppn_l_q      <= ddtp_ppn_l_n;
+          ddtp_ppn_h_q      <= ddtp_ppn_h_n;
+        end
+    end : ddtp_write_ff
 
   // cqb (low)
   assign cqb_log2sz_1_we = addr_hit[5] & reg_we & !reg_error;

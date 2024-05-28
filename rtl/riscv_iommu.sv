@@ -630,6 +630,7 @@ module riscv_iommu #(
         .flush_pscid_o      (flush_pscid),  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
         // Request data
+        .in_flight_i        (request_ongoing | dbg_if_ctl.go.q),    // The IOMMU is currently processing a transaction
         .trans_type_i       (ttype),            // transaction type
         .did_i              (did),              // device_id associated with the transaction
         .pv_i               (pv),               // to indicate if transaction has a valid process_id
