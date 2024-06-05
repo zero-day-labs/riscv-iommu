@@ -379,6 +379,13 @@ module rv_iommu_cdw #(
                                 wait_rlast_n    = 1'b1;
                             end
 
+                            // If inclPC == 0 and dc.tc.pdtv == 1, stop and report "TRANS_TYPE_DISALLOWED"
+                            else if (dc_tc.pdtv) begin
+                                state_n         = ERROR;
+                                cause_n         = rv_iommu::TRANS_TYPE_DISALLOWED;
+                                wait_rlast_n    = 1'b1;
+                            end
+                            
                             // Config checks
                             else if ((|dc_tc.reserved_1) || (|dc_tc.reserved_2) || 
                                 (!caps_ats_i && (dc_tc.en_ats || dc_tc.en_pri || dc_tc.prpr)) ||
