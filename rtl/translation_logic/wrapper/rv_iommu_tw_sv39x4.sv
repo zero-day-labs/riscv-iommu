@@ -804,26 +804,16 @@ module rv_iommu_tw_sv39x4 #(
                     end
                 end
 
-                 // Untranslated request
+                // Untranslated request
                 else begin
-                    
-                    // No Process Context
-                    if (!dc_base.tc.pdtv) begin
-                        gscid           = dc_base.iohgatp.gscid;
-                        pscid           = dc_base.ta.pscid;
-                        iohgatp_ppn     = dc_base.iohgatp.ppn;
-                        iosatp_ppn      = dc_base.fsc.ppn;
-                        iotlb_access    = 1'b1;
-                    end
-
-                    // Process Context associated
-                    // Raise fault since this module does not support PCs
-                    else begin
-                        wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
-                        wrap_error      = 1'b1;
-                    end
+                    gscid           = dc_base.iohgatp.gscid;
+                    pscid           = dc_base.ta.pscid;
+                    iohgatp_ppn     = dc_base.iohgatp.ppn;
+                    iosatp_ppn      = dc_base.fsc.ppn;
+                    iotlb_access    = 1'b1;
                 end
             end
+        end
 
             //# IOTLB Lookup & Hit
             if (iotlb_lu_hit) begin
