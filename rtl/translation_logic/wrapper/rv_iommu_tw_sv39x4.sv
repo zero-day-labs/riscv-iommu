@@ -813,7 +813,6 @@ module rv_iommu_tw_sv39x4 #(
                     iotlb_access    = 1'b1;
                 end
             end
-        end
 
             //# IOTLB Lookup & Hit
             if (iotlb_lu_hit) begin
