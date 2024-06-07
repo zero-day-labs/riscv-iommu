@@ -148,6 +148,9 @@ module rv_iommu_ptw_sv39x4_pc #(
     // To signal page faults / guest page faults
     logic pf_excep_q, pf_excep_n;
 
+    // To signal data corruption
+    logic pt_data_corrupt_q, pt_data_corrupt_n;
+
     // PTW walking
     assign ptw_active_o    = (state_q != IDLE);
 
@@ -334,6 +337,7 @@ module rv_iommu_ptw_sv39x4_pc #(
         cause_n                 = cause_q;
         cdw_implicit_access_n   = cdw_implicit_access_q;
         pf_excep_n              = pf_excep_q;
+        pt_data_corrupt_n       = pt_data_corrupt_q;
 
         case (state_q)
 
@@ -346,6 +350,7 @@ module rv_iommu_ptw_sv39x4_pc #(
                 gpaddr_n            = '0;
                 leaf_1Spte_n        = '0;
                 pf_excep_n          = 1'b0;
+                pt_data_corrupt_n   = 1'b0;
 
                 // check for possible IOTLB miss
                 if ((init_ptw_i && !edge_trigger_q) || cdw_implicit_access_i) begin
@@ -683,7 +688,7 @@ module rv_iommu_ptw_sv39x4_pc #(
                     if (mem_resp_i.r.resp != axi_pkg::RESP_OKAY) begin
                         cause_n = rv_iommu::PT_DATA_CORRUPTION;
                         state_n = ERROR;
-
+                        pt_data_corrupt_n = 1'b1;
                         update_o = 1'b0;
                         cdw_done_o  = 1'b0;
                     end
@@ -697,18 +702,21 @@ module rv_iommu_ptw_sv39x4_pc #(
                 ptw_error_o = 1'b1;
 
                 // Set cause code and flags
-                if (pf_excep_q) begin
-                    if (ptw_stage_q != STAGE_1) begin
-                        ptw_error_2S_o   = 1'b1;
-                        if (is_store_i) cause_code_o = rv_iommu::STORE_GUEST_PAGE_FAULT;
-                        else            cause_code_o = rv_iommu::LOAD_GUEST_PAGE_FAULT;
-                    end
-                    else begin
-                        if (is_store_i) cause_code_o = rv_iommu::STORE_PAGE_FAULT;
-                        else            cause_code_o = rv_iommu::LOAD_PAGE_FAULT;
+                if(pt_data_corrupt_q)
+                    cause_code_o = cause_q;
+                else begin
+                    if (pf_excep_q) begin
+                        if (ptw_stage_q != STAGE_1) begin
+                            ptw_error_2S_o   = 1'b1;
+                            if (is_store_i) cause_code_o = rv_iommu::STORE_GUEST_PAGE_FAULT;
+                            else            cause_code_o = rv_iommu::LOAD_GUEST_PAGE_FAULT;
+                        end
+                        else begin
+                            if (is_store_i) cause_code_o = rv_iommu::STORE_PAGE_FAULT;
+                            else            cause_code_o = rv_iommu::LOAD_PAGE_FAULT;
+                        end
                     end
                 end
-                else cause_code_o = cause_q;
                 ptw_error_2S_int_o = (ptw_stage_q == STAGE_2_INTERMED) ? 1'b1 : 1'b0;
                 flush_cdw_o = cdw_implicit_access_q;
             end
@@ -733,6 +741,7 @@ module rv_iommu_ptw_sv39x4_pc #(
             cause_q                 <= '0;
             cdw_implicit_access_q   <= 1'b0;
             pf_excep_q              <= 1'b0;
+            pt_data_corrupt_q       <= 1'b0;
             edge_trigger_q          <= 1'b0;
 
         end else begin
@@ -751,6 +760,7 @@ module rv_iommu_ptw_sv39x4_pc #(
             cause_q                 <= cause_n;
             cdw_implicit_access_q   <= cdw_implicit_access_n;
             pf_excep_q              <= pf_excep_n;
+            pt_data_corrupt_q       <= pt_data_corrupt_n;
             edge_trigger_q          <= edge_trigger_n;
         end
     end
