@@ -18,6 +18,8 @@
 //              Defines data structures and other register-related data.
 //              This module was developed using LowRISC `reggen` tool.
 
+`include "common_cells/assertions.svh" 
+
 module rv_iommu_regmap #(
   parameter int 			        DATA_WIDTH = 32,
 
