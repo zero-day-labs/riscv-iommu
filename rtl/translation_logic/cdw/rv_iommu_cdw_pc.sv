@@ -411,6 +411,14 @@ module rv_iommu_cdw_pc #(
                         else cause_n = rv_iommu::PDT_ENTRY_INVALID;
                     end
 
+                    // "If any bits or encoding that are reserved for future standard use are set within ddte/pdte,"
+                    // "stop and report "DDT/pdte entry misconfigured" (cause = 259/267)"
+                    else if (mem_resp_i.r_valid && ((|nl.reserved_1) || (|nl.reserved_2))) begin
+                        state_n = ERROR;
+                        if (is_ddt_walk_q) cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
+                        else cause_n = rv_iommu::PDT_ENTRY_MISCONFIGURED;
+                    end
+
                     //# Valid non-leaf entry
                     else begin
                         // Set pptr and next level
@@ -442,13 +450,6 @@ module rv_iommu_cdw_pc #(
                         endcase
 
                         state_n = MEM_ACCESS;
-                    end
-
-                    // "If any bits or encoding that are reserved for future standard use are set within ddte,"
-                    // "stop and report "DDT entry misconfigured" (cause = 259)"
-                    if (mem_resp_i.r_valid && ((|nl.reserved_1) || (|nl.reserved_2))) begin
-                        state_n = ERROR;
-                        cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                     end
 
                     // Abort walk and go to IDLE if PTW raised a second-stage translation error
