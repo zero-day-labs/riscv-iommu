@@ -16,10 +16,8 @@
 // Description: Top module to instance riscv_iommu module, 
 //				defining parameters and types for lint checks.
 
-`include "assertions.svh"
 `include "register_interface/typedef.svh"
 
-`include "riscv_pkg.sv"
 `include "lint_wrapper_pkg.sv"
 
 `include "rv_iommu_pkg.sv"

@@ -22,19 +22,19 @@
 
 module rv_iommu_axi4_bc (
     // AxVALID
-    input  logic                    request_i,
+    input  logic                        request_i,
     // AxADDR
-    input  logic [riscv::VLEN-1:0]  addr_i,
+    input  logic [rv_iommu::XLEN-1:0]   addr_i,
     // AxBURST
-    input  axi_pkg::burst_t         burst_type_i,
+    input  axi_pkg::burst_t             burst_type_i,
     // AxLEN
-    input  axi_pkg::len_t           burst_length_i,
+    input  axi_pkg::len_t               burst_length_i,
     // AxSIZE
-    input  axi_pkg::size_t          n_bytes_i,
+    input  axi_pkg::size_t              n_bytes_i,
 
     // To indicate valid requests or boundary violations
-    output logic                    allow_request_o,
-    output logic                    bound_violation_o
+    output logic                        allow_request_o,
+    output logic                        bound_violation_o
 ); 
 
     always_comb begin : boundary_check
@@ -65,7 +65,7 @@ module rv_iommu_axi4_bc (
                 axi_pkg::BURST_WRAP: begin
                     // wrap_boundary = (start_address/(number_bytes*burst_length_i)) * (number_bytes*burst_length_i)
                     // address_n = wrap_boundary + (number_bytes * burst_length_i)
-                    logic [riscv::PLEN-1:0] wrap_boundary;
+                    logic [rv_iommu::PLEN-1:0] wrap_boundary;
 
                     // by spec, N of transfers must be {2, 4, 8, 16}
                     // So, ARLEN must be {1, 3, 7, 15}

@@ -37,36 +37,36 @@ module rv_iommu_mrifc #(
     input  logic            rst_ni,         // Asynchronous reset active low
 
     // Flush signals
-    input  logic                    flush_vma_i,      // IOTINVAL.VMA
-    input  logic                    flush_gvma_i,     // IOTINVAL.GVMA
-    input  logic                    flush_av_i,       // ADDR tag filtering
-    input  logic                    flush_gv_i,       // GSCID tag filtering
-    input  logic                    flush_pscv_i,     // PSCID tag filtering
-    input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN/GPPN to be flushed
-    input  logic [15:0]             flush_gscid_i,    // GSCID to be flushed
-    input  logic [19:0]             flush_pscid_i,    // PSCID to be flushed
+    input  logic                        flush_vma_i,      // IOTINVAL.VMA
+    input  logic                        flush_gvma_i,     // IOTINVAL.GVMA
+    input  logic                        flush_av_i,       // ADDR tag filtering
+    input  logic                        flush_gv_i,       // GSCID tag filtering
+    input  logic                        flush_pscv_i,     // PSCID tag filtering
+    input  logic [rv_iommu::GPPNW-1:0]  flush_vpn_i,      // VPN/GPPN to be flushed
+    input  logic [15:0]                 flush_gscid_i,    // GSCID to be flushed
+    input  logic [19:0]                 flush_pscid_i,    // PSCID to be flushed
 
     // Update signals
-    input  logic                    update_i,
-    input  logic                    up_1S_2M_i,
-    input  logic                    up_1S_1G_i,
-    input  logic [riscv::GPPNW-1:0] up_vpn_i,
-    input  logic [19:0]             up_pscid_i,
-    input  logic [15:0]             up_gscid_i,
-    input  riscv::pte_t             up_1S_content_i,
-    input  rv_iommu::mrifc_entry_t  up_msi_content_i,   // MSI PTE contents
+    input  logic                        update_i,
+    input  logic                        up_1S_2M_i,
+    input  logic                        up_1S_1G_i,
+    input  logic [rv_iommu::GPPNW-1:0]  up_vpn_i,
+    input  logic [19:0]                 up_pscid_i,
+    input  logic [15:0]                 up_gscid_i,
+    input  rv_iommu::pte_t              up_1S_content_i,
+    input  rv_iommu::mrifc_entry_t      up_msi_content_i,   // MSI PTE contents
 
     // Lookup signals
-    input  logic                    lookup_i,           // lookup flag
-    input  logic [riscv::VLEN-1:0]  lu_iova_i,          // IOVA to look for 
-    input  logic [19:0]             lu_pscid_i,         // PSCID to look for
-    input  logic [15:0]             lu_gscid_i,         // GSCID to look for
-    input  logic                    en_1S_i,            // first-stage enabled
-    input  logic                    en_2S_i,            // second-stage enabled
-    output logic                    lu_hit_o,           // hit flag
-    output logic                    lu_miss_o,          // miss flag
-    output riscv::pte_t             lu_1S_content_o,    // first-stage PTE
-    output rv_iommu::mrifc_entry_t  lu_msi_content_o    // MSI PTE
+    input  logic                        lookup_i,           // lookup flag
+    input  logic [rv_iommu::XLEN-1:0]   lu_iova_i,          // IOVA to look for 
+    input  logic [19:0]                 lu_pscid_i,         // PSCID to look for
+    input  logic [15:0]                 lu_gscid_i,         // GSCID to look for
+    input  logic                        en_1S_i,            // first-stage enabled
+    input  logic                        en_2S_i,            // second-stage enabled
+    output logic                        lu_hit_o,           // hit flag
+    output logic                        lu_miss_o,          // miss flag
+    output rv_iommu::pte_t              lu_1S_content_o,    // first-stage PTE
+    output rv_iommu::mrifc_entry_t      lu_msi_content_o    // MSI PTE
 );
 
     // Tags
@@ -85,7 +85,7 @@ module rv_iommu_mrifc #(
 
     // MRIFC entries: MSI PTEs in MRIF mode
     struct packed {
-        riscv::pte_t            pte_1S;     // first-stage data
+        rv_iommu::pte_t            pte_1S;     // first-stage data
         rv_iommu::mrifc_entry_t msi_pte;    // MSI PTE in MRIF mode
     } [MRIFC_ENTRIES-1:0] content_q, content_n;
 
@@ -173,7 +173,7 @@ module rv_iommu_mrifc #(
 
         This implementation assumes the HW cost and performs the IOTINVAL.GVMA completely.
     */
-    logic  [MRIFC_ENTRIES-1:0] [(riscv::GPPNW-1):0] gppn;
+    logic  [MRIFC_ENTRIES-1:0] [(rv_iommu::GPPNW-1):0] gppn;
 
     always_comb begin : update_flush
 

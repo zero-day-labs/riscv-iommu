@@ -101,7 +101,7 @@ module rv_iommu_msi_ig #(
         // AXI parameters
         // AW
         mem_req_o.aw.id         = 4'b0010;
-        mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, msi_addr_x_i[intv_q], 2'b0};
+        mem_req_o.aw.addr       = {{rv_iommu::XLEN-rv_iommu::PLEN{1'b0}}, msi_addr_x_i[intv_q], 2'b0};
         mem_req_o.aw.len        = 8'd0;         // MSI writes only 32 bits
         mem_req_o.aw.size       = 3'b010;       // 4-bytes beat
         mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;

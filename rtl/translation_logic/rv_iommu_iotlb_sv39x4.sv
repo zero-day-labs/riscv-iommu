@@ -24,75 +24,75 @@
 module rv_iommu_iotlb_sv39x4 #(
     parameter int unsigned IOTLB_ENTRIES = 4
 )(
-    input  logic                    clk_i,            // Clock
-    input  logic                    rst_ni,           // Asynchronous reset active low
+    input  logic                        clk_i,            // Clock
+    input  logic                        rst_ni,           // Asynchronous reset active low
 
     // Flush signals
-    input  logic                    flush_vma_i,      // IOTINVAL.VMA
-    input  logic                    flush_gvma_i,     // IOTINVAL.GVMA
-    input  logic                    flush_av_i,       // ADDR valid
-    input  logic                    flush_gv_i,       // GSCID valid
-    input  logic                    flush_pscv_i,     // PSCID valid
-    input  logic [riscv::GPPNW-1:0] flush_vpn_i,      // VPN to be flushed
-    input  logic [15:0]             flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
-    input  logic [19:0]             flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
+    input  logic                        flush_vma_i,      // IOTINVAL.VMA
+    input  logic                        flush_gvma_i,     // IOTINVAL.GVMA
+    input  logic                        flush_av_i,       // ADDR valid
+    input  logic                        flush_gv_i,       // GSCID valid
+    input  logic                        flush_pscv_i,     // PSCID valid
+    input  logic [rv_iommu::GPPNW-1:0]  flush_vpn_i,      // VPN to be flushed
+    input  logic [15:0]                 flush_gscid_i,    // GSCID identifier to be flushed (VM identifier)
+    input  logic [19:0]                 flush_pscid_i,    // PSCID identifier to be flushed (address space identifier)
 
     // Update signals
-    input  logic                    update_i,
-    input  logic                    up_1S_2M_i,
-    input  logic                    up_1S_1G_i,
-    input  logic                    up_2S_2M_i,
-    input  logic                    up_2S_1G_i,
-    input  logic                    up_is_msi_i,
-    input  logic [riscv::GPPNW-1:0] up_vpn_i,
-    input  logic [19:0]             up_pscid_i,
-    input  logic [15:0]             up_gscid_i,
-    input riscv::pte_t              up_1S_content_i,
-    input riscv::pte_t              up_2S_content_i,
+    input  logic                        update_i,
+    input  logic                        up_1S_2M_i,
+    input  logic                        up_1S_1G_i,
+    input  logic                        up_2S_2M_i,
+    input  logic                        up_2S_1G_i,
+    input  logic                        up_is_msi_i,
+    input  logic [rv_iommu::GPPNW-1:0]  up_vpn_i,
+    input  logic [19:0]                 up_pscid_i,
+    input  logic [15:0]                 up_gscid_i,
+    input rv_iommu::pte_t               up_1S_content_i,
+    input rv_iommu::pte_t               up_2S_content_i,
 
     // Lookup signals
-    input  logic                    lookup_i,           // lookup flag
-    input  logic [riscv::VLEN-1:0]  lu_iova_i,          // IOVA to look for 
-    input  logic [19:0]             lu_pscid_i,         // PSCID to look for
-    input  logic [15:0]             lu_gscid_i,         // GSCID to look for
-    input  logic                    en_1S_i,            // first-stage enabled
-    input  logic                    en_2S_i,            // second-stage enabled
-    output logic                    lu_1S_2M_o,         // superpages     
-    output logic                    lu_1S_1G_o,
-    output logic                    lu_2S_2M_o,               
-    output logic                    lu_2S_1G_o,
-    output logic                    lu_is_msi_o,        // MSI translation
-    output logic                    lu_hit_o,           // hit flag
-    output logic                    lu_miss_o,          // miss flag
-    output riscv::pte_t             lu_1S_content_o,    // first-stage PTE (GPA PPN)
-    output riscv::pte_t             lu_2S_content_o     // second-stage PTE (SPA PPN)
+    input  logic                        lookup_i,           // lookup flag
+    input  logic [rv_iommu::GPPNW-1:0]  lu_vpn_i,           // IOVA to look for 
+    input  logic [19:0]                 lu_pscid_i,         // PSCID to look for
+    input  logic [15:0]                 lu_gscid_i,         // GSCID to look for
+    input  logic                        en_1S_i,            // first-stage enabled
+    input  logic                        en_2S_i,            // second-stage enabled
+    output logic                        lu_1S_2M_o,         // superpages     
+    output logic                        lu_1S_1G_o,
+    output logic                        lu_2S_2M_o,               
+    output logic                        lu_2S_1G_o,
+    output logic                        lu_is_msi_o,        // MSI translation
+    output logic                        lu_hit_o,           // hit flag
+    output logic                        lu_miss_o,          // miss flag
+    output rv_iommu::pte_t              lu_1S_content_o,    // first-stage PTE (GPA PPN)
+    output rv_iommu::pte_t              lu_2S_content_o     // second-stage PTE (SPA PPN)
 );
 
     // Tags to identify IOTLB entries
     struct packed {
-        logic [19:0]            pscid;      // process address space identifier
-        logic [15:0]            gscid;      // virtual machine identifier
-        logic [riscv::GPPN2:0]  vpn2;       // 3-level VPN (VPN[2] is the segment expanded by two bits in Sv39x4)
-        logic [8:0]             vpn1;
-        logic [8:0]             vpn0;
-        logic                   is_1S_2M;   // first-stage 2MiB superpage: VPN[0] makes part of the offset
-        logic                   is_1S_1G;   // first-stage 1GiB superpage: VPN[0,1] makes part of the offset
-        logic                   is_2S_2M;   // second-stage 2MiB superpage: VPN[0] makes part of the offset
-        logic                   is_2S_1G;   // second-stage 1GiB superpage: VPN[0,1] makes part of the offset
-        logic                   is_msi;     // second-stage entry contains an MSI translation
-        logic                   en_1S;      // first-stage translation enable
-        logic                   en_2S;      // second-stage translation enable
-        logic                   valid;      // valid bit
+        logic [19:0]                pscid;      // process address space identifier
+        logic [15:0]                gscid;      // virtual machine identifier
+        logic [10:0]                vpn2;       // 3-level VPN (VPN[2] is the segment expanded by two bits in Sv39x4)
+        logic [8:0]                 vpn1;
+        logic [8:0]                 vpn0;
+        logic                       is_1S_2M;   // first-stage 2MiB superpage: VPN[0] makes part of the offset
+        logic                       is_1S_1G;   // first-stage 1GiB superpage: VPN[0,1] makes part of the offset
+        logic                       is_2S_2M;   // second-stage 2MiB superpage: VPN[0] makes part of the offset
+        logic                       is_2S_1G;   // second-stage 1GiB superpage: VPN[0,1] makes part of the offset
+        logic                       is_msi;     // second-stage entry contains an MSI translation
+        logic                       en_1S;      // first-stage translation enable
+        logic                       en_2S;      // second-stage translation enable
+        logic                       valid;      // valid bit
     } [IOTLB_ENTRIES-1:0] tags_q, tags_n;
 
     // IOTLB entries: Same entry for both stages
     struct packed {
-        riscv::pte_t pte_1S;    // first-stage
-        riscv::pte_t pte_2S;    // second-stage
+        rv_iommu::pte_t pte_1S;    // first-stage
+        rv_iommu::pte_t pte_2S;    // second-stage
     } [IOTLB_ENTRIES-1:0] content_q, content_n;
 
     logic [8:0] vpn0, vpn1;
-    logic [riscv::GPPN2:0] vpn2;
+    logic [10:0] vpn2;
     logic [IOTLB_ENTRIES-1:0] lu_hit;     // to replacement logic
     logic [IOTLB_ENTRIES-1:0] replace_en; // replace the following entry, set by replacement policy
     logic [IOTLB_ENTRIES-1:0] match_gscid;
@@ -105,11 +105,9 @@ module rv_iommu_iotlb_sv39x4 #(
     //# Lookup
     //-------------
     always_comb begin : lookup
-        automatic logic [riscv::GPPN2:0] mask_pn2;
-        mask_pn2 = en_1S_i ? ((2**(riscv::VPN2+1))-1) : ((2**(riscv::GPPN2+1))-1);  // 2^9 - 1 : 2^11 - 1 
-        vpn0 = lu_iova_i[20:12];
-        vpn1 = lu_iova_i[29:21];
-        vpn2 = lu_iova_i[30+riscv::GPPN2:30] & mask_pn2;   // input vaddr[40:30] (Sv39x4), clear additional bits
+        vpn0 = lu_vpn_i[8:0];
+        vpn1 = lu_vpn_i[17:9];
+        vpn2 = lu_vpn_i[rv_iommu::GPPNW-1:18];   // input vaddr[40:30] (Sv39x4), clear additional bits
 
         // default assignment
         lu_hit          = '{default: 0};
@@ -156,7 +154,7 @@ module rv_iommu_iotlb_sv39x4 #(
             match_stage[i] = (tags_q[i].en_2S == en_2S_i) && (tags_q[i].en_1S == en_1S_i);
             
             // An entry match occurs if the entry is valid, if GSCID and PSCID matches, if translation stages matches, and VPN[2] matches
-            if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == (tags_q[i].vpn2 & mask_pn2))) begin
+            if (tags_q[i].valid && match_pscid[i] && match_gscid[i] && match_stage[i] && (vpn2 == tags_q[i].vpn2)) begin
                 
                 // 1G match | 2M match | 4k match
                 if (is_1G[i] || ((vpn1 == tags_q[i].vpn1) && (is_2M[i] || vpn0 == tags_q[i].vpn0))) begin
@@ -198,7 +196,7 @@ module rv_iommu_iotlb_sv39x4 #(
 
         This implementation will assume the HW cost and perform the IOTINVAL.GVMA according to the specification.
     */
-    logic  [IOTLB_ENTRIES-1:0] [(riscv::GPPNW-1):0] gppn;
+    logic  [IOTLB_ENTRIES-1:0] [(rv_iommu::GPPNW-1):0] gppn;
 
     // only update if a flush operation is not ongoing
     always_comb begin : update_flush
@@ -210,7 +208,7 @@ module rv_iommu_iotlb_sv39x4 #(
             // check if given GVA (39-bits) matches VPN tag
             vaddr_vpn0_match[i] = (flush_vpn_i[8:0] == tags_q[i].vpn0);
             vaddr_vpn1_match[i] = (flush_vpn_i[17:9] == tags_q[i].vpn1);
-            vaddr_vpn2_match[i] = (flush_vpn_i[18+riscv::VPN2:18] == tags_q[i].vpn2[riscv::VPN2:0]);   // [26:18]
+            vaddr_vpn2_match[i] = (flush_vpn_i[rv_iommu::VPNW-1:18] == tags_q[i].vpn2[8:0]);
 
             // first-stage superpage cases
             vaddr_2M_match[i] = (vaddr_vpn2_match[i] && vaddr_vpn1_match[i] && tags_q[i].is_1S_2M);
@@ -222,7 +220,7 @@ module rv_iommu_iotlb_sv39x4 #(
             // check if given GPA matches with any tag
             gpaddr_gppn0_match[i] = (flush_vpn_i[8:0] == gppn[i][8:0]);
             gpaddr_gppn1_match[i] = (flush_vpn_i[17:9] == gppn[i][17:9]);
-            gpaddr_gppn2_match[i] = (flush_vpn_i[18+riscv::GPPN2:18] == gppn[i][18+riscv::GPPN2:18]);
+            gpaddr_gppn2_match[i] = (flush_vpn_i[rv_iommu::GPPNW-1:18] == gppn[i][rv_iommu::GPPNW-1:18]);
 
             // second-stage superpage cases
             gpaddr_2M_match[i] = (gpaddr_gppn2_match[i] && gpaddr_gppn1_match[i] && tags_q[i].is_2S_2M);
@@ -356,7 +354,7 @@ module rv_iommu_iotlb_sv39x4 #(
                 tags_n[i] = '{
                     pscid:      up_pscid_i,
                     gscid:      up_gscid_i,
-                    vpn2:       up_vpn_i[18+riscv::GPPN2:18],
+                    vpn2:       up_vpn_i[rv_iommu::GPPNW-1:18],
                     vpn1:       up_vpn_i[17:9],
                     vpn0:       up_vpn_i[8:0],
                     en_1S:      en_1S_i,

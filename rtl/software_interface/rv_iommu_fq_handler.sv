@@ -42,35 +42,35 @@ module rv_iommu_fq_handler #(
     input  logic rst_ni,
 
     // Regmap
-    input  logic [riscv::PPNW-1:0]  fq_base_ppn_i,      // Base address of the FQ in memory (Should be aligned. See Spec)
-    input  logic [4:0]              fq_size_i,          // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
+    input  logic [rv_iommu::PPNW-1:0]   fq_base_ppn_i,      // Base address of the FQ in memory (Should be aligned. See Spec)
+    input  logic [4:0]                  fq_size_i,          // Size of the FQ as log2-1 (2 entries: 0 | 4 entries: 1 | 8 entries: 2 | ...)
 
-    input  logic                    fq_en_i,            // FQ enable bit from fqcsr, handled by SW
-    input  logic                    fq_ie_i,            // FQ interrupt enable bit from fqcsr, handled by SW
+    input  logic                        fq_en_i,            // FQ enable bit from fqcsr, handled by SW
+    input  logic                        fq_ie_i,            // FQ interrupt enable bit from fqcsr, handled by SW
 
     // INFO: Indexes are incremented by 1 each time a fault is read or written.
-    input  logic [31:0]             fq_head_i,          // FQ head index (SW reads the next entry from fq_base + fq_head * 32 bytes)
-    input  logic [31:0]             fq_tail_i,          // FQ tail index (IOMMU writes the next FQ entry to fq_base + fq_tail * 32 bytes)
-    output logic [31:0]             fq_tail_o,
+    input  logic [31:0]                 fq_head_i,          // FQ head index (SW reads the next entry from fq_base + fq_head * 32 bytes)
+    input  logic [31:0]                 fq_tail_i,          // FQ tail index (IOMMU writes the next FQ entry to fq_base + fq_tail * 32 bytes)
+    output logic [31:0]                 fq_tail_o,
 
-    output logic                    fq_on_o,            // FQ active bit. Indicates to SW whether the FQ is active or not
-    output logic                    busy_o,             // FQ busy bit. Indicates SW that the FQ is in the middle of a state transition, 
+    output logic                        fq_on_o,            // FQ active bit. Indicates to SW whether the FQ is active or not
+    output logic                        busy_o,             // FQ busy bit. Indicates SW that the FQ is in the middle of a state transition, 
                                                         //              so it has to wait to write to fqcsr.
 
-    input logic                     fq_mf_i,             
-    input logic                     fq_of_i,  
+    input logic                         fq_mf_i,             
+    input logic                         fq_of_i,  
 
-    output logic                    error_wen_o,        // To enable write of corresponding error bit to regmap
-    output logic                    fq_mf_o,            // Set when a memory fault occurred during FQ access
-    output logic                    fq_of_o,            // The execution of a command lead to a timeout 
-    output logic                    fq_ip_o,            // To set ipsr.fip register if a fault occurs and fq_ie is set
+    output logic                        error_wen_o,        // To enable write of corresponding error bit to regmap
+    output logic                        fq_mf_o,            // Set when a memory fault occurred during FQ access
+    output logic                        fq_of_o,            // The execution of a command lead to a timeout 
+    output logic                        fq_ip_o,            // To set ipsr.fip register if a fault occurs and fq_ie is set
 
     // Event data
     input  logic                                event_valid_i,      // a fault/event has occurred
     input  logic [rv_iommu::TTYP_LEN-1:0]       trans_type_i,       // transaction type
     input  logic [(rv_iommu::CAUSE_LEN-1):0]    cause_code_i,       // Fault code as defined by IOMMU and Priv Spec
-    input  logic [riscv::VLEN-1:0]              iova_i,             // to report if transaction has an IOVA
-    input  logic [riscv::SVX-1:0]               gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
+    input  logic [rv_iommu::XLEN-1:0]           iova_i,             // to report if transaction has an IOVA
+    input  logic [rv_iommu::GPLEN-1:0]          gpaddr_i,           // to report bits [63:2] of the GPA in case of a Guest Page Fault
     input  logic [23:0]                         did_i,              // device_id associated with the transaction
     input  logic                                pv_i,               // to indicate if transaction has a valid process_id
     input  logic [19:0]                         pid_i,              // process_id associated with the transaction
@@ -79,10 +79,10 @@ module rv_iommu_fq_handler #(
     input  logic                                is_implicit_i,      // Guest page fault caused by implicit access for 1st-stage addr translation
 
     // Memory Bus
-    input  axi_rsp_t   mem_resp_i,
-    output axi_req_t    mem_req_o,
+    input  axi_rsp_t                    mem_resp_i,
+    output axi_req_t                    mem_req_o,
 
-    output logic                    is_full_o
+    output logic                        is_full_o
 );
 
     // FSM States
@@ -100,7 +100,7 @@ module rv_iommu_fq_handler #(
     }   wr_state_q, wr_state_n;
 
     // Physical pointer to access memory
-    logic [riscv::PLEN-1:0] fq_pptr_q, fq_pptr_n;
+    logic [rv_iommu::PLEN-1:0] fq_pptr_q, fq_pptr_n;
 
     // To mask the input tail index according to the size of the CQ
     logic [31:0]    masked_tail;
@@ -135,8 +135,8 @@ module rv_iommu_fq_handler #(
     // Wires to connect FIFO output
     logic [rv_iommu::TTYP_LEN-1:0]      trans_type;   
     logic [(rv_iommu::CAUSE_LEN-1):0]   cause_code;   
-    logic [riscv::VLEN-1:0]             iova;         
-    logic [riscv::SVX-1:0]              gpaddr;       
+    logic [rv_iommu::XLEN-1:0]          iova;         
+    logic [rv_iommu::GPLEN-1:0]         gpaddr;       
     logic [23:0]                        did;          
     logic                               pv;           
     logic [19:0]                        pid;          
@@ -153,7 +153,7 @@ module rv_iommu_fq_handler #(
     fifo_v3 #(
         .FALL_THROUGH   (1),
         .DEPTH          (4),
-        .DATA_WIDTH     (rv_iommu::TTYP_LEN + rv_iommu::CAUSE_LEN + riscv::VLEN + riscv::SVX + 24 + 20 + 4)
+        .DATA_WIDTH     (rv_iommu::TTYP_LEN + rv_iommu::CAUSE_LEN + rv_iommu::XLEN + rv_iommu::GPLEN + 24 + 20 + 4)
     ) i_fifo_fq (
         .clk_i      ( clk_i           ),
         .rst_ni     ( rst_ni          ),
@@ -191,7 +191,7 @@ module rv_iommu_fq_handler #(
         // AXI parameters
         // AW
         mem_req_o.aw.id         = 4'b0001;
-        mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, fq_pptr_q};
+        mem_req_o.aw.addr       = {{rv_iommu::XLEN-rv_iommu::PLEN{1'b0}}, fq_pptr_q};
         mem_req_o.aw.len        = 8'd3;         // FQ records are 32-bytes wide
         mem_req_o.aw.size       = 3'b011;
         mem_req_o.aw.burst      = axi_pkg::BURST_INCR;
@@ -306,7 +306,7 @@ module rv_iommu_fq_handler #(
                             end
 
                         // Set pptr with the paddr of the next entry
-                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{riscv::PLEN-32{1'b0}}, masked_tail} << 5);
+                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{rv_iommu::PLEN-32{1'b0}}, masked_tail} << 5);
 
                         // If a fault that must be reported occurs and the FQ is full, set fq_of and signal error
                         if (fq_tail_i == fq_head_i - 1) begin

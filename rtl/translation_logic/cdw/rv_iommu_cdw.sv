@@ -36,6 +36,9 @@ module rv_iommu_cdw #(
 ) (
     input  logic                    clk_i,                  // Clock
     input  logic                    rst_ni,                 // Asynchronous reset active low
+
+    // Init CDW
+    input  logic                    init_cdw_i,
     
     // Error signaling
     output logic                                cdw_active_o,           // Set when PTW is walking memory
@@ -65,12 +68,9 @@ module rv_iommu_cdw #(
     // CDC tags
     input  logic [23:0]             req_did_i,    // device_id associated with request
 
-    // from DDTC / PDTC, to monitor misses
-    input  logic                    init_cdw_i,
-
     // from regmap
-    input  logic [riscv::PPNW-1:0]  ddtp_ppn_i,     // PPN from ddtp register
-    input  logic [3:0]              ddtp_mode_i     // DDT levels and IOMMU mode
+    input  logic [rv_iommu::PPNW-1:0]   ddtp_ppn_i,     // PPN from ddtp register
+    input  logic [3:0]                  ddtp_mode_i     // DDT levels and IOMMU mode
 );
 
     // Save and propagate the input device_id to walk multiple levels
@@ -119,7 +119,7 @@ module rv_iommu_cdw #(
     level_t cdw_lvl_q, cdw_lvl_n;
 
     // Physical pointer to access memory bus
-    logic [riscv::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
+    logic [rv_iommu::PLEN-1:0] cdw_pptr_q, cdw_pptr_n;
 
     // Last DDT/PDT level
     logic is_last_cdw_lvl;
@@ -206,7 +206,7 @@ module rv_iommu_cdw #(
 
         // AR
         mem_req_o.ar.id         = 4'b0001;                         
-        mem_req_o.ar.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, cdw_pptr_q};    // Physical address to access
+        mem_req_o.ar.addr       = {{rv_iommu::XLEN-rv_iommu::PLEN{1'b0}}, cdw_pptr_q};    // Physical address to access
         // Number of beats per burst (1 for non-leaf entries, 7/4 for DC)
         mem_req_o.ar.len        = (is_last_cdw_lvl) ? (ar_len) : (8'd0);
         mem_req_o.ar.size       = 3'b011;                                           // 64 bits (8 bytes) per beat
@@ -244,17 +244,18 @@ module rv_iommu_cdw #(
 
             // check for possible misses in Context Directory Caches
             IDLE: begin
-                // start with the level indicated by ddtp.MODE
-                cdw_lvl_n       = level_t'(ddtp_mode_i);
-                device_id_n     = req_did_i;
-                entry_cnt_n     = '0;
-                wait_rlast_n    = 1'b0;
 
                 // check for DDTC misses
                 // External logic guarantees that DDTC is looked up before PDTC
                 if (init_cdw_i && !edge_trigger_q) begin
+
+                    state_n         = MEM_ACCESS;
                     
-                    state_n = MEM_ACCESS;
+                    // start with the level indicated by ddtp.MODE
+                    cdw_lvl_n       = level_t'(ddtp_mode_i);
+                    device_id_n     = req_did_i;
+                    entry_cnt_n     = '0;
+                    wait_rlast_n    = 1'b0;
 
                     // load pptr according to ddtp.MODE
                     // 3LVL
@@ -439,19 +440,24 @@ module rv_iommu_cdw #(
                             dc_fsc_n = dc_fsc;
 
                             // Config checks
-                            if ((dc_tc_q.pdtv && ((!caps_pd20_i && dc_fsc.mode == 4'b0011) ||
-                                                  (!caps_pd17_i && dc_fsc.mode == 4'b0010) ||
-                                                  (!caps_pd8_i && dc_fsc.mode == 4'b0001))) ||
-                                (!dc_tc_q.pdtv && !(dc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
-                                (!dc_tc_q.pdtv && !dc_tc_q.sxl && ((!caps_sv39_i && dc_fsc.mode == 4'd8) ||
-                                                                   (!caps_sv48_i && dc_fsc.mode == 4'd9) ||
-                                                                   (!caps_sv57_i && dc_fsc.mode == 4'd10))) ||
-                                (!dc_tc_q.pdtv && dc_tc_q.sxl && (!caps_sv32_i && dc_fsc.mode == 4'd8)) ||
+                            if ((dc_tc_q.pdtv && (!(dc_fsc.mode inside {4'd0, 4'd1, 4'd2, 4'd3}) ||
+                                                   (!caps_pd20_i && dc_fsc.mode == 4'b0011     ) ||
+                                                   (!caps_pd17_i && dc_fsc.mode == 4'b0010     ) ||
+                                                   (!caps_pd8_i && dc_fsc.mode == 4'b0001      )
+                                                  )) ||
+                                (!dc_tc_q.pdtv && !dc_tc_q.sxl && (!(dc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10}) ||
+                                                                    (!caps_sv39_i && dc_fsc.mode == 4'd8         ) ||
+                                                                    (!caps_sv48_i && dc_fsc.mode == 4'd9         ) ||
+                                                                    (!caps_sv57_i && dc_fsc.mode == 4'd10        )
+                                                                   )) ||
+                                (!dc_tc_q.pdtv && dc_tc_q.sxl && (!(dc_fsc.mode inside {4'd0, 4'd8}    ) ||
+                                                                   (!caps_sv32_i && dc_fsc.mode == 4'd8)
+                                                                  )) ||
                                 (|dc_fsc.reserved)) begin
 
-                                state_n = ERROR;
-                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
-                                wait_rlast_n = (MSITrans == rv_iommu::MSI_DISABLED) ? (1'b0) : (1'b1);
+                                state_n         = ERROR;
+                                cause_n         = rv_iommu::DDT_ENTRY_MISCONFIGURED;
+                                wait_rlast_n    = (MSITrans == rv_iommu::MSI_DISABLED) ? (1'b0) : (1'b1);
                             end
                         end
 
@@ -462,8 +468,8 @@ module rv_iommu_cdw #(
                             if (msi_check_error) begin
                                 
                                 wait_rlast_n    = (entry_cnt_q != 3'b110);
-                                state_n = ERROR;
-                                cause_n = rv_iommu::DDT_ENTRY_MISCONFIGURED;
+                                state_n         = ERROR;
+                                cause_n         = rv_iommu::DDT_ENTRY_MISCONFIGURED;
                             end
                         end
                         
