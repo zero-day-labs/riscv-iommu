@@ -259,7 +259,7 @@ module rv_iommu_ptw_sv39x4 #(
         mem_req_o.aw.addr       = '0;           // Physical address to access
         mem_req_o.aw.len        = 8'b0;                 // 1 beat per burst only
         mem_req_o.aw.size       = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.aw.burst      = axi_pkg::BURST_FIXED; // Fixed start address
+        mem_req_o.aw.burst      = axi_pkg::BURST_INCR; // Fixed start address
         mem_req_o.aw.lock       = '0;
         mem_req_o.aw.cache      = '0;
         mem_req_o.aw.prot       = '0;
@@ -286,7 +286,7 @@ module rv_iommu_ptw_sv39x4 #(
         mem_req_o.ar.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, ptw_pptr_q};           // Physical address to access
         mem_req_o.ar.len        = 8'b0;                 // 1 beat per burst only
         mem_req_o.ar.size       = 3'b011;               // 64 bits (8 bytes) per beat
-        mem_req_o.ar.burst      = axi_pkg::BURST_FIXED; // Fixed start address
+        mem_req_o.ar.burst      = axi_pkg::BURST_INCR; // Fixed start address
         mem_req_o.ar.lock       = '0;
         mem_req_o.ar.cache      = '0;
         mem_req_o.ar.prot       = '0;

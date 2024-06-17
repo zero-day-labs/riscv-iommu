@@ -149,7 +149,7 @@ module rv_iommu_cq_handler #(
         mem_req_o.aw.addr       = {{riscv::XLEN-riscv::PLEN{1'b0}}, cq_pptr_q};
         mem_req_o.aw.len        = 8'b0;
         mem_req_o.aw.size       = 3'b010;
-        mem_req_o.aw.burst      = axi_pkg::BURST_FIXED;
+        mem_req_o.aw.burst      = axi_pkg::BURST_INCR;
         mem_req_o.aw.lock       = '0;
         mem_req_o.aw.cache      = '0;
         mem_req_o.aw.prot       = '0;
