@@ -21,35 +21,45 @@
 
 package rv_iommu;
 
-    // Device Context max length
-    localparam DEV_ID_MAX_LEN   = 24;
-    localparam PROC_ID_MAX_LEN  = 20;
+    // ----------------
+    //# Address Length
+    // ----------------
+    localparam XLEN             = 64;   // register length
 
-    // to identify memory accesses to virtual guest interrupt files
-    localparam MSI_MASK_LEN     = 52;
-    localparam MSI_PATTERN_LEN  = 52;
+    localparam VLEN             = 39;   // virtual address length
+    localparam GPLEN            = 41;   // guest physical address length
+    localparam PLEN             = 56;   // physical address length
 
-    //--------------------------
-    //#  ICVEC values
-    //--------------------------
-    localparam logic [3:0] icvec_vals [16] = '{
-        4'd0,
-        4'd1,
-        4'd2,
-        4'd3,
-        4'd4,
-        4'd5,
-        4'd6,
-        4'd7,
-        4'd8,
-        4'd9,
-        4'd10,
-        4'd11,
-        4'd12,
-        4'd13,
-        4'd14,
-        4'd15
-    };
+    localparam VPNW             = 27;   // PPN width
+    localparam GPPNW            = 29;   // GPPN width
+    localparam PPNW             = 44;   // PPN width
+
+    // -----------------
+    //# PTE Struct
+    // -----------------
+    typedef struct packed {
+        logic [9:0]  reserved;
+        logic [44-1:0] ppn; // PPN length for
+        logic [1:0]  rsw;
+        logic d;
+        logic a;
+        logic g;
+        logic u;
+        logic x;
+        logic w;
+        logic r;
+        logic v;
+    } pte_t;
+
+    // -----------------
+    //# Privilege Modes
+    // -----------------
+    typedef enum logic[1:0] {
+      PRIV_LVL_M  = 2'b11,
+      PRIV_LVL_HS = 2'b10,
+      PRIV_LVL_S  = 2'b01,
+      PRIV_LVL_U  = 2'b00
+    } priv_lvl_t;
 
     //------------------------
     //#  Context Fields
@@ -57,14 +67,14 @@ package rv_iommu;
 
     // MSI Address Pattern
     typedef struct packed {
-        logic [11:0]                    reserved;
-        logic [(MSI_PATTERN_LEN-1):0]   pattern;
+        logic [11:0]        reserved;
+        logic [(52-1):0]    pattern;
     } msi_addr_pattern_t;
 
     // MSI Address Mask
     typedef struct packed {
-        logic [11:0]                reserved;
-        logic [(MSI_MASK_LEN-1):0]  mask;
+        logic [11:0]        reserved;
+        logic [(52-1):0]    mask;
     } msi_addr_mask_t;
 
     // MSI Page Table Pointer
@@ -363,59 +373,6 @@ package rv_iommu;
     localparam logic [TTYP_LEN-1:0] PCIE_ATS_TRANS_REQ  = 6'b00_1_0_00;
     localparam logic [TTYP_LEN-1:0] PCIE_MSG_REQ        = 6'b00_1_0_01;
 
-    //-----------------------------
-    //# Memory-mapped registers structs
-    //-----------------------------
-
-    // Capabilities (caps)
-    typedef struct packed {
-        logic [7:0]     custom;
-        logic [14:0]    reserved_3;
-        logic           pd20;
-        logic           pd17;
-        logic           pd8;
-        logic [5:0]     pas;
-        logic           dbg;
-        logic           hpm;
-        logic [1:0]     igs;
-        logic           endi;
-        logic           t2gpa;
-        logic           ats;
-        logic           amo;
-        logic           msi_mrif;
-        logic           msi_flat;
-        logic [1:0]     reserved_2;
-        logic           sv57x4;
-        logic           sv48x4;
-        logic           sv39x4;
-        logic           sv32x4;
-        logic           svpbmt;
-        logic [2:0]     reserved_1;
-        logic           sv57;
-        logic           sv48;
-        logic           sv39;
-        logic           sv32;
-        logic [7:0]     version;
-    } capabilities_t;
-
-    // Features control (fctl)
-    typedef struct packed {
-        logic [15:0]    custom;
-        logic [12:0]    reserved;
-        logic           gxl;
-        logic           wsi;
-        logic           be;
-    } fctl_t;
-
-    // Device Directory Table Pointer (ddtp)
-    typedef struct packed {
-        logic [9:0]             reserved_2;
-        logic [riscv::PPNW-1:0] ppn;
-        logic [4:0]             reserved_1;
-        logic                   busy;
-        logic [3:0]             iommu_mode;
-    } ddtp_t;
-
     //--------------------------
     //#  HPM Event IDs
     //--------------------------
@@ -443,6 +400,28 @@ package rv_iommu;
     } igs_t;
 
     //--------------------------
+    //#  ICVEC values
+    //--------------------------
+    localparam logic [3:0] icvec_vals [16] = '{
+        4'd0,
+        4'd1,
+        4'd2,
+        4'd3,
+        4'd4,
+        4'd5,
+        4'd6,
+        4'd7,
+        4'd8,
+        4'd9,
+        4'd10,
+        4'd11,
+        4'd12,
+        4'd13,
+        4'd14,
+        4'd15
+    };
+
+    //--------------------------
     //#  IOMMU functions
     //--------------------------
 
@@ -465,30 +444,30 @@ package rv_iommu;
 
     // Computes the paddr based on the page size, ppn and offset
     // Adapted from MMU function in ariane_pkg
-    function automatic logic [(riscv::GPLEN-1):0] make_gpaddr(
+    function automatic logic [(GPLEN-1):0] make_gpaddr(
         input logic S1_en, input logic is_1G, input logic is_2M,
-        input logic [(riscv::VLEN-1):0] vaddr, input riscv::pte_t pte);
-        logic [(riscv::GPLEN-1):0] gpaddr;
+        input logic [(XLEN-1):0] vaddr, input pte_t pte);
+        logic [(GPLEN-1):0] gpaddr;
         if (S1_en) begin
-        gpaddr = {pte.ppn[(riscv::GPPNW-1):0], vaddr[11:0]};
+        gpaddr = {pte.ppn[(GPPNW-1):0], vaddr[11:0]};
         // Giga page
         if (is_1G) gpaddr[29:12] = vaddr[29:12];
         // Mega page
         if (is_2M) gpaddr[20:12] = vaddr[20:12];
         end else begin
-        gpaddr = vaddr[(riscv::GPLEN-1):0];
+        gpaddr = vaddr[(GPLEN-1):0];
         end
         return gpaddr;
     endfunction : make_gpaddr
 
     // Computes the final gppn based on the guest physical address
     // Adapted from MMU function in ariane_pkg
-    function automatic logic [(riscv::GPPNW-1):0] make_gppn(input logic S1_en, input logic is_1G,
+    function automatic logic [(GPPNW-1):0] make_gppn(input logic S1_en, input logic is_1G,
                                                             input logic is_2M, input logic [28:0] vpn,
-                                                            input riscv::pte_t pte);
-        logic [(riscv::GPPNW-1):0] gppn;
+                                                            input pte_t pte);
+        logic [(GPPNW-1):0] gppn;
         if (S1_en) begin
-        gppn = pte.ppn[(riscv::GPPNW-1):0];
+        gppn = pte.ppn[(GPPNW-1):0];
         if (is_2M) gppn[8:0] = vpn[8:0];
         if (is_1G) gppn[17:0] = vpn[17:0];
         end else begin
@@ -499,14 +478,14 @@ package rv_iommu;
 
     // Extract Interrupt File number from GPA
     // The resulting IF number is used to index the corresponding MSI PTE in memory.
-    function automatic logic [(riscv::GPPNW-1):0] extract_imsic_num(input logic [(riscv::GPPNW-1):0] gpaddr, input logic [riscv::GPPNW-1:0] mask);
-        logic [(riscv::GPPNW-1):0] masked_gpaddr, imsic_num;
+    function automatic logic [(GPPNW-1):0] extract_imsic_num(input logic [(GPPNW-1):0] gpaddr, input logic [GPPNW-1:0] mask);
+        logic [(GPPNW-1):0] masked_gpaddr, imsic_num;
         int unsigned i;
 
         masked_gpaddr = gpaddr & mask;
         imsic_num = '0;
         i = 0;
-        for (int unsigned k = 0 ; k < riscv::GPPNW; k++) begin
+        for (int unsigned k = 0 ; k < GPPNW; k++) begin
             if (mask[k]) begin
                 imsic_num[i] = masked_gpaddr[k];
                 i++;

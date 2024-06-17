@@ -57,40 +57,40 @@ module rv_iommu_msiptw #(
     output logic ignore_o,
 
     // Request IOVA
-    input  logic [riscv::VLEN-1:0]      req_iova_i,
+    input  logic [rv_iommu::XLEN-1:0]   req_iova_i,
     // First-stage translation enable
     input  logic                        en_1S_i,
     // The translation is read-for-execute
     input  logic                        is_rx_i,
 
     // First-stage data provided by PTW
-    input  logic [(riscv::GPPNW-1):0]   vpn_i,
-    input  logic [19:0]                 pscid_i,
-    input  logic [15:0]                 gscid_i,
-    input  logic                        is_1S_2M_i,
-    input  logic                        is_1S_1G_i,
-    input  riscv::pte_t                 gpte_i,
+    input  logic [(rv_iommu::GPPNW-1):0]    vpn_i,
+    input  logic [19:0]                     pscid_i,
+    input  logic [15:0]                     gscid_i,
+    input  logic                            is_1S_2M_i,
+    input  logic                            is_1S_1G_i,
+    input  rv_iommu::pte_t                  gpte_i,
 
     // MSI PT base PPN
-    input  logic [(riscv::PPNW-1):0]    msiptp_ppn_i,
+    input  logic [(rv_iommu::PPNW-1):0]     msiptp_ppn_i,
     // MSI address mask
-    input  logic [riscv::GPPNW-1:0]     msi_addr_mask_i,
+    input  logic [rv_iommu::GPPNW-1:0]      msi_addr_mask_i,
 
     // Generic update ports
-    output logic [(riscv::GPPNW-1):0]   vpn_o,
-    output logic [19:0]                 pscid_o,
-    output logic [15:0]                 gscid_o,
-    output logic                        is_1S_2M_o,
-    output logic                        is_1S_1G_o,
-    output riscv::pte_t                 content_1S_o,
+    output logic [(rv_iommu::GPPNW-1):0]    vpn_o,
+    output logic [19:0]                     pscid_o,
+    output logic [15:0]                     gscid_o,
+    output logic                            is_1S_2M_o,
+    output logic                            is_1S_1G_o,
+    output rv_iommu::pte_t                  content_1S_o,
 
     // IOTLB update ports
-    output logic                        iotlb_update_o,
-    output rv_iommu::msi_pte_flat_t     iotlb_msi_content_o,
+    output logic                            iotlb_update_o,
+    output rv_iommu::msi_pte_flat_t         iotlb_msi_content_o,
 
     // MRIFC update ports
-    output logic                        mrifc_update_o,
-    output rv_iommu::mrifc_entry_t      mrifc_msi_content_o,
+    output logic                            mrifc_update_o,
+    output rv_iommu::mrifc_entry_t          mrifc_msi_content_o,
 
     // Error signaling
     output logic                                error_o,
@@ -108,7 +108,7 @@ module rv_iommu_msiptw #(
     state_flat_t flat_state_q, flat_state_n;
 
     // Physical pointer to access memory
-    logic [riscv::PLEN-1:0] pptr_q, pptr_n;
+    logic [rv_iommu::PLEN-1:0] pptr_q, pptr_n;
 
     // To cast input memory port to MSI PTE data
     // MSI-FLAT
@@ -125,12 +125,12 @@ module rv_iommu_msiptw #(
     logic init_msi_mrif;
 
     // Registers to propagate first-stage data
-    logic [(riscv::GPPNW-1):0]   vpn_q,         vpn_n;
-    logic [19:0]                 pscid_q,       pscid_n;
-    logic [15:0]                 gscid_q,       gscid_n;
-    logic                        is_1S_2M_q,    is_1S_2M_n;
-    logic                        is_1S_1G_q,    is_1S_1G_n;
-    riscv::pte_t                 gpte_q,        gpte_n;
+    logic [(rv_iommu::GPPNW-1):0]   vpn_q,         vpn_n;
+    logic [19:0]                    pscid_q,       pscid_n;
+    logic [15:0]                    gscid_q,       gscid_n;
+    logic                           is_1S_2M_q,    is_1S_2M_n;
+    logic                           is_1S_1G_q,    is_1S_1G_n;
+    rv_iommu::pte_t                 gpte_q,        gpte_n;
 
     // Generic update ports
     assign vpn_o          = vpn_q;
@@ -181,7 +181,7 @@ module rv_iommu_msiptw #(
 
         // AR
         mem_req_o.ar.id      = 4'b0011;
-        mem_req_o.ar.addr    = {{riscv::XLEN-riscv::PLEN{1'b0}}, pptr_q};   // Physical address to access
+        mem_req_o.ar.addr    = {{rv_iommu::XLEN-rv_iommu::PLEN{1'b0}}, pptr_q};   // Physical address to access
         mem_req_o.ar.len     = 8'b1;                                        // Two beats
         mem_req_o.ar.size    = 3'b011;                                      // 64 bits (8 bytes) per beat
         mem_req_o.ar.burst   = axi_pkg::BURST_INCR;                         // Incremental addresses
@@ -235,11 +235,11 @@ module rv_iommu_msiptw #(
                         // First-stage translation enabled. Tags come from PTW. Propagate first-stage data
                         if (en_1S_i) begin
                             
-                            automatic logic [riscv::GPPNW-1:0] imsic_num;
-                            imsic_num = rv_iommu::extract_imsic_num(gpte_i.ppn[(riscv::GPPNW-1):0], msi_addr_mask_i);
+                            automatic logic [rv_iommu::GPPNW-1:0] imsic_num;
+                            imsic_num = rv_iommu::extract_imsic_num(gpte_i.ppn[(rv_iommu::GPPNW-1):0], msi_addr_mask_i);
 
                             pptr_n      = {msiptp_ppn_i, 12'b0} | 
-                                            ({{riscv::PLEN-riscv::GPPNW{1'b0}}, imsic_num} << 4);
+                                            ({{rv_iommu::PLEN-rv_iommu::GPPNW{1'b0}}, imsic_num} << 4);
 
                             // First-stage parameters
                             vpn_n       = vpn_i;        // GVA
@@ -251,14 +251,14 @@ module rv_iommu_msiptw #(
                         // First-stage translation disabled. Tags come directly from translation logic
                         else begin
                             
-                            automatic logic [riscv::GPPNW-1:0] imsic_num;
-                            imsic_num = rv_iommu::extract_imsic_num(req_iova_i[(riscv::GPLEN-1):12], msi_addr_mask_i);
+                            automatic logic [rv_iommu::GPPNW-1:0] imsic_num;
+                            imsic_num = rv_iommu::extract_imsic_num(req_iova_i[(rv_iommu::GPLEN-1):12], msi_addr_mask_i);
 
                             pptr_n      = {msiptp_ppn_i, 12'b0} | 
-                                            ({{riscv::PLEN-riscv::GPPNW{1'b0}}, imsic_num} << 4);
+                                            ({{rv_iommu::PLEN-rv_iommu::GPPNW{1'b0}}, imsic_num} << 4);
 
                             // First-stage parameters
-                            vpn_n       = req_iova_i[(riscv::GPLEN-1):12];  // GPA
+                            vpn_n       = req_iova_i[(rv_iommu::GPLEN-1):12];  // GPA
                             is_1S_2M_n  = 1'b0;
                             is_1S_1G_n  = 1'b0;
                             gpte_n      = '0;
