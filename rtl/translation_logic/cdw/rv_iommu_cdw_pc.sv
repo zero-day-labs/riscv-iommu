@@ -588,14 +588,19 @@ module rv_iommu_cdw_pc #(
                             dc_fsc_n = dc_fsc;
 
                             // Config checks
-                            if ((dc_tc_q.pdtv && ((!caps_pd20_i && dc_fsc.mode == 4'b0011) ||
-                                                  (!caps_pd17_i && dc_fsc.mode == 4'b0010) ||
-                                                  (!caps_pd8_i && dc_fsc.mode == 4'b0001))) ||
-                                (!dc_tc_q.pdtv && !(dc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10})) ||
-                                (!dc_tc_q.pdtv && !dc_tc_q.sxl && ((!caps_sv39_i && dc_fsc.mode == 4'd8) ||
-                                                                   (!caps_sv48_i && dc_fsc.mode == 4'd9) ||
-                                                                   (!caps_sv57_i && dc_fsc.mode == 4'd10))) ||
-                                (!dc_tc_q.pdtv && dc_tc_q.sxl && (!caps_sv32_i && dc_fsc.mode == 4'd8)) ||
+                            if ((dc_tc_q.pdtv && ((dc_fsc.mode inside {[4:15]}) ||
+                                                   (!caps_pd20_i && dc_fsc.mode == 4'b0011     ) ||
+                                                   (!caps_pd17_i && dc_fsc.mode == 4'b0010     ) ||
+                                                   (!caps_pd8_i && dc_fsc.mode == 4'b0001      )
+                                                  )) ||
+                                (!dc_tc_q.pdtv && !dc_tc_q.sxl && (!(dc_fsc.mode inside {4'd0, 4'd8, 4'd9, 4'd10}) ||
+                                                                    (!caps_sv39_i && dc_fsc.mode == 4'd8         ) ||
+                                                                    (!caps_sv48_i && dc_fsc.mode == 4'd9         ) ||
+                                                                    (!caps_sv57_i && dc_fsc.mode == 4'd10        )
+                                                                   )) ||
+                                (!dc_tc_q.pdtv && dc_tc_q.sxl && (!(dc_fsc.mode inside {4'd0, 4'd8}    ) ||
+                                                                   (!caps_sv32_i && dc_fsc.mode == 4'd8)
+                                                                  )) ||
                                 (|dc_fsc.reserved)) begin
 
                                 wait_rlast_n    = (MSITrans == rv_iommu::MSI_DISABLED) ? (1'b0) : (1'b1);
@@ -604,7 +609,7 @@ module rv_iommu_cdw_pc #(
                             end
 
                             // MSI translation NOT supported
-                            if (MSITrans == rv_iommu::MSI_DISABLED) begin
+                            else if (MSITrans == rv_iommu::MSI_DISABLED) begin
                                 // only if DC have an associated PC and Stage-2 is enabled, pdtp.PPN must be translated before being stored
                                 // otherwise, fsc.PPN holds iosatp field, which must be saved as a GPA
                                 if (en_stage2_i && dc_tc_q.pdtv)
