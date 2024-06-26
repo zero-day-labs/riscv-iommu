@@ -1077,7 +1077,7 @@ module rv_iommu_tw_sv39x4_pc #(
                            (mrif_handler_error) |
                            (msi_write_error_i));
 
-        unique case (1'b1)
+        priority case (1'b1)
             wrap_error:         cause_code_o = wrap_cause_code;
             cdw_error:          cause_code_o = cdw_cause_code;
             ptw_error:          cause_code_o = ptw_cause_code;
