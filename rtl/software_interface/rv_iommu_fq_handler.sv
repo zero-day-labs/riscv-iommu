@@ -221,7 +221,7 @@ module rv_iommu_fq_handler #(
         mem_req_o.ar.addr       = '0;                   // IOMMU never reads from FQ
         mem_req_o.ar.len        = '0;
         mem_req_o.ar.size       = 3'b011;
-        mem_req_o.ar.burst      = axi_pkg::BURST_FIXED;
+        mem_req_o.ar.burst      = axi_pkg::BURST_INCR;
         mem_req_o.ar.lock       = '0;
         mem_req_o.ar.cache      = '0;
         mem_req_o.ar.prot       = '0;
