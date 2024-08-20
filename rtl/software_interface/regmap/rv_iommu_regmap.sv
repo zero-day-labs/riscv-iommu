@@ -135,6 +135,8 @@ module rv_iommu_regmap #(
   logic 		    fctl_gxl_we;
 
   // ddtp
+  logic         ddtp_l_we;
+  logic         ddtp_h_we;
   logic [3:0] 	ddtp_iommu_mode_qs;
   logic [3:0] 	ddtp_iommu_mode_wd;
   logic 		    ddtp_iommu_mode_we;
@@ -2777,8 +2779,19 @@ module rv_iommu_regmap #(
   assign fctl_gxl_we = addr_hit[2] & reg_we & !reg_error;
   assign fctl_gxl_wd = reg_wdata[2];
 
-  // Writes to the ddtp register must be committed to both register halves at the same time
-  // and only if the IOMMU has no in-flight transactions
+  /*  
+    If there is any in-flight transaction going through the IOMMU, we must wait 
+    until the transaction ends to modify the ddtp register.
+
+    Writes to the ddtp register received during in-flight transactions are 
+    registered and committed after the transaction ends
+  */
+
+  // ddtp (low)
+  assign ddtp_l_we = addr_hit[3] & reg_we & !reg_error;
+  // ddtp (high)
+  assign ddtp_h_we = addr_hit[4] & reg_we & !reg_error;
+
   always_comb begin : ddtp_write_comb
 
     ddtp_iommu_mode_we  = 1'b0;
@@ -2797,67 +2810,73 @@ module rv_iommu_regmap #(
     ddtp_busy_de        = 1'b0;
     ddtp_busy_d         = 1'b0;
 
-    // The IOMMU is not processing a transaction and there is data to be written
-    // Commit the write
-    if (!in_flight_i && (write_h_q || write_l_q)) begin
+    // There is pending data to be written to ddtp
+    if ((write_h_q || write_l_q)) begin
+      
+      // Write data if there is no in-flight transaction
+      if (!in_flight_i) begin
+        if (write_l_q) begin
+          write_l_n           = 1'b0;
+          ddtp_iommu_mode_we  = 1'b1;
+          ddtp_ppn_l_we       = 1'b1;
+        end
+      
+        if (write_h_q) begin
+          write_h_n           = 1'b0;
+          ddtp_ppn_h_we       = 1'b1;
+        end
 
-      if (write_l_q) begin
-        write_l_n           = 1'b0;
-        ddtp_iommu_mode_we  = 1'b1;
-        ddtp_ppn_l_we       = 1'b1;
-      end
-     
-      if (write_h_q) begin
-        write_h_n           = 1'b0;
-        ddtp_ppn_h_we       = 1'b1;
-      end
-
-      // Clear busy bit
-      ddtp_busy_de      = 1'b1;
-    end
-
-    // SW is trying to write to the low half of ddtp
-    if (addr_hit[3] && (reg_wdata[3:0] <= 4'd4) && reg_we && !reg_error) begin
-
-      // Check whether the IOMMU has in-flight transactions
-      if (in_flight_i) begin
-        // Wait for all in-flight transactions to finish
-        write_l_n         = 1'b1;
-        // Set busy bit
+        // Clear busy bit
         ddtp_busy_de      = 1'b1;
-        ddtp_busy_d       = 1'b1;
-        // Save input values
-        ddtp_iommu_mode_n = reg_wdata[3:0];
-        ddtp_ppn_l_n      = reg_wdata[31:10];
-      end
-
-      // There are no in-flight transactions. We can modify ddtp
-      else begin
-        ddtp_iommu_mode_we  = 1'b1;
-        ddtp_ppn_l_we       = 1'b1;
-        ddtp_iommu_mode_wd  = reg_wdata[3:0];
-        ddtp_ppn_l_wd       = reg_wdata[31:10];
       end
     end
 
-    // SW is trying to write to the high half of ddtp
-    if (addr_hit[4] && reg_we && !reg_error) begin
+    // There is no pending data to be written to ddtp
+    else begin
 
-      // Check whether the IOMMU has in-flight transactions
-      if (in_flight_i) begin
-        // Wait for all in-flight transactions to finish
-        write_h_n     = 1'b1;
-        // Set busy bit
-        ddtp_busy_de  = 1'b1;
-        ddtp_busy_d   = 1'b1;
-        // Save input values
-        ddtp_ppn_h_n  = reg_wdata[21:0];
+      // SW is trying to write to the low half of ddtp
+      if (ddtp_l_we) begin
+
+        // Check whether the IOMMU has in-flight transactions
+        if (in_flight_i) begin
+          // Wait for all in-flight transactions to finish
+          write_l_n         = 1'b1;
+          // Set busy bit
+          ddtp_busy_de      = 1'b1;
+          ddtp_busy_d       = 1'b1;
+          // Save input values
+          ddtp_iommu_mode_n = reg_wdata[3:0];
+          ddtp_ppn_l_n      = reg_wdata[31:10];
+        end
+
+        // There are no in-flight transactions. We can modify ddtp
+        else begin
+          ddtp_iommu_mode_we  = 1'b1;
+          ddtp_ppn_l_we       = 1'b1;
+          ddtp_iommu_mode_wd  = reg_wdata[3:0];
+          ddtp_ppn_l_wd       = reg_wdata[31:10];
+        end
       end
 
-      // There are no in-flight transactions. We can modify ddtp
-      else begin
-        ddtp_ppn_h_we = 1'b1;
-        ddtp_ppn_h_wd = reg_wdata[21:0];
+      // SW is trying to write to the high half of ddtp
+      if (ddtp_h_we) begin
+
+        // Check whether the IOMMU has in-flight transactions
+        if (in_flight_i) begin
+          // Wait for all in-flight transactions to finish
+          write_h_n     = 1'b1;
+          // Set busy bit
+          ddtp_busy_de  = 1'b1;
+          ddtp_busy_d   = 1'b1;
+          // Save input values
+          ddtp_ppn_h_n  = reg_wdata[21:0];
+        end
+
+        // There are no in-flight transactions. We can modify ddtp
+        else begin
+          ddtp_ppn_h_we = 1'b1;
+          ddtp_ppn_h_wd = reg_wdata[21:0];
+        end
       end
     end
   end : ddtp_write_comb
