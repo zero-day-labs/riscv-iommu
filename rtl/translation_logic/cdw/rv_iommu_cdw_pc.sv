@@ -524,7 +524,7 @@ module rv_iommu_cdw_pc #(
                             end
 
                             // Config checks
-                            if ((|pc_ta.reserved_1) || (|pc_ta.reserved_2)) begin
+                            else if ((|pc_ta.reserved_1) || (|pc_ta.reserved_2)) begin
                                 state_n         = ERROR;
                                 cause_n         = rv_iommu::PDT_ENTRY_MISCONFIGURED;
                                 wait_rlast_n    = 1'b1;
