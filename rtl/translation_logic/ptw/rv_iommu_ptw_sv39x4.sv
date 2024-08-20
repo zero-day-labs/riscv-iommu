@@ -641,7 +641,8 @@ module rv_iommu_ptw_sv39x4 #(
                     end
 
                     // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
-                    if (ptw_stage_q == STAGE_1 && (|pte.ppn[rv_iommu::PPNW-1:rv_iommu::GPPNW]) != 1'b0) begin
+                    if ((ptw_stage_q == STAGE_1) && (en_2S_i) && 
+                        (|pte.ppn[rv_iommu::PPNW-1:rv_iommu::GPPNW]) != 1'b0) begin
                         pf_excep_n      = 1'b1;
                         state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
                         ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault

@@ -535,10 +535,10 @@ module rv_iommu_ptw_sv39x4_pc #(
                             // "     as though executed in U-mode."
                             if ((main_lvl_q == LVL1 && |pte.ppn[17:0] != 1'b0   ) ||       // 1G
                                 (main_lvl_q == LVL2 && |pte.ppn[8:0] != 1'b0    ) ||       // 2M
-                                (!pte.a || !pte.r || (is_store_i && !pte.d)    ) ||
+                                (!pte.a || !pte.r || (is_store_i && !pte.d)     ) ||
                                 (ptw_stage_q != STAGE_1 && !pte.u              )) begin
                                 
-                                pf_excep_n        = 1'b1;
+                                pf_excep_n          = 1'b1;
                                 state_n             = ERROR;
                                 ptw_stage_n         = ptw_stage_q;
                                 update_o            = 1'b0;
@@ -668,8 +668,9 @@ module rv_iommu_ptw_sv39x4_pc #(
                     end
 
                     // "For Sv39x4 (...) GPA's bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
-                    if (ptw_stage_q == STAGE_1 && (|pte.ppn[rv_iommu::PPNW-1:rv_iommu::GPPNW]) != 1'b0) begin
-                        pf_excep_n    = 1'b1;
+                    if ((ptw_stage_q == STAGE_1) && (en_2S_i) && 
+                        (|pte.ppn[rv_iommu::PPNW-1:rv_iommu::GPPNW]) != 1'b0) begin
+                        pf_excep_n      = 1'b1;
                         state_n         = ERROR;  // GPPN bits [44:29] MUST be all zero
                         ptw_stage_n     = STAGE_2_INTERMED;    // to throw guest page fault
                         update_o        = 1'b0;
