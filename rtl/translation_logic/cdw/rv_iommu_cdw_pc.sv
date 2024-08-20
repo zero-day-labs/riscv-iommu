@@ -38,7 +38,8 @@ module rv_iommu_cdw_pc #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
 
     // Init CDW
-    input  logic                    init_cdw_i,
+    input  logic                    init_ddtw_i,
+    input  logic                    init_pdtw_i,
     
     // Error signaling
     output logic                                cdw_active_o,           // Set when PTW is walking memory
@@ -211,21 +212,34 @@ module rv_iommu_cdw_pc #(
     assign is_ddt_walk_o    = is_ddt_walk_q;
 
     // Edge-triggered init control
-    logic edge_trigger_q, edge_trigger_n;
+    logic ddt_edge_trigger_q, ddt_edge_trigger_n;
+    logic pdt_edge_trigger_q, pdt_edge_trigger_n;
 
     // Edge-triggered init control
     always_comb begin : cdw_init_control
 
         // Default
-        edge_trigger_n = edge_trigger_q;
+        ddt_edge_trigger_n = ddt_edge_trigger_q;
+        pdt_edge_trigger_n = pdt_edge_trigger_q;
 
+        // DDT walks
         // Edged signal
-        if (!edge_trigger_q && init_cdw_i)
-            edge_trigger_n = 1'b1;
+        if (!ddt_edge_trigger_q && init_ddtw_i)
+            ddt_edge_trigger_n = 1'b1;
 
         // End of edged signal
-        if (edge_trigger_q && !init_cdw_i)
-            edge_trigger_n = 1'b0;
+        if (ddt_edge_trigger_q && !init_ddtw_i)
+            ddt_edge_trigger_n = 1'b0;
+
+        // PDT walks
+        // Edged signal
+        if (!pdt_edge_trigger_q && init_pdtw_i)
+            pdt_edge_trigger_n = 1'b1;
+
+        // End of edged signal
+        if (pdt_edge_trigger_q && !init_pdtw_i)
+            pdt_edge_trigger_n = 1'b0;
+
 
     end : cdw_init_control
 
@@ -318,52 +332,50 @@ module rv_iommu_cdw_pc #(
                 wait_rlast_n    = 1'b0;
 
                 // check for DDTC misses
-                if (init_cdw_i && !edge_trigger_q) begin
+                if (init_ddtw_i && !ddt_edge_trigger_q) begin
 
                     state_n         = MEM_ACCESS;
+
+                    device_id_n     = req_did_i;
+                    is_ddt_walk_n   = 1'b1;
+                    cdw_lvl_n       = level_t'(ddtp_mode_i);
+
+                    // load pptr according to ddtp.MODE
+                    // 3LVL
+                    if (ddtp_mode_i == 4'b0100)
+                        cdw_pptr_n = {ddtp_ppn_i, 
+                                        ((MSITrans == rv_iommu::MSI_DISABLED) ? ({1'b0, req_did_i[23:16]}) : (req_did_i[23:15])), 
+                                            3'b0};
+                    // 2LVL
+                    else if (ddtp_mode_i == 4'b0011)
+                        cdw_pptr_n = {ddtp_ppn_i, 
+                                        ((MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[15:7]) : (req_did_i[14:6])), 
+                                            3'b0};
+                    // 1LVL
+                    else if (ddtp_mode_i == 4'b0010)
+                        cdw_pptr_n = {ddtp_ppn_i, 
+                                        (MSITrans == rv_iommu::MSI_DISABLED) ? ({req_did_i[6:0], 5'b0}) : ({req_did_i[5:0], 6'b0})};
+                end
+
+                // check for PDTC misses
+                else if (init_pdtw_i && !pdt_edge_trigger_q) begin
                     
-                    // check for DDTC misses
-                    if (ddtc_access_i && ~ddtc_hit_i) begin
+                    state_n         = MEM_ACCESS;
 
-                        device_id_n     = req_did_i;
-                        is_ddt_walk_n   = 1'b1;
-                        cdw_lvl_n       = level_t'(ddtp_mode_i);
+                    process_id_n    = req_pid_i;
+                    is_ddt_walk_n   = 1'b0;
+                    cdw_lvl_n       = level_t'(pdtp_mode_i + 4'd1);    // level enconding is different for PDT
 
-                        // load pptr according to ddtp.MODE
-                        // 3LVL
-                        if (ddtp_mode_i == 4'b0100)
-                            cdw_pptr_n = {ddtp_ppn_i, 
-                                            ((MSITrans == rv_iommu::MSI_DISABLED) ? ({1'b0, req_did_i[23:16]}) : (req_did_i[23:15])), 
-                                                3'b0};
-                        // 2LVL
-                        else if (ddtp_mode_i == 4'b0011)
-                            cdw_pptr_n = {ddtp_ppn_i, 
-                                            ((MSITrans == rv_iommu::MSI_DISABLED) ? (req_did_i[15:7]) : (req_did_i[14:6])), 
-                                                3'b0};
-                        // 1LVL
-                        else if (ddtp_mode_i == 4'b0010)
-                            cdw_pptr_n = {ddtp_ppn_i, 
-                                            (MSITrans == rv_iommu::MSI_DISABLED) ? ({req_did_i[6:0], 5'b0}) : ({req_did_i[5:0], 6'b0})};
-                    end
-
-                    // check for PDTC misses
-                    else if (pdtc_access_i && ~pdtc_hit_i) begin
-                    
-                        process_id_n    = req_pid_i;
-                        is_ddt_walk_n   = 1'b0;
-                        cdw_lvl_n       = level_t'(pdtp_mode_i + 4'd1);    // level enconding is different for PDT
-
-                        // load pptr according to pdtp.MODE
-                        // PD20
-                        if (pdtp_mode_i == 4'b0011)
-                            cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_pid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
-                        // PD17
-                        else if (pdtp_mode_i == 4'b0010)
-                            cdw_pptr_n = {pdtp_ppn_i, req_pid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
-                        // PD8
-                        else if (pdtp_mode_i == 4'b0001)
-                            cdw_pptr_n = {pdtp_ppn_i, req_pid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
-                    end
+                    // load pptr according to pdtp.MODE
+                    // PD20
+                    if (pdtp_mode_i == 4'b0011)
+                        cdw_pptr_n = {pdtp_ppn_i, 6'b0, req_pid_i[19:17], 3'b0};    // ... aaaa 0000 00bb b000
+                    // PD17
+                    else if (pdtp_mode_i == 4'b0010)
+                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[16:8], 3'b0};           // ... aaaa bbbb bbbb b000
+                    // PD8
+                    else if (pdtp_mode_i == 4'b0001)
+                        cdw_pptr_n = {pdtp_ppn_i, req_pid_i[7:0], 4'b0};             // ... aaaa bbbb bbbb 0000
                 end
             end
 
@@ -886,7 +898,8 @@ module rv_iommu_cdw_pc #(
             pc_fsc_q                <= '0;
             ptw_done_q              <= 1'b0;
             wait_rlast_q            <= 1'b0;
-            edge_trigger_q          <= 1'b0;
+            ddt_edge_trigger_q      <= 1'b0;
+            pdt_edge_trigger_q      <= 1'b0;
 
         end else begin
             state_q                 <= state_n;
@@ -905,7 +918,8 @@ module rv_iommu_cdw_pc #(
             pc_fsc_q                <= pc_fsc_n;
             ptw_done_q              <= ptw_done_i;
             wait_rlast_q            <= wait_rlast_n;
-            edge_trigger_q          <= edge_trigger_n;
+            ddt_edge_trigger_q      <= ddt_edge_trigger_n;
+            pdt_edge_trigger_q      <= pdt_edge_trigger_n;
         end
     end
 

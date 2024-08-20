@@ -192,10 +192,6 @@ module rv_iommu_tw_sv39x4 #(
     rv_iommu::pte_t             iotlb_up_1S_content;
     rv_iommu::pte_t             iotlb_up_2S_content;
 
-    // Init CDW
-    logic init_cdw;
-    assign init_cdw = (ddtc_access & ~ddtc_lu_hit);
-
     // To check whether first and second-stage translation modes are Bare
     logic S1_en, S2_en;
     assign S1_en    = (dc_base.fsc.mode != 4'b0000);
@@ -294,6 +290,10 @@ module rv_iommu_tw_sv39x4 #(
     logic                       msi_1S_2M;
     logic                       msi_1S_1G;
     rv_iommu::pte_t             msi_gpte;
+
+    // Init CDW
+    logic init_ddtw;
+    assign init_ddtw = (ddtc_access & ~ddtc_lu_hit);
 
     // Init PTW
     // Triggered when a miss occurs in the IOTLB and:
@@ -677,7 +677,7 @@ module rv_iommu_tw_sv39x4 #(
         .rst_ni                 (rst_ni             ),  // Asynchronous reset active low
 
         // from DDTC, to monitor misses
-        .init_cdw_i             (init_cdw           ),
+        .init_ddtw_i            (init_ddtw          ),
         
         // Error signaling
         .cdw_active_o           (cdw_active         ),  // Set when CDW is walking memory

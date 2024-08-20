@@ -38,7 +38,7 @@ module rv_iommu_cdw #(
     input  logic                    rst_ni,                 // Asynchronous reset active low
 
     // Init CDW
-    input  logic                    init_cdw_i,
+    input  logic                    init_ddtw_i,
     
     // Error signaling
     output logic                                cdw_active_o,           // Set when PTW is walking memory
@@ -159,11 +159,11 @@ module rv_iommu_cdw #(
         edge_trigger_n = edge_trigger_q;
 
         // Edged signal
-        if (!edge_trigger_q && init_cdw_i)
+        if (!edge_trigger_q && init_ddtw_i)
             edge_trigger_n = 1'b1;
 
         // End of edged signal
-        if (edge_trigger_q && !init_cdw_i)
+        if (edge_trigger_q && !init_ddtw_i)
             edge_trigger_n = 1'b0;
 
     end : cdw_init_control
@@ -246,8 +246,7 @@ module rv_iommu_cdw #(
             IDLE: begin
 
                 // check for DDTC misses
-                // External logic guarantees that DDTC is looked up before PDTC
-                if (init_cdw_i && !edge_trigger_q) begin
+                if (init_ddtw_i && !edge_trigger_q) begin
 
                     state_n         = MEM_ACCESS;
                     
