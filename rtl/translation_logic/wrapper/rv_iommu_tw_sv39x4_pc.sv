@@ -953,8 +953,8 @@ module rv_iommu_tw_sv39x4_pc #(
                 
                 // "Hold and stop if the transaction requests supervisor privilege but PC.ta.ENS is not set"
                 if (priv_lvl_i && !pdtc_lu_content.ta.ens) begin
-                    wrap_cause_code    = rv_iommu::TRANS_TYPE_DISALLOWED;
-                    wrap_error   = 1'b1;
+                    wrap_cause_code = rv_iommu::TRANS_TYPE_DISALLOWED;
+                    wrap_error      = 1'b1;
                 end
 
                 else begin
@@ -972,27 +972,32 @@ module rv_iommu_tw_sv39x4_pc #(
                 trans_valid_o   = 1'b1;
 
                 /*
-                    A fault is generated if:
-                    - A bit is not set (checked in PTW);
-                    - Page is not readable (checked in PTW);
-                    - (1): Transaction is a store and page has not write permissions (D bit checked in PTW);
-                    - (2): Transaction is read-for-execute and page has not X permissions;
-                    - (3): U-mode transaction and PTE has U=0;
-                    - (4): S-mode transaction and PTE has U=1 and (SUM=0 or x=1).
+                    First-stage checks: A fault is generated if:
+                    - (1): W transaction and pte.w=0;
+                    - (2): RX transaction and pte.x=0;
+                    - (3): U-mode transaction and pte.u=0;
+                    - (4): S-mode transaction, pte.u=1 and (PC.SUM=0 or transaction is RX)
                 */
-                if  ((is_store && !iotlb_lu_1S_content.w && S1_en                                              ) ||    // (1)
-                     (is_rx && !iotlb_lu_1S_content.r && !iotlb_lu_1S_content.x && S1_en                       ) ||    // (2)
-                     ((!priv_lvl_i) && !iotlb_lu_1S_content.u && S1_en                                         ) ||    // (3)
-                     (priv_lvl_i && iotlb_lu_1S_content.u && (!pdtc_lu_content.ta.sum || is_rx)                )       // (4)
-                    ) begin
+                if (S1_en && (
+                    (is_store && !iotlb_lu_1S_content.w                                         ) ||    // (1)
+                    (is_rx && !iotlb_lu_1S_content.r && !iotlb_lu_1S_content.x                  ) ||    // (2)
+                    (!priv_lvl_i && !iotlb_lu_1S_content.u                                      ) ||    // (3)
+                    (priv_lvl_i && iotlb_lu_1S_content.u && (!pdtc_lu_content.ta.sum || is_rx)  ))      // (4)
+                ) begin
                         if (is_store)   wrap_cause_code = rv_iommu::STORE_PAGE_FAULT;
                         else            wrap_cause_code = rv_iommu::LOAD_PAGE_FAULT;
                         wrap_error      = 1'b1;
                         trans_valid_o   = 1'b0;
                 end
 
-                else if ((is_store && (!iotlb_lu_2S_content.w && S2_en)) || // (1)
-                            (is_rx && (!iotlb_lu_2S_content.x && S2_en))    // (2)
+                /*
+                    Second-stage checks: A fault is generated if:
+                    - (1): W transaction and pte.w=0;
+                    - (2): RX transaction and pte.x=0;
+                */
+                else if (S2_en && (
+                         (is_store && !iotlb_lu_2S_content.w) ||    // (1)
+                         (is_rx && !iotlb_lu_2S_content.x   ))      // (2)
                         ) begin
                         if (is_store)   wrap_cause_code = rv_iommu::STORE_GUEST_PAGE_FAULT;
                         else            wrap_cause_code = rv_iommu::LOAD_GUEST_PAGE_FAULT;

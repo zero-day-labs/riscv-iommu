@@ -102,9 +102,9 @@ module rv_iommu_fq_handler #(
     // Physical pointer to access memory
     logic [rv_iommu::PLEN-1:0] fq_pptr_q, fq_pptr_n;
 
-    // To mask the input tail index according to the size of the CQ
-    logic [31:0]    masked_tail;
-    assign          masked_tail = fq_tail_i & ~({32{1'b1}} << (fq_size_i+1));
+    // To mask fqt after incrementing
+    logic [31:0]    idx_mask;
+    assign          idx_mask = ~({32{1'b1}} << (fq_size_i+1));
 
     // Control busy signal to notice SW when is not possible to write to cqcsr
     logic fq_en_q, fq_en_n;
@@ -306,10 +306,10 @@ module rv_iommu_fq_handler #(
                             end
 
                         // Set pptr with the paddr of the next entry
-                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{rv_iommu::PLEN-32{1'b0}}, masked_tail} << 5);
+                        fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{rv_iommu::PLEN-32{1'b0}}, fq_tail_i} << 5);
 
                         // If a fault that must be reported occurs and the FQ is full, set fq_of and signal error
-                        if (fq_tail_i == fq_head_i - 1) begin
+                        if (fq_tail_i == ((fq_head_i - 1) & idx_mask)) begin
                             fq_of_o     = 1'b1;
                             error_wen_o = 1'b1;
                             fq_ip_o     = fq_ie_i;
@@ -380,7 +380,7 @@ module rv_iommu_fq_handler #(
 
                             // After writing FQ record we can go back to IDLE
                             else begin
-                                fq_tail_o   = (fq_tail_i + 1) & ~({32{1'b1}} << (fq_size_i+1));    // Increment fqt
+                                fq_tail_o   = (fq_tail_i + 1) & idx_mask;    // Increment fqt
                                 state_n     = IDLE;
                             end
                         end
