@@ -353,7 +353,13 @@ module rv_iommu_ptw_sv39x4 #(
                             ptw_stage_n = STAGE_2_FINAL;
                         
                             gpaddr_n    = req_iova_i[rv_iommu::GPLEN-1:0];
-                            ptw_pptr_n  = {iohgatp_ppn_i[rv_iommu::PPNW-1:2], req_iova_i[rv_iommu::GPLEN-1:30], 3'b0};                 
+                            ptw_pptr_n  = {iohgatp_ppn_i[rv_iommu::PPNW-1:2], req_iova_i[rv_iommu::GPLEN-1:30], 3'b0};
+
+                            // "For G-stage translation Address bits 63:41 must all be zeros, or else a guest-page-fault exception occurs."
+                            if (|req_iova_i[rv_iommu::XLEN-1:rv_iommu::GPLEN] != 1'b0) begin
+                                pf_excep_n  = 1'b1;
+                                state_n     = ERROR;
+                            end
                         end 
 
                         // Stage 1 only: Start in S1-L1
