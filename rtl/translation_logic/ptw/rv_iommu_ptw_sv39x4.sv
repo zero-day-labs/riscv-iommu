@@ -414,8 +414,11 @@ module rv_iommu_ptw_sv39x4 #(
                         global_mapping_n = 1'b1;
 
                     // Invalid PTE
-                    // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, stop and raise a page-fault exception corresponding to the original access type".
-                    if (!pte.v || (!pte.r && pte.w)) begin
+                    // "If pte.v = 0, or if pte.r = 0 and pte.w = 1, or if any bits or encodings that are reserved for
+                    // "future standard use are set within pte, stop and raise a page-fault exception corresponding
+                    // "to the original access type.".
+                    if (!pte.v || (!pte.r && pte.w) ||
+                        (pte.g && (ptw_stage_q != STAGE_1))) begin
                         pf_excep_n    = 1'b1;
                         state_n         = ERROR;
                     end
