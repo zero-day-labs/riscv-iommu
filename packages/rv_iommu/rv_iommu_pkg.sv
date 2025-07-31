@@ -146,7 +146,6 @@ package rv_iommu;
     
     // Extended format Device Context
     typedef struct packed {
-        logic [63:0]        reserved;
         msi_addr_pattern_t  msi_addr_pattern;
         msi_addr_mask_t     msi_addr_mask;
         msiptp_t            msiptp;

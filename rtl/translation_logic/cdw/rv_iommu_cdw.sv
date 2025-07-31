@@ -545,7 +545,6 @@ module rv_iommu_cdw #(
                 up_dc_content.msi_addr_pattern  = dc_msi_addr_patt_q;
                 up_dc_content.msi_addr_mask     = dc_msi_addr_mask_q;
                 up_dc_content.msiptp            = dc_msiptp_q;
-                up_dc_content.reserved          = '0;
 
                 // Outputs
                 up_dc_content_o = up_dc_content;
