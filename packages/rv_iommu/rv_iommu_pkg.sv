@@ -108,7 +108,8 @@ package rv_iommu;
     // Translation Control
    typedef struct packed {
         logic [31:0]    reserved_2;
-        logic [7:0]     custom;
+        logic [6:0]     custom;
+        logic           gipc;
         logic [11:0]    reserved_1;
         logic           sxl;
         logic           sbe;
@@ -164,6 +165,7 @@ package rv_iommu;
     typedef struct packed {
         fsc_t   fsc;
         pc_ta_t ta;
+        iohgatp_t iohgatp;
     } pc_t;
 
     //--------------------------
@@ -369,7 +371,8 @@ package rv_iommu;
 
     // Capabilities (caps)
     typedef struct packed {
-        logic [7:0]     custom;
+        logic [6:0]     custom;
+        logic           gipc;
         logic [14:0]    reserved_3;
         logic           pd20;
         logic           pd17;

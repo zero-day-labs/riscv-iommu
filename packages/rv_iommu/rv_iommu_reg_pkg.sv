@@ -100,6 +100,9 @@ package rv_iommu_reg_pkg;
     struct packed {
       logic        q;
     } pd20;
+    struct packed {
+      logic        q;
+    } gipc;
   } iommu_reg2hw_capabilities_reg_t;
 
   typedef struct packed {

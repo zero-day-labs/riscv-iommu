@@ -220,7 +220,9 @@ module rv_iommu_tw_sv39x4_pc #(
     logic S1_en, S2_en;
     assign S1_en    = ((dc_base.tc.pdtv && pdtc_lu_content.fsc.mode != 4'b0000) ||
                        (!dc_base.tc.pdtv && dc_base.fsc.mode != 4'b0000)          );
-    assign S2_en    = (dc_base.iohgatp.mode != 4'b0000);
+    assign S2_en    = (dc_base.iohgatp.mode != 4'b0000 ||
+                       (dc_base.tc.pdtv && dc_base.tc.gipc &&
+                        pdtc_lu_content.iohgatp.mode != 4'b0000));
 
     // Alternative translation config for PTW implicit second-stage translations in CDW Walks
     logic   ptw_en_1S, ptw_en_2S;
@@ -480,7 +482,7 @@ module rv_iommu_tw_sv39x4_pc #(
         .cause_code_o           (ptw_cause_code     ),
 
         .en_1S_i                (ptw_en_1S          ),  // Enable signal for stage 1 translation. Defined by DC/PC
-        .en_2S_i                (ptw_en_2S          ),  // Enable signal for stage 2 translation. Defined by DC only
+        .en_2S_i                (ptw_en_2S          ),  // Enable signal for stage 2 translation. Defined by DC/PC
         .is_store_i             (is_store           ),  // Indicate whether this translation was triggered by a store or a load
         .is_rx_i                (is_rx              ),  // Read-for-execute
 
@@ -771,6 +773,7 @@ module rv_iommu_tw_sv39x4_pc #(
         .caps_msi_flat_i        (capabilities_i.msi_flat.q  ),
         .caps_amo_hwad_i        (capabilities_i.amo_hwad.q  ),
         .caps_end_i             (capabilities_i.endi.q      ),
+        .caps_gipc_i            (capabilities_i.gipc.q      ),
         .fctl_be_i              (fctl_i.be.q                ),
 
         // PC checks
@@ -805,6 +808,7 @@ module rv_iommu_tw_sv39x4_pc #(
 
         // from DC (for PC walks)
         .en_stage2_i            (S2_en              ),    // Second-stage translation is enabled
+        .gipc_i                 (dc_base.tc.gipc    ),    // GIPC is enabled
         .pdtp_ppn_i             (dc_base.fsc.ppn    ),      // PPN from DC.fsc.PPN
         .pdtp_mode_i            (dc_base.fsc.mode   ),      // PDT levels from DC.fsc.MODE
 
@@ -951,7 +955,7 @@ module rv_iommu_tw_sv39x4_pc #(
                 else begin
                     gscid           = dc_base.iohgatp.gscid;
                     pscid           = pdtc_lu_content.ta.pscid;
-                    iohgatp_ppn     = dc_base.iohgatp.ppn;
+                    iohgatp_ppn     = dc_base.tc.gipc ? pdtc_lu_content.iohgatp.ppn : dc_base.iohgatp.ppn;
                     iosatp_ppn      = pdtc_lu_content.fsc.ppn;
                     iotlb_access    = 1'b1;
                 end

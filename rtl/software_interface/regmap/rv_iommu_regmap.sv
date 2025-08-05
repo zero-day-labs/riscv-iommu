@@ -124,6 +124,7 @@ module rv_iommu_regmap #(
   logic 		    capabilities_pd8_qs;
   logic 		    capabilities_pd17_qs;
   logic 		    capabilities_pd20_qs;
+  logic 		    capabilities_gipc_qs;
 
   // fctl
   logic 		    fctl_be_qs;
@@ -528,6 +529,9 @@ module rv_iommu_regmap #(
   assign reg2hw.capabilities.pd20.q = 1'h1;
   assign capabilities_pd20_qs = 1'h1;
 
+  //   F[gipc]: 56:56
+  assign reg2hw.capabilities.gipc.q = 1'h1;
+  assign capabilities_gipc_qs = 1'h1;
 
   // R[fctl]: V(False)
 
@@ -3251,7 +3255,9 @@ module rv_iommu_regmap #(
         reg_rdata_next[6]     = capabilities_pd8_qs;
         reg_rdata_next[7]     = capabilities_pd17_qs;
         reg_rdata_next[8]     = capabilities_pd20_qs;
-        reg_rdata_next[31:9]  = '0;
+        reg_rdata_next[23:9]  = '0;
+        reg_rdata_next[24]    = capabilities_gipc_qs;
+        reg_rdata_next[31:25] = '0;
       end
 
       // fctl
