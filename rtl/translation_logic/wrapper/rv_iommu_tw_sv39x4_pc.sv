@@ -122,6 +122,7 @@ module rv_iommu_tw_sv39x4_pc #(
     input  logic [19:0]                 flush_pscid_i,  // PSCID to tag entries to be flushed
 
     output logic        ignore_request_o,   // Ignore request (MRIF only)
+    output logic        mrif_data_consumed_o,// Captured MSI data was accepted by the MRIF handler
     input  logic        msi_data_valid_i,   // MSI data sent by DMA available
     input  logic [31:0] msi_data_i          // MSI data
 );
@@ -357,7 +358,7 @@ module rv_iommu_tw_sv39x4_pc #(
 
     // Resume and ignore the current translation (used for MRIF processing)
     logic   msiptw_ignore, mrif_handler_ignore;
-    assign  ignore_request_o = (msiptw_ignore | mrif_handler_ignore);
+    assign  ignore_request_o = (msiptw_ignore | mrif_handler_ignore | mrifc_lu_hit);
 
     //# Device Directory Table Cache
     rv_iommu_ddtc #(
@@ -649,6 +650,9 @@ module rv_iommu_tw_sv39x4_pc #(
 
     // MRIF Support enabled
     if (MSITrans == rv_iommu::MSI_FLAT_MRIF) begin : gen_mrif_support
+        logic mrif_handler_ready;
+
+        assign mrif_data_consumed_o = mrifc_lu_hit & msi_data_valid_i & mrif_handler_ready;
         
         //# MRIF Handler
         rv_iommu_mrif_handler #(
@@ -663,7 +667,8 @@ module rv_iommu_tw_sv39x4_pc #(
             .mem_req_o      (mrif_handler_axi_req_o),
 
             // Init MRIF processing. MSI data and MRIF cache data are valid
-            .init_mrif_i    (mrifc_lu_hit & msi_data_valid_i),
+            .init_mrif_i    (mrif_data_consumed_o),
+            .ready_o        (mrif_handler_ready),
             // Abort access (discard without fault)
             .ignore_o       (mrif_handler_ignore),
 
@@ -725,6 +730,7 @@ module rv_iommu_tw_sv39x4_pc #(
     else begin : gen_mrif_support_disabled
         
         assign mrif_handler_axi_req_o   = '0;
+        assign mrif_data_consumed_o     = 1'b0;
 
         assign mrif_handler_ignore      = 1'b0;
 
