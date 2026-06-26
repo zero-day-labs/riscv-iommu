@@ -277,11 +277,14 @@ module riscv_iommu #(
     assign axi_aux_req.w_valid      = dev_tr_req_i.w_valid;
     assign write_data_handshake     = dev_tr_req_i.w_valid & dev_tr_resp_o.w_ready;
 
-    // These are the validity checks already implemented by the upstream MRIF
-    // path. The follow-up encoding patch extends this predicate with the AXI
-    // size and byte-lane requirements.
-    assign mrif_handler_expected    = (write_aw_q.addr[11:0] == '0) &
-                                      !(|write_data_q.data[31:11]);
+    // Unsupported MRIF-page writes retire through the ignore slave without
+    // changing interrupt state.
+    assign mrif_handler_expected = (write_aw_q.addr[11:0] == '0) &
+                                   (write_aw_q.len == '0) &
+                                   (write_aw_q.size == 3'b010) &
+                                   (write_data_q.strb == {{(DATA_WIDTH/8-4){1'b0}}, 4'hf}) &
+                                   write_data_q.last &
+                                   !(|write_data_q.data[31:11]);
 
     // B
     assign axi_aux_req.b_ready      = dev_tr_req_i.b_ready;
