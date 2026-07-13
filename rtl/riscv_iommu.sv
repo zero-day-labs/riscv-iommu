@@ -96,6 +96,12 @@ module riscv_iommu #(
     input  axi_req_slv_t    prog_req_i,
     output axi_rsp_slv_t    prog_resp_o,
 
+    // Host-bridge global-observability synchronization
+    output logic            iofence_req_o,
+    output logic            iofence_pr_o,
+    output logic            iofence_pw_o,
+    input  logic            iofence_done_i,
+
     output logic [(N_INT_VEC-1):0] wsi_wires_o
 );
 
@@ -592,6 +598,10 @@ module riscv_iommu #(
         // CQ
         .cq_axi_resp_i      (cq_axi_resp),
         .cq_axi_req_o       (cq_axi_req),
+        .iofence_req_o      (iofence_req_o),
+        .iofence_pr_o       (iofence_pr_o),
+        .iofence_pw_o       (iofence_pw_o),
+        .iofence_done_i     (iofence_done_i),
         // FQ
         .fq_axi_resp_i      (fq_axi_resp),
         .fq_axi_req_o       (fq_axi_req),

@@ -56,6 +56,10 @@ module rv_iommu_sw_if_wrapper #(
     // CQ
     input  axi_rsp_t    cq_axi_resp_i,
     output axi_req_t    cq_axi_req_o,
+    output logic        iofence_req_o,
+    output logic        iofence_pr_o,
+    output logic        iofence_pw_o,
+    input  logic        iofence_done_i,
     // FQ
     input  axi_rsp_t    fq_axi_resp_i,
     output axi_req_t    fq_axi_req_o,
@@ -310,6 +314,11 @@ module rv_iommu_sw_if_wrapper #(
         .cq_ip_o                (hw2reg.ipsr.cip.d      ),  // To set cip bit in ipsr register if a fault occurs and cq_ie is set
 
         .wsi_en_i               (wsi_en         ),  // To know whether WSI generation is supported
+
+        .iofence_req_o          (iofence_req_o  ),
+        .iofence_pr_o           (iofence_pr_o   ),
+        .iofence_pw_o           (iofence_pw_o   ),
+        .iofence_done_i         (iofence_done_i ),
 
         // DDTC Invalidation
         .flush_ddtc_o           (flush_ddtc_o   ),  // Flush DDTC
