@@ -50,6 +50,10 @@ import rv_iommu::*;
 	input  req_slv_t    			prog_req_i,
 	output resp_slv_t   			prog_resp_o,
 
+	// Global-observability synchronization for DDTP Off
+	output logic                    ddtp_sync_req_o,
+	input  logic                    ddtp_sync_done_i,
+
 	output logic [NumIRQWires-1:0]	wsi_wires_o
 );
 
@@ -112,6 +116,9 @@ import rv_iommu::*;
 		// Programming Interface (Slave)
 		.prog_req_i			( prog_req_i		),
 		.prog_resp_o		( prog_resp_o		),
+
+		.ddtp_sync_req_o	( ddtp_sync_req_o	),
+		.ddtp_sync_done_i	( ddtp_sync_done_i	),
 
 		.wsi_wires_o		( wsi_wires_o		)
 	);
