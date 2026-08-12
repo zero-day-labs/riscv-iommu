@@ -57,6 +57,12 @@ module rv_iommu_cq_handler #(
 
     input  logic                    wsi_en_i,           // Indicates if the IOMMU supports and uses WSI generation
 
+    // Host-bridge global-observability synchronization
+    output logic                    iofence_req_o,
+    output logic                    iofence_pr_o,
+    output logic                    iofence_pw_o,
+    input  logic                    iofence_done_i,
+
     // DDTC Invalidation
     output logic                        flush_ddtc_o,   // Flush DDTC
     output logic                        flush_dv_o,     // Indicates if device_id is valid
@@ -89,7 +95,8 @@ module rv_iommu_cq_handler #(
         REGISTER,       // 010
         DECODE,         // 011
         WRITE,          // 100
-        ERROR           // 101
+        ERROR,          // 101
+        FENCE           // 110
     }   state_q, state_n;
 
     // Write FSM states
@@ -105,6 +112,8 @@ module rv_iommu_cq_handler #(
     // To mask the input head index according to the size of the CQ
     logic [31:0]    masked_head;
     assign          masked_head = cq_head_i & ~({32{1'b1}} << (cq_size_i+1));
+    logic [31:0]    next_head;
+    assign          next_head = (cq_head_i + 1) & ~({32{1'b1}} << (cq_size_i+1));
 
     // Control busy signal to notice SW when is not possible to write to cqcsr
     logic cq_en_q, cq_en_n;
@@ -132,11 +141,13 @@ module rv_iommu_cq_handler #(
     rv_iommu::cq_iotinval_t    cmd_iotinval;
     rv_iommu::cq_iofence_t     cmd_iofence;
     rv_iommu::cq_iodirinval_t  cmd_iodirinval;
+    rv_iommu::cq_entry_t       fetched_entry;
 
     assign cq_entry         = rv_iommu::cq_entry_t'(cmd_q);
     assign cmd_iotinval     = rv_iommu::cq_iotinval_t'(cmd_q);
     assign cmd_iofence      = rv_iommu::cq_iofence_t'(cmd_q);
     assign cmd_iodirinval   = rv_iommu::cq_iodirinval_t'(cmd_q);
+    assign fetched_entry    = rv_iommu::cq_entry_t'({mem_resp_i.r.data, cmd_q[63:0]});
 
 
     //# Combinational Logic
@@ -188,6 +199,10 @@ module rv_iommu_cq_handler #(
 
         // R
         mem_req_o.r_ready       = 1'b0;                 // to signal read completion
+
+        iofence_req_o           = 1'b0;
+        iofence_pr_o            = 1'b0;
+        iofence_pw_o            = 1'b0;
 
         flush_vma_o             = 1'b0;
         flush_gvma_o            = 1'b0;
@@ -268,7 +283,10 @@ module rv_iommu_cq_handler #(
 
                     if (mem_resp_i.r.last) begin
                         cmd_n[127:64]   = mem_resp_i.r.data;
-                        cq_head_o = (cq_head_i + 1) & ~({32{1'b1}} << (cq_size_i+1));  // head is incremented after fetching a command
+                        // IOFENCE.C advances cqh only after it completes.
+                        if ((mem_resp_i.r.resp == axi_pkg::RESP_OKAY) &&
+                            (fetched_entry.opcode != rv_iommu::IOFENCE))
+                            cq_head_o = next_head;
                         state_n         = DECODE;
                     end
                     else cmd_n[63:0]    = mem_resp_i.r.data;
@@ -334,14 +352,6 @@ module rv_iommu_cq_handler #(
                         completed and committed.
                     */
                     rv_iommu::IOFENCE: begin
-                        /*
-                            INFO:
-                            I think this command makes sense when implementing ATS commands, or any other command that
-                            could take several cycles to execute. In this scenario, the FSM may execute subsequent commands
-                            while the other completes, and the IOFENCE would wait for all fetched commands to be completed.
-                            Since all implemented commands in this version are executed immediately, there's no need to wait for now
-                        */
-
                         // "A command is determined to be illegal if a reserved bit is set to 1"
                         if ((|cmd_iofence.reserved_1) || (|cmd_iofence.reserved_2)) begin
                             
@@ -351,23 +361,25 @@ module rv_iommu_cq_handler #(
                         end
 
                         // Valid IOFENCE.C command
+                        else if (cmd_iofence.pr || cmd_iofence.pw) begin
+                            state_n = FENCE;
+                        end
+
+                        // "If AV=1, the IOMMU writes DATA to memory at a 4-byte aligned address ADDR[63:2] * 4"
+                        else if (cmd_iofence.av) begin
+                            cq_pptr_n  = {cmd_iofence.addr[riscv::PLEN-1-2:0], 2'b0};
+                            wr_state_n = AW_REQ;
+                            state_n    = WRITE;
+                        end
+
                         else begin
+                            cq_head_o = next_head;
 
-                            // "If AV=1, the IOMMU writes DATA to memory at a 4-byte aligned address ADDR[63:2] * 4"
-                            if(cmd_iofence.av) begin
-                                cq_pptr_n   = {cmd_iofence.addr[riscv::PLEN-1-2:0], 2'b0};
-                                wr_state_n  = AW_REQ;
-                                state_n     = WRITE;
-                            end
-
-                            // Set cqcsr.fence_w_ip if IOMMU supports and uses WSIs
                             if (cmd_iofence.wsi && wsi_en_i) begin
                                 fence_w_ip_o    = 1'b1;
                                 error_wen_o     = 1'b1;
                             end
                         end
-
-                        // TODO: Check PR and PW bits
                     end
 
                     /*
@@ -425,6 +437,30 @@ module rv_iommu_cq_handler #(
                 endcase
             end
 
+            // Wait for the host bridge to order prior processed requests.
+            FENCE: begin
+                iofence_req_o = 1'b1;
+                iofence_pr_o  = cmd_iofence.pr;
+                iofence_pw_o  = cmd_iofence.pw;
+
+                if (iofence_done_i) begin
+                    if (cmd_iofence.av) begin
+                        cq_pptr_n  = {cmd_iofence.addr[riscv::PLEN-1-2:0], 2'b0};
+                        wr_state_n = AW_REQ;
+                        state_n    = WRITE;
+                    end
+                    else begin
+                        cq_head_o = next_head;
+                        state_n   = IDLE;
+
+                        if (cmd_iofence.wsi && wsi_en_i) begin
+                            fence_w_ip_o = 1'b1;
+                            error_wen_o  = 1'b1;
+                        end
+                    end
+                end
+            end
+
             // Write DATA (32-bit) to ADDR[63:2] * 4
             WRITE: begin
                 
@@ -460,9 +496,15 @@ module rv_iommu_cq_handler #(
                                 cq_mf_o         = 1'b1;
                                 error_wen_o     = 1'b1;
                             end
+                            else begin
+                                state_n   = IDLE;
+                                cq_head_o = next_head;
 
-                            // After writing DATA to ADDR[63:2]*4 there is nothing else to do for IOFENCE.C
-                            else state_n = IDLE;
+                                if (cmd_iofence.wsi && wsi_en_i) begin
+                                    fence_w_ip_o = 1'b1;
+                                    error_wen_o  = 1'b1;
+                                end
+                            end
                         end
                     end
 

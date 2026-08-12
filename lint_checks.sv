@@ -50,6 +50,11 @@ import rv_iommu::*;
 	input  req_slv_t    			prog_req_i,
 	output resp_slv_t   			prog_resp_o,
 
+	output logic                    iofence_req_o,
+	output logic                    iofence_pr_o,
+	output logic                    iofence_pw_o,
+	input  logic                    iofence_done_i,
+
 	output logic [NumIRQWires-1:0]	wsi_wires_o
 );
 
@@ -112,6 +117,11 @@ import rv_iommu::*;
 		// Programming Interface (Slave)
 		.prog_req_i			( prog_req_i		),
 		.prog_resp_o		( prog_resp_o		),
+
+		.iofence_req_o		( iofence_req_o		),
+		.iofence_pr_o		( iofence_pr_o		),
+		.iofence_pw_o		( iofence_pw_o		),
+		.iofence_done_i		( iofence_done_i	),
 
 		.wsi_wires_o		( wsi_wires_o		)
 	);
