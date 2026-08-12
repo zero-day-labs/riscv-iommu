@@ -96,6 +96,10 @@ module riscv_iommu #(
     input  axi_req_slv_t    prog_req_i,
     output axi_rsp_slv_t    prog_resp_o,
 
+    // Global-observability synchronization for DDTP Off
+    output logic            ddtp_sync_req_o,
+    input  logic            ddtp_sync_done_i,
+
     output logic [(N_INT_VEC-1):0] wsi_wires_o
 );
 
@@ -189,6 +193,7 @@ module riscv_iommu #(
     rv_iommu_reg_pkg::iommu_reg2hw_capabilities_reg_t   capabilities;
     rv_iommu_reg_pkg::iommu_reg2hw_fctl_reg_t           fctl;
     rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t           ddtp;
+    logic                                               ddtp_off_pending;
 
     // Debug Interface register wires
     rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t    dbg_if_iova;
@@ -238,6 +243,16 @@ module riscv_iommu #(
     logic   resume_aw_n, resume_aw_q;
     logic   resume_ar_n, resume_ar_q;
 
+    // Keep DDTP busy until every accepted device transaction has returned its
+    // final response. The demux allows MaxTrans transactions for every AXI ID.
+    localparam int unsigned AXI_MAX_TRANS = 8;
+    localparam int unsigned OUTSTANDING_WIDTH = ID_WIDTH + $clog2(AXI_MAX_TRANS + 1);
+    logic [OUTSTANDING_WIDTH-1:0] write_outstanding_n, write_outstanding_q;
+    logic [OUTSTANDING_WIDTH-1:0] read_outstanding_n, read_outstanding_q;
+    logic                         write_accept, write_complete;
+    logic                         read_accept, read_complete;
+    logic                         completion_in_flight;
+
     // Connect the aux AXI bus to the translation request interface
     // AW
     assign axi_aux_req.aw_valid     = resume_aw_q;
@@ -280,6 +295,44 @@ module riscv_iommu #(
     // R
     assign axi_aux_req.r_ready      = dev_tr_req_i.r_ready;
 
+    assign write_accept   = axi_aux_req.aw_valid && dev_tr_resp_o.aw_ready;
+    assign write_complete = dev_tr_resp_o.b_valid && axi_aux_req.b_ready;
+    assign read_accept    = (axi_aux_req.ar_valid && dev_tr_resp_o.ar_ready) ||
+                            (write_accept && axi_aux_req.aw.atop[5]);
+    assign read_complete  = dev_tr_resp_o.r_valid && axi_aux_req.r_ready &&
+                            dev_tr_resp_o.r.last;
+
+    // Include current-cycle accepts to close the gap before the counters update.
+    assign completion_in_flight = (|write_outstanding_q) || (|read_outstanding_q) ||
+                                  write_accept || read_accept;
+
+    always_comb begin : outstanding_count_comb
+        write_outstanding_n = write_outstanding_q;
+        read_outstanding_n  = read_outstanding_q;
+
+        case ({write_accept, write_complete})
+            2'b10: write_outstanding_n = write_outstanding_q + 1'b1;
+            2'b01: write_outstanding_n = write_outstanding_q - 1'b1;
+            default: ;
+        endcase
+
+        case ({read_accept, read_complete})
+            2'b10: read_outstanding_n = read_outstanding_q + 1'b1;
+            2'b01: read_outstanding_n = read_outstanding_q - 1'b1;
+            default: ;
+        endcase
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : outstanding_count_seq
+        if (~rst_ni) begin
+            write_outstanding_q <= '0;
+            read_outstanding_q  <= '0;
+        end else begin
+            write_outstanding_q <= write_outstanding_n;
+            read_outstanding_q  <= read_outstanding_n;
+        end
+    end
+
     // Select transaction parameters source: TR request / DBG IF
     // Priority is given to normal translations
     // If a debug translation is ongoing and a normal translation is triggered, we wait for the debug translation to complete.
@@ -312,7 +365,8 @@ module riscv_iommu #(
             dbg_ongoing_n           = dbg_ongoing_q;
 
             // DBG IF request received and no normal translation is starting / ongoing
-            if (dbg_if_ctl.go.q & ~(request_ongoing | dev_tr_req_i.ar_valid | dev_tr_req_i.aw_valid)) begin
+            if (dbg_if_ctl.go.q & ~(request_ongoing | dev_tr_req_i.ar_valid |
+                                    dev_tr_req_i.aw_valid | ddtp_off_pending)) begin
 
                 // Indicate that a debug translation is ongoing
                 dbg_ongoing_n = 1'b1;
@@ -491,7 +545,7 @@ module riscv_iommu #(
         .rst_ni         (rst_ni ),
 
         .req_trans_i    (request_ongoing),                    // Trigger normal translation (if no DBG translation is ongoing)
-        .req_dbg_i      (dbg_if_ctl.go.q & ~request_ongoing), // Trigger debug translation  (if no normal translation is ongoing)
+        .req_dbg_i      (dbg_if_ctl.go.q & ~request_ongoing & ~ddtp_off_pending), // Trigger debug translation  (if no normal translation is ongoing)
 
         // Translation request data
         .did_i          (did        ),  // AxMMUSID / DBG IF
@@ -603,6 +657,9 @@ module riscv_iommu #(
         .capabilities_o     (capabilities),
         .fctl_o             (fctl),
         .ddtp_o             (ddtp),
+        .ddtp_off_pending_o (ddtp_off_pending),
+        .ddtp_sync_req_o    (ddtp_sync_req_o),
+        .ddtp_sync_done_i   (ddtp_sync_done_i),
 
         // DBG IF registers
         .dbg_if_iova_o      (dbg_if_iova),
@@ -630,7 +687,9 @@ module riscv_iommu #(
         .flush_pscid_o      (flush_pscid),  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
         // Request data
-        .in_flight_i        (request_ongoing | dbg_if_ctl.go.q),    // The IOMMU is currently processing a transaction
+        .in_flight_i        (request_ongoing | dbg_ongoing_q |
+                             (dbg_if_ctl.go.q & ~ddtp_off_pending) |
+                             completion_in_flight), // The IOMMU is currently processing a transaction
         .trans_type_i       (ttype),            // transaction type
         .did_i              (did),              // device_id associated with the transaction
         .pv_i               (pv),               // to indicate if transaction has a valid process_id
@@ -738,6 +797,7 @@ module riscv_iommu #(
             .resp_t         ( axi_rsp_t     ),
             .NoMstPorts     ( 3             ),  // MRIF supports adds ignoring mechanism
             .AxiLookBits    ( ID_WIDTH      ),  // Assuming same value as AXI ID width
+            .MaxTrans       ( AXI_MAX_TRANS ),
             .FallThrough    ( 1'b0          ),
             .SpillAw        ( 1'b0          ),
             .SpillW         ( 1'b0          ),
@@ -779,6 +839,7 @@ module riscv_iommu #(
             .resp_t         ( axi_rsp_t     ),
             .NoMstPorts     ( 2             ),  // MRIF supports adds ignoring mechanism
             .AxiLookBits    ( ID_WIDTH      ),  // Assuming same value as AXI ID width
+            .MaxTrans       ( AXI_MAX_TRANS ),
             .FallThrough    ( 1'b0          ),
             .SpillAw        ( 1'b0          ),
             .SpillW         ( 1'b0          ),
@@ -844,12 +905,12 @@ module riscv_iommu #(
             IDLE: begin
                 
                 // AR request received (this way we are giving priority to read transactions)
-                if (dev_tr_req_i.ar_valid & ~dbg_ongoing_q) begin
+                if (dev_tr_req_i.ar_valid & ~dbg_ongoing_q & ~ddtp_off_pending) begin
                     request_type_n  = READ;
                 end
 
                 // AW request received
-                else if (dev_tr_req_i.aw_valid & ~dbg_ongoing_q) begin
+                else if (dev_tr_req_i.aw_valid & ~dbg_ongoing_q & ~ddtp_off_pending) begin
                     request_type_n  = WRITE;
                 end
             end

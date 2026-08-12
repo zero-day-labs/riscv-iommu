@@ -68,6 +68,11 @@ module rv_iommu_sw_if_wrapper #(
     output rv_iommu_reg_pkg::iommu_reg2hw_fctl_reg_t            fctl_o,
     output rv_iommu_reg_pkg::iommu_reg2hw_ddtp_reg_t            ddtp_o,
 
+    // DDTP Off global-observability synchronization
+    output logic ddtp_off_pending_o,
+    output logic ddtp_sync_req_o,
+    input  logic ddtp_sync_done_i,
+
     // Debug register IF
     output rv_iommu_reg_pkg::iommu_reg2hw_tr_req_iova_reg_t     dbg_if_iova_o,
     input  rv_iommu_reg_pkg::iommu_hw2reg_tr_response_reg_t     dbg_if_resp_i,
@@ -270,8 +275,11 @@ module rv_iommu_sw_if_wrapper #(
         .reg2hw         ( reg2hw        ),
         .hw2reg         ( hw2reg        ),
         
-        .devmode_i      ( 1'b0          ),
-        .in_flight_i    ( in_flight_i   )
+        .devmode_i          ( 1'b0               ),
+        .in_flight_i        ( in_flight_i        ),
+        .ddtp_off_pending_o ( ddtp_off_pending_o ),
+        .ddtp_sync_req_o    ( ddtp_sync_req_o    ),
+        .ddtp_sync_done_i   ( ddtp_sync_done_i   )
     );
 
     //# Command Queue

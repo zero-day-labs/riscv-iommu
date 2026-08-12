@@ -140,6 +140,10 @@ Master interface used to forward permitted requests to the system interconnect. 
 
 On an error, the AXI demux connects the translation request IF to a [PULP AXI Error Slave](https://github.com/pulp-platform/axi/blob/master/src/axi_err_slv.sv), which responds the failing request with an AXI error.
 
+### **DDTP Off Synchronization Interface**
+
+The IOMMU holds `ddtp_sync_req_o` high while a DDTP Off transition is waiting for prior device traffic to reach the platform's global ordering point. The integrator must assert `ddtp_sync_done_i` only after every earlier processed request is observable by all harts, devices and IOMMUs. New translation requests remain stalled until synchronization completes; tying `ddtp_sync_done_i` high is valid only when completion responses already provide this guarantee.
+
 ### **Interrupt wires**
 
 The IOMMU may be configured to generate interrupts as WSIs to request service from software. For this purpose, a set of external wires is driven by the WSI interrupt generation support module, and should be connected to a Platform-Level Interrupt Controller (e.g. PLIC/APLIC). The number of interrupt wires is defined by the N_INT_VEC parameter.

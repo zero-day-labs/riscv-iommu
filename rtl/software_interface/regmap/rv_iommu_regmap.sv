@@ -51,8 +51,11 @@ module rv_iommu_regmap #(
   output rv_iommu_reg_pkg::iommu_reg2hw_t 	reg2hw, // Write
   input  rv_iommu_reg_pkg::iommu_hw2reg_t 	hw2reg, // Read
 
-  input  logic devmode_i,   // If 1, explicit error return for unmapped register access
-  input  logic in_flight_i  // The IOMMU is currently processing a translation
+  input  logic devmode_i,          // If 1, explicit error return for unmapped register access
+  input  logic in_flight_i,        // The IOMMU is currently processing a transaction
+  output logic ddtp_off_pending_o, // An Off transition is waiting for quiescence
+  output logic ddtp_sync_req_o,    // Request global ordering of prior traffic
+  input  logic ddtp_sync_done_i    // Prior traffic reached the global ordering point
 );
 
   import rv_iommu_reg_pkg::* ;
@@ -153,6 +156,7 @@ module rv_iommu_regmap #(
   logic [3:0]   ddtp_iommu_mode_n, ddtp_iommu_mode_q;
   logic [21:0]  ddtp_ppn_l_n, ddtp_ppn_l_q;
   logic [21:0]  ddtp_ppn_h_n, ddtp_ppn_h_q;
+  logic         ddtp_second_word_off;
 
   // cqb (low)
   logic [4:0] 	cqb_log2sz_1_qs;
@@ -2777,8 +2781,13 @@ module rv_iommu_regmap #(
   assign fctl_gxl_we = addr_hit[2] & reg_we & !reg_error;
   assign fctl_gxl_wd = reg_wdata[2];
 
-  // Writes to the ddtp register must be committed to both register halves at the same time
-  // and only if the IOMMU has no in-flight transactions
+  // Writes to the ddtp register must be committed to both register halves at the same time.
+  // Off also requires prior traffic to reach the platform's global ordering point.
+  assign ddtp_off_pending_o = write_l_q && write_h_q && (ddtp_iommu_mode_q == 4'h0);
+  assign ddtp_sync_req_o = ddtp_off_pending_o && !in_flight_i;
+  assign ddtp_second_word_off = (addr_hit[4] && (ddtp_iommu_mode_q == 4'h0)) ||
+                                (addr_hit[3] && (reg_wdata[3:0] == 4'h0));
+
   always_comb begin : ddtp_write_comb
 
     ddtp_iommu_mode_we  = 1'b0;
@@ -2799,7 +2808,8 @@ module rv_iommu_regmap #(
 
     // The IOMMU is not processing a transaction and there is data to be written
     // Commit the write
-    if (!in_flight_i && write_h_q && write_l_q) begin
+    if (!in_flight_i && write_h_q && write_l_q &&
+        (!ddtp_off_pending_o || ddtp_sync_done_i)) begin
       write_l_n           = 1'b0;
       write_h_n           = 1'b0;
 
@@ -2830,8 +2840,8 @@ module rv_iommu_regmap #(
       // Second word
       if ((addr_hit[4] && write_l_q) || (addr_hit[3] && write_h_q)) begin
 
-        // Check whether the IOMMU has in-flight transactions
-        if (in_flight_i) begin
+        // Queue writes that need local quiescence or global synchronization.
+        if (in_flight_i || ddtp_second_word_off) begin
           // Wait for all in-flight transactions to finish
           // Set busy bit
           ddtp_busy_de      = 1'b1;
