@@ -110,8 +110,25 @@ module riscv_iommu #(
     enum logic [1:0] {
         IDLE,
         READ,
-        WRITE
+        WRITE,
+        WRITE_DATA
     } request_type_q, request_type_n;
+
+    // The translation request interface processes one write at a time. Keep
+    // its address metadata and data beat until both independent AXI channels
+    // have completed. MRIF handling may consume the data after AW has retired.
+    aw_chan_t                      write_aw_q;
+    w_chan_t                       write_data_q;
+    logic [23:0]                   write_did_q;
+    logic                          write_pv_q;
+    logic [19:0]                   write_pid_q;
+    logic                          write_data_valid_q;
+    logic                          write_data_complete_q, write_data_complete_n;
+    logic                          write_is_mrif_q, write_is_mrif_n;
+    logic                          write_data_handshake;
+    logic                          mrif_handler_expected;
+    logic                          mrif_data_consumed;
+    logic                          translation_request_active;
 
     // Transaction parameters
     // Final parameters. Selected between AR/AW requests and DBG IF requests
@@ -242,22 +259,32 @@ module riscv_iommu #(
     // AW
     assign axi_aux_req.aw_valid     = resume_aw_q;
 
-    assign axi_aux_req.aw.id        = dev_tr_req_i.aw.id;
+    assign axi_aux_req.aw.id        = write_aw_q.id;
     assign axi_aux_req.aw.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr};    // translated address
-    assign axi_aux_req.aw.len       = dev_tr_req_i.aw.len;
-    assign axi_aux_req.aw.size      = dev_tr_req_i.aw.size;
-    assign axi_aux_req.aw.burst     = dev_tr_req_i.aw.burst;
-    assign axi_aux_req.aw.lock      = dev_tr_req_i.aw.lock;
-    assign axi_aux_req.aw.cache     = dev_tr_req_i.aw.cache;
-    assign axi_aux_req.aw.prot      = dev_tr_req_i.aw.prot;
-    assign axi_aux_req.aw.qos       = dev_tr_req_i.aw.qos;
-    assign axi_aux_req.aw.region    = dev_tr_req_i.aw.region;
-    assign axi_aux_req.aw.atop      = dev_tr_req_i.aw.atop;
-    assign axi_aux_req.aw.user      = dev_tr_req_i.aw.user;
+    assign axi_aux_req.aw.len       = write_aw_q.len;
+    assign axi_aux_req.aw.size      = write_aw_q.size;
+    assign axi_aux_req.aw.burst     = write_aw_q.burst;
+    assign axi_aux_req.aw.lock      = write_aw_q.lock;
+    assign axi_aux_req.aw.cache     = write_aw_q.cache;
+    assign axi_aux_req.aw.prot      = write_aw_q.prot;
+    assign axi_aux_req.aw.qos       = write_aw_q.qos;
+    assign axi_aux_req.aw.region    = write_aw_q.region;
+    assign axi_aux_req.aw.atop      = write_aw_q.atop;
+    assign axi_aux_req.aw.user      = write_aw_q.user;
 
     // W
     assign axi_aux_req.w            = dev_tr_req_i.w;
     assign axi_aux_req.w_valid      = dev_tr_req_i.w_valid;
+    assign write_data_handshake     = dev_tr_req_i.w_valid & dev_tr_resp_o.w_ready;
+
+    // Unsupported MRIF-page writes retire through the ignore slave without
+    // changing interrupt state.
+    assign mrif_handler_expected = (write_aw_q.addr[11:0] == '0) &
+                                   (write_aw_q.len == '0) &
+                                   (write_aw_q.size == 3'b010) &
+                                   (write_data_q.strb == {{(DATA_WIDTH/8-4){1'b0}}, 4'hf}) &
+                                   write_data_q.last &
+                                   !(|write_data_q.data[31:11]);
 
     // B
     assign axi_aux_req.b_ready      = dev_tr_req_i.b_ready;
@@ -564,8 +591,10 @@ module riscv_iommu #(
 
         // MRIF Control
         .ignore_request_o   (ignore_request             ),  // Ignore AXI request, as the transaction was to an MRIF
-        .msi_data_valid_i   (dev_tr_req_i.w_valid       ),  // Data present in AWDATA is valid (for MRIF purposes)
-        .msi_data_i         (dev_tr_req_i.w.data[31:0]  )   // MSI data
+        .mrif_data_consumed_o(mrif_data_consumed        ),
+        .msi_data_valid_i   ((request_type_q == WRITE_DATA) & write_is_mrif_q &
+                             write_data_valid_q & mrif_handler_expected),
+        .msi_data_i         (write_data_q.data[31:0]    )   // Captured MSI data
     );
 
     //# Software Interface Wrapper
@@ -664,6 +693,10 @@ module riscv_iommu #(
     );
 
     //# Boundary Check
+    assign translation_request_active = (request_type_q == READ) |
+                                        (request_type_q == WRITE) |
+                                        ((request_type_q == WRITE_DATA) & write_is_mrif_q);
+
     // In order to send error response, we need to set the corresponding valid signal and select the error slave in the AXI Demux.
     // To do that, we may OR the translation error flag from the translation wrapper with another flag to indicate a 4kiB cross
     // and trigger the error response
@@ -673,7 +706,7 @@ module riscv_iommu #(
         rv_iommu_axi4_bc i_rv_iommu_axi4_bc
         (
             // AxVALID
-            .request_i          (request_type_q != IDLE),
+            .request_i          (translation_request_active),
             // AxADDR
             .addr_i             ( trans_iova            ),
             // AxBURST
@@ -693,7 +726,7 @@ module riscv_iommu #(
     // In this scenario, there's no need to include this logic.
     else begin : gen_axi4_bc_disabled
 
-        assign request_ongoing   = (request_type_q != IDLE);
+        assign request_ongoing = translation_request_active;
         assign bound_violation = 1'b0;
     end : gen_axi4_bc_disabled
     endgenerate
@@ -828,6 +861,9 @@ module riscv_iommu #(
         demux_ar_select_n   = demux_ar_select_q;
         resume_aw_n         = resume_aw_q;
         resume_ar_n         = resume_ar_q;
+        write_data_complete_n = write_data_complete_q |
+                                (write_data_handshake & dev_tr_req_i.w.last);
+        write_is_mrif_n       = write_is_mrif_q;
 
         trans_iova      = '0;
         trans_did       = '0;
@@ -851,6 +887,8 @@ module riscv_iommu #(
                 // AW request received
                 else if (dev_tr_req_i.aw_valid & ~dbg_ongoing_q) begin
                     request_type_n  = WRITE;
+                    write_data_complete_n = 1'b0;
+                    write_is_mrif_n = 1'b0;
                 end
             end
 
@@ -898,17 +936,17 @@ module riscv_iommu #(
             WRITE: begin
                 
                 // Tags
-                trans_iova      =  dev_tr_req_i.aw.addr;
+                trans_iova      =  write_aw_q.addr;
                 // AXI DVM extension for SMMU
-                trans_did       =  dev_tr_req_i.aw.stream_id;
-                trans_pv        =  dev_tr_req_i.aw.ss_id_valid;
-                trans_pid       =  dev_tr_req_i.aw.substream_id;
+                trans_did       =  write_did_q;
+                trans_pv        =  write_pv_q;
+                trans_pid       =  write_pid_q;
                 trans_type      =  rv_iommu::UNTRANSLATED_W;
-                trans_priv      =  dev_tr_req_i.aw.prot[0];
+                trans_priv      =  write_aw_q.prot[0];
 
-                burst_type      =  dev_tr_req_i.aw.burst;
-                burst_length    =  dev_tr_req_i.aw.len;
-                n_bytes         =  dev_tr_req_i.aw.size;
+                burst_type      =  write_aw_q.burst;
+                burst_length    =  write_aw_q.len;
+                n_bytes         =  write_aw_q.size;
                     
                 // Successful translation. Connect AXI demux to Comp IF
                 if (trans_valid) begin
@@ -930,8 +968,29 @@ module riscv_iommu #(
 
                 // We need to wait for AWREADY to go high
                 if (dev_tr_resp_o.aw_ready) begin
-                    request_type_n      = IDLE;
+                    request_type_n      = WRITE_DATA;
                     resume_aw_n         = 1'b0;
+                    write_is_mrif_n     = (demux_aw_select_q == 2'b10);
+                end
+            end
+
+            WRITE_DATA: begin
+                // Retain the translated MRIF lookup context until the handler
+                // has consumed the captured W beat. Other writes wait only for
+                // their W handshake before the next translation may start.
+                trans_iova      = write_aw_q.addr;
+                trans_did       = write_did_q;
+                trans_pv        = write_pv_q;
+                trans_pid       = write_pid_q;
+                trans_type      = rv_iommu::UNTRANSLATED_W;
+                trans_priv      = write_aw_q.prot[0];
+                burst_type      = write_aw_q.burst;
+                burst_length    = write_aw_q.len;
+                n_bytes         = write_aw_q.size;
+
+                if (write_data_complete_n &&
+                    (!write_is_mrif_q || !mrif_handler_expected || mrif_data_consumed)) begin
+                    request_type_n = IDLE;
                 end
             end
 
@@ -947,6 +1006,14 @@ module riscv_iommu #(
             demux_aw_select_q   <= '0;
             demux_ar_select_q   <= '0;
             request_type_q      <= IDLE;
+            write_aw_q          <= '0;
+            write_data_q        <= '0;
+            write_did_q         <= '0;
+            write_pv_q          <= 1'b0;
+            write_pid_q         <= '0;
+            write_data_valid_q  <= 1'b0;
+            write_data_complete_q <= 1'b0;
+            write_is_mrif_q     <= 1'b0;
         end
 
         else begin
@@ -956,6 +1023,37 @@ module riscv_iommu #(
             demux_aw_select_q   <= demux_aw_select_n;
             demux_ar_select_q   <= demux_ar_select_n;
             request_type_q      <= request_type_n;
+            write_data_complete_q <= write_data_complete_n;
+            write_is_mrif_q     <= write_is_mrif_n;
+
+            if ((request_type_q == IDLE) && (request_type_n == WRITE)) begin
+                write_aw_q.id     <= dev_tr_req_i.aw.id;
+                write_aw_q.addr   <= dev_tr_req_i.aw.addr;
+                write_aw_q.len    <= dev_tr_req_i.aw.len;
+                write_aw_q.size   <= dev_tr_req_i.aw.size;
+                write_aw_q.burst  <= dev_tr_req_i.aw.burst;
+                write_aw_q.lock   <= dev_tr_req_i.aw.lock;
+                write_aw_q.cache  <= dev_tr_req_i.aw.cache;
+                write_aw_q.prot   <= dev_tr_req_i.aw.prot;
+                write_aw_q.qos    <= dev_tr_req_i.aw.qos;
+                write_aw_q.region <= dev_tr_req_i.aw.region;
+                write_aw_q.atop   <= dev_tr_req_i.aw.atop;
+                write_aw_q.user   <= dev_tr_req_i.aw.user;
+                write_did_q       <= dev_tr_req_i.aw.stream_id;
+                write_pv_q        <= dev_tr_req_i.aw.ss_id_valid;
+                write_pid_q       <= dev_tr_req_i.aw.substream_id;
+            end
+
+            if (!write_data_valid_q && dev_tr_req_i.w_valid &&
+                ((request_type_n == WRITE) || (request_type_q == WRITE) ||
+                 (request_type_q == WRITE_DATA))) begin
+                write_data_q       <= dev_tr_req_i.w;
+                write_data_valid_q <= 1'b1;
+            end
+
+            if ((request_type_q == WRITE_DATA) && (request_type_n == IDLE)) begin
+                write_data_valid_q <= 1'b0;
+            end
         end
     end : transaction_control_seq
 

@@ -47,6 +47,8 @@ module rv_iommu_mrif_handler #(
 
     // Init MRIF processing. MSI data and MRIF cache data are valid.
     input  logic        init_mrif_i,
+    // The handler can capture a new MRIF request.
+    output logic        ready_o,
     // Abort access (discard without fault)
     output logic        ignore_o,
 
@@ -105,6 +107,7 @@ module rv_iommu_mrif_handler #(
 
     assign error_o  = (state_q == ERROR);
     assign cause_o  = rv_iommu::MSI_PT_DATA_CORRUPTION;
+    assign ready_o  = (state_q == IDLE);
 
     always_comb begin : mrif_handler_comb
 

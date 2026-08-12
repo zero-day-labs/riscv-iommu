@@ -120,6 +120,7 @@ module rv_iommu_translation_wrapper #(
     input  logic [19:0]                 flush_pscid_i,  // PSCID (Guest virtual address space identifier) to tag entries to be flushed
 
     output logic                        ignore_request_o,   // Ignore request (MRIF only)
+    output logic                        mrif_data_consumed_o,// Captured MSI data was accepted by the MRIF handler
     input  logic                        msi_data_valid_i,   // MSI data sent by DMA available
     input  logic [31:0]                 msi_data_i          // MSI data
 );
@@ -205,6 +206,7 @@ module rv_iommu_translation_wrapper #(
                 .flush_pscid_i,         // PSCID (Guest virtual address space identifier) to tag entries to be flushed
             
                 .ignore_request_o,      // Ignore request (MRIF only)
+                .mrif_data_consumed_o,  // Captured MSI data accepted
                 .msi_data_valid_i,      // MSI data sent by DMA available
                 .msi_data_i             // MSI data
             );
@@ -281,6 +283,7 @@ module rv_iommu_translation_wrapper #(
                 .flush_pscid_i,         // PSCID (Guest virtual address space identifier) to tag entries to be flushed
             
                 .ignore_request_o,      // Ignore request (MRIF only)
+                .mrif_data_consumed_o,  // Captured MSI data accepted
                 .msi_data_valid_i,      // MSI data sent by DMA available
                 .msi_data_i             // MSI data
             );
