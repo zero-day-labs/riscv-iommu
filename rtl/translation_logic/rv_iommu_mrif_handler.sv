@@ -13,22 +13,14 @@
 // Author:  Manuel Rodríguez <manuel.cederog@gmail.com>
 // Date:    09/12/2023
 //
-// Description: Handler for MSI translations in MRIF mode
-//              Modifies the destination MRIF using read-modify-write operations.
-//              Sends a notice MSI using the data provided by the MSI PTE if the IE bit 
-//                  corresponding to the interrupt identity being processed is set.
+// Description: Handler for MSI translations in MRIF mode.
+//              Sets the destination MRIF pending bit and sends a notice MSI
+//              for every valid MRIF-mode MSI, regardless of the IE bit.
 //
 
 /*
-    -   This module receives the interrupt identity and the base address of the destination MRIF.
-        It computes the address of the IP and IE bits corresponding to the interrupt identity within the MRIF and fetches both DWs.
-        Then, it sets the corresponding IP bit and checks whether the IE bit is set.
-        Finally, only the IP DW is written back to the MRIF.
-
-    -   If the IE bit was NOT set, the processing ends here, as there is no need to send the 
-            notice MSI because the corresponding interrupt is not enabled.
-
-    -   Otherwise, if the IE bit was set, a notice MSI is sent using the input NID and NPPN.
+    -   This module fetches the IP and IE DWs for the interrupt identity.
+    -   It sets IP when needed, then sends the notice MSI using NID and NPPN.
 */
 
 module rv_iommu_mrif_handler #(
@@ -47,6 +39,8 @@ module rv_iommu_mrif_handler #(
 
     // Init MRIF processing. MSI data and MRIF cache data are valid.
     input  logic        init_mrif_i,
+    // The handler can capture a new MRIF request.
+    output logic        ready_o,
     // Abort access (discard without fault)
     output logic        ignore_o,
 
@@ -87,8 +81,6 @@ module rv_iommu_mrif_handler #(
 
     // MRIF IP register
     logic [63:0] mrif_ip_q, mrif_ip_n;
-    // MRIF IE register
-    logic [63:0] mrif_ie_q, mrif_ie_n;
     // Interrupt ID register
     logic [10:0] int_id_q, int_id_n;
     // Notice PPN register
@@ -105,6 +97,7 @@ module rv_iommu_mrif_handler #(
 
     assign error_o  = (state_q == ERROR);
     assign cause_o  = rv_iommu::MSI_PT_DATA_CORRUPTION;
+    assign ready_o  = (state_q == IDLE);
 
     always_comb begin : mrif_handler_comb
 
@@ -165,7 +158,6 @@ module rv_iommu_mrif_handler #(
         wr_state_n      = wr_state_q;
         wait_rlast_n    = wait_rlast_q;
         mrif_ip_n       = mrif_ip_q;
-        mrif_ie_n       = mrif_ie_q;
         int_id_n        = int_id_q;
         notice_ppn_n    = notice_ppn_q;
         notice_nid_n    = notice_nid_q;
@@ -216,23 +208,11 @@ module rv_iommu_mrif_handler #(
                     // Second DW: IE
                     if (mem_resp_i.r.last) begin
 
-                        // Save IE DW
-                        mrif_ie_n   = mem_resp_i.r.data;
-
                         // If the IP bit corresponding to the interrupt ID is already set, there is no need to write back the IP DW to the MRIF
                         if (|(mrif_ip_q & int_id_bit)) begin
-                            
-                            // If the IE bit corresponding to the interrupt ID is not set, there is no need to send the MSI notice
-                            // IE bit set. Send MSI notice
-                            if (|(mem_resp_i.r.data & int_id_bit)) begin
-                                state_n     = WRITE_NOTICE;
-                                wr_state_n  = AW_REQ;
-                            end
-
-                            // IE bit clear. Go back to IDLE
-                            else begin
-                                state_n = IDLE;
-                            end
+                            // Always send the notice MSI (AIA), even if already pending.
+                            state_n     = WRITE_NOTICE;
+                            wr_state_n  = AW_REQ;
                         end
 
                         // IP bit is not set, write back the IP DW
@@ -257,7 +237,6 @@ module rv_iommu_mrif_handler #(
             end
 
             // Write back the IP DW to the MRIF.
-            // Check whether the corresponding IE bit is enable
             WRITE_MRIF: begin
 
                 case (wr_state_q)
@@ -291,8 +270,8 @@ module rv_iommu_mrif_handler #(
                             mem_req_o.b_ready   = 1'b1;
                             wr_state_n  = AW_REQ;
 
-                            // Check IE bit to determine whether to send notice MSI
-                            state_n = (|(mrif_ie_q & int_id_bit)) ? (WRITE_NOTICE) : (IDLE);
+                            // Always send the notice MSI (AIA), regardless of IE.
+                            state_n = WRITE_NOTICE;
 
                             // AXI error
                             if (mem_resp_i.b.resp != axi_pkg::RESP_OKAY) begin
@@ -305,8 +284,7 @@ module rv_iommu_mrif_handler #(
                 endcase
             end
 
-            // If the IE bit corresponding to the given interrupt identity was set,
-            //  send MSI notice using input NID and NPPN.
+            // Send the notice MSI using input NID and NPPN.
             WRITE_NOTICE: begin
                 
                 case (wr_state_q)
@@ -381,7 +359,6 @@ module rv_iommu_mrif_handler #(
             pptr_q          <= '0;
             wait_rlast_q    <= 1'b0;
             mrif_ip_q       <= '0;
-            mrif_ie_q       <= '0;
             int_id_q        <= '0;
             notice_ppn_q    <= '0;
             notice_nid_q    <= '0;
@@ -394,7 +371,6 @@ module rv_iommu_mrif_handler #(
             pptr_q          <= pptr_n;
             wait_rlast_q    <= wait_rlast_n;
             mrif_ip_q       <= mrif_ip_n;
-            mrif_ie_q       <= mrif_ie_n;
             int_id_q        <= int_id_n;
             notice_ppn_q    <= notice_ppn_n;
             notice_nid_q    <= notice_nid_n;
