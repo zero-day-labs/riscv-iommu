@@ -423,9 +423,11 @@ module rv_iommu_ptw #(
                                     // superpages
                                     if (main_lvl_q == LVL2)
                                         final_gpa[20:0] = iova_q[20:0];
-                                    if (main_lvl_q == LVL1)
+                                    else if (main_lvl_q == LVL1)
                                         final_gpa[29:0] = iova_q[29:0];
-                                    else begin
+                                    // LVL3 is a valid 4 KiB leaf; keep the PPN
+                                    // and page offset assembled above.
+                                    else if (main_lvl_q != LVL3) begin
                                         pf_excep_n  = 1'b1;
                                         state_n     = ERROR;
                                     end
@@ -460,7 +462,9 @@ module rv_iommu_ptw #(
                                         pptr[20:0] = gpa_x_q[20:0];
                                     else if (main_lvl_q == LVL1)
                                         pptr[29:0] = gpa_x_q[29:0];
-                                    else begin
+                                    // A 4 KiB G-stage leaf also keeps the
+                                    // already assembled PPN and page offset.
+                                    else if (main_lvl_q != LVL3) begin
                                         pf_excep_n  = 1'b1;
                                         state_n     = ERROR;
                                     end
