@@ -112,6 +112,11 @@ module rv_iommu_ds_if #(
     aw_chan_t aw_data;
     logic aw_valid;
     logic aw_ready;
+    logic aw_spill_ready;
+    logic w_fifo_full, w_fifo_empty;
+
+    // Every accepted AW must retain its owner until the corresponding WLAST.
+    assign aw_ready = aw_spill_ready && !w_fifo_full;
     stream_arbiter #(
         .DATA_T (aw_chan_t),
         .N_INP  (5)
@@ -134,8 +139,8 @@ module rv_iommu_ds_if #(
         .rst_ni     (rst_ni),
 
         .data_i     (aw_data),
-        .valid_i    (aw_valid),
-        .ready_o    (aw_ready),
+        .valid_i    (aw_valid && !w_fifo_full),
+        .ready_o    (aw_spill_ready),
 
         .data_o     (ds_req_o.aw),
         .valid_o    (ds_req_o.aw_valid),
@@ -145,6 +150,7 @@ module rv_iommu_ds_if #(
     // W Channel
     logic[2:0] w_select, w_select_fifo;
     logic w_valid;
+    logic w_mux_valid;
     logic w_ready;
     w_chan_t w_data;
 
@@ -156,8 +162,8 @@ module rv_iommu_ds_if #(
             1:          w_select = 3'd1; // FQ
             2:          w_select = 3'd2; // MRIF Handler
             3:          w_select = 3'd3; // MSI IG
-            3:          w_select = 3'd4; // PQ
-            default:    w_select = 2'd0; // CQ
+            4:          w_select = 3'd4; // PQ
+            default:    w_select = 3'd0; // CQ
         endcase
     end
 
@@ -170,8 +176,8 @@ module rv_iommu_ds_if #(
       .rst_ni     (rst_ni),
       .flush_i    (1'b0),
       .testmode_i (1'b0),
-      .full_o     ( ),
-      .empty_o    ( ),
+      .full_o     (w_fifo_full),
+      .empty_o    (w_fifo_empty),
       .usage_o    ( ),
       .data_i     (w_select),
       .push_i     (aw_valid & aw_ready),
@@ -183,14 +189,18 @@ module rv_iommu_ds_if #(
         .DATA_T (w_chan_t),
         .N_INP  (5)
     ) i_stream_mux_w (
-        .inp_data_i  ({msi_ig_req_i.w, mrif_handler_req_i.w, fq_req_i.w, cq_req_i.w, pq_req_i.w}),
-        .inp_valid_i ({msi_ig_req_i.w_valid, mrif_handler_req_i.w_valid, fq_req_i.w_valid, cq_req_i.w_valid, pq_req_i.w_valid}),
-        .inp_ready_o ({msi_ig_resp_o.w_ready, mrif_handler_resp_o.w_ready, fq_resp_o.w_ready, cq_resp_o.w_ready, pq_resp_o.w_ready}),
+        // Packed index must match the owner selected from AWID above.
+        .inp_data_i  ({pq_req_i.w, msi_ig_req_i.w, mrif_handler_req_i.w, fq_req_i.w, cq_req_i.w}),
+        .inp_valid_i ({pq_req_i.w_valid, msi_ig_req_i.w_valid, mrif_handler_req_i.w_valid, fq_req_i.w_valid, cq_req_i.w_valid}),
+        .inp_ready_o ({pq_resp_o.w_ready, msi_ig_resp_o.w_ready, mrif_handler_resp_o.w_ready, fq_resp_o.w_ready, cq_resp_o.w_ready}),
         .inp_sel_i   (w_select_fifo),
         .oup_data_o  (w_data),
-        .oup_valid_o (w_valid),
-        .oup_ready_i (w_ready)
+        .oup_valid_o (w_mux_valid),
+        .oup_ready_i (w_ready && !w_fifo_empty)
     );
+
+    // An empty queue's stale selector must not consume a producer's W data.
+    assign w_valid = w_mux_valid && !w_fifo_empty;
 
     spill_register #(
         .T          (w_chan_t),
