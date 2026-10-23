@@ -823,11 +823,12 @@ module rv_iommu_tw_sv39x4 #(
                     A fault is generated if:
                     - A bit is not set (checked in PTW);
                     - Page is not readable (checked in PTW);
-                    - (1): Transaction is a store and page has not write permissions (D bit checked in PTW);
+                    - (1): Transaction is a store and page has not write permissions or D=0;
                     - (2): Transaction is read-for-execute and page has not X permissions;
                     - (3): U-mode transaction and PTE has U=0;
                 */
                 if  ((is_store && (!iotlb_lu_1S_content.w && S1_en)     ) ||    // (1)
+                     (is_store && (!iotlb_lu_1S_content.d && S1_en)     ) ||    // (1)
                      (is_rx && (!iotlb_lu_1S_content.x && S1_en)        ) ||    // (2)
                      ((!priv_lvl_i) && !iotlb_lu_1S_content.u && S1_en  )       // (3)
                     ) begin
@@ -838,6 +839,7 @@ module rv_iommu_tw_sv39x4 #(
                 end
 
                 else if ((is_store && (!iotlb_lu_2S_content.w && S2_en)) ||     // (1)
+                            (is_store && (!iotlb_lu_2S_content.d && S2_en && !iotlb_lu_is_msi)) || // (1)
                             (is_rx && (!iotlb_lu_2S_content.x && S2_en))        // (2)
                         ) begin
                         if (is_store)   wrap_cause_code = rv_iommu::STORE_GUEST_PAGE_FAULT;
