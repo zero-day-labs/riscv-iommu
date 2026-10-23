@@ -243,7 +243,13 @@ module riscv_iommu #(
     assign axi_aux_req.aw_valid     = resume_aw_q;
 
     assign axi_aux_req.aw.id        = dev_tr_req_i.aw.id;
-    assign axi_aux_req.aw.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr};    // translated address
+    // Translated address, captured with trans_valid (the IOTLB/DDTC lookup may change before AxREADY)
+    logic [riscv::PLEN-1:0] spaddr_q;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)          spaddr_q <= '0;
+        else if (trans_valid) spaddr_q <= spaddr;
+    end
+    assign axi_aux_req.aw.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr_q};  // translated address
     assign axi_aux_req.aw.len       = dev_tr_req_i.aw.len;
     assign axi_aux_req.aw.size      = dev_tr_req_i.aw.size;
     assign axi_aux_req.aw.burst     = dev_tr_req_i.aw.burst;
@@ -266,7 +272,7 @@ module riscv_iommu #(
     assign axi_aux_req.ar_valid     = resume_ar_q;
 
     assign axi_aux_req.ar.id        = dev_tr_req_i.ar.id;
-    assign axi_aux_req.ar.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr};    // translated address
+    assign axi_aux_req.ar.addr      = {{riscv::XLEN-riscv::PLEN{1'b0}}, spaddr_q};  // translated address
     assign axi_aux_req.ar.len       = dev_tr_req_i.ar.len;
     assign axi_aux_req.ar.size      = dev_tr_req_i.ar.size;
     assign axi_aux_req.ar.burst     = dev_tr_req_i.ar.burst;
