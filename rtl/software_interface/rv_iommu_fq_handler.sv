@@ -163,9 +163,10 @@ module rv_iommu_fq_handler #(
         .empty_o    ( is_empty        ),
         .usage_o    (                 ),
         .data_i     ( {trans_type_i, cause_code_i, iova_i, gpaddr_i, did_i, pv_i, pid_i, is_supervisor_i, is_guest_pf_i, is_implicit_i}),
-        .push_i     ( event_valid_i & !edge_trigger_q ),
+        // Records are discarded while the FQ is disabled or an error bit is set in fqcsr
+        .push_i     ( event_valid_i & !edge_trigger_q & fq_en_i & !error_vector ),
         .data_o     ( {trans_type, cause_code, iova, gpaddr, did, pv, pid, is_supervisor, is_guest_pf, is_implicit} ),
-        .pop_i      ( is_idle ) // W transaction has finished
+        .pop_i      ( is_idle | (!is_empty & (!fq_en_i | (state_q == ERROR)))) // W transaction has finished, or record discarded
     );
 
     // FIFO edge-triggered push control
@@ -309,7 +310,7 @@ module rv_iommu_fq_handler #(
                         fq_pptr_n = ({fq_base_ppn_i, 12'b0}) | ({{riscv::PLEN-32{1'b0}}, masked_tail} << 5);
 
                         // If a fault that must be reported occurs and the FQ is full, set fq_of and signal error
-                        if (fq_tail_i == fq_head_i - 1) begin
+                        if (((fq_tail_i + 1) & ~({32{1'b1}} << (fq_size_i+1))) == fq_head_i) begin
                             fq_of_o     = 1'b1;
                             error_wen_o = 1'b1;
                             fq_ip_o     = fq_ie_i;
