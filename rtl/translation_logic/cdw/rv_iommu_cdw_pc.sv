@@ -211,8 +211,8 @@ module rv_iommu_cdw_pc #(
         // Default
         edge_trigger_n = edge_trigger_q;
 
-        // Edged signal
-        if (!edge_trigger_q && init_cdw_i)
+        // Edged signal. Only armed in IDLE, so a request raised while the walker is busy still starts it
+        if (!edge_trigger_q && init_cdw_i && (state_q == IDLE))
             edge_trigger_n = 1'b1;
 
         // End of edged signal

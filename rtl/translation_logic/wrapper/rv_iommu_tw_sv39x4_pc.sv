@@ -255,6 +255,7 @@ module rv_iommu_tw_sv39x4_pc #(
 
     // HPM event indicators
     logic cdw_active, ptw_active;
+    logic ptw_orphan_q, ptw_orphan_now, msi_orphan_q, msi_orphan_now, iotlb_update_gated;
     assign iotlb_miss_o = iotlb_lu_miss;
     assign ddt_walk_o   = cdw_active & (is_ddt_walk);
     assign pdt_walk_o   = cdw_active & (~is_ddt_walk);
@@ -336,7 +337,13 @@ module rv_iommu_tw_sv39x4_pc #(
     //      or 
     // (ii) second-stage translation is enabled and the GPA is not MSI
     logic   init_ptw;
-    assign  init_ptw =  (iotlb_lu_miss) & 
+    // A flush may drop or remove what a walk installed. Gap the walker start request for one cycle so it walks again
+    logic   iotlb_flush_q, dir_flush_q;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin iotlb_flush_q <= 1'b0; dir_flush_q <= 1'b0; end
+        else begin iotlb_flush_q <= flush_vma_i | flush_gvma_i; dir_flush_q <= flush_ddtc_i | flush_pdtc_i; end
+    end
+    assign  init_ptw =  (iotlb_lu_miss) & ~iotlb_flush_q &
                         ((S1_en) | 
                          (S2_en & ~iova_is_msi));
 
@@ -430,7 +437,7 @@ module rv_iommu_tw_sv39x4_pc #(
         .flush_pscid_i      ( flush_pscid_i         ),  // PSCID identifier to be flushed (address space identifier)
 
         // Update signals
-        .update_i           ( iotlb_update          ),
+        .update_i           ( iotlb_update_gated    ),
         .up_1S_2M_i         ( iotlb_up_1S_2M        ),
         .up_1S_1G_i         ( iotlb_up_1S_1G        ),
         .up_2S_2M_i         ( iotlb_up_2S_2M        ),
@@ -794,7 +801,7 @@ module rv_iommu_tw_sv39x4_pc #(
         .req_pid_i              (process_id     ),      // process ID associated with request
 
         // from DDTC, to monitor misses
-        .init_cdw_i             (ddtc_access && ~ddtc_lu_hit ),
+        .init_cdw_i             (ddtc_access && ~ddtc_lu_hit && ~dir_flush_q),
 
         .pdtc_access_i          (pdtc_access    ),
         .pdtc_hit_i             (pdtc_lu_hit    ),
@@ -1068,18 +1075,45 @@ module rv_iommu_tw_sv39x4_pc #(
     end
 
     //# Error routing
+    // A walk is orphaned when its request ends while the walk is active. The IOTLB takes the stage
+    // enables of a new entry from the current request, so an orphaned walk must not install it,
+    // and its error must not be reported against the next request.
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)            ptw_orphan_q <= 1'b0;
+        else if (!ptw_active)   ptw_orphan_q <= 1'b0;
+        else if (!req_trans_i)  ptw_orphan_q <= 1'b1;
+    end
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)              msi_orphan_q <= 1'b0;
+        else if (!msiptw_active)  msi_orphan_q <= 1'b0;
+        else if (!req_trans_i)    msi_orphan_q <= 1'b1;
+    end
+    assign ptw_orphan_now     = ptw_orphan_q | (ptw_active & ~req_trans_i);
+    assign msi_orphan_now     = msi_orphan_q | (msiptw_active & ~req_trans_i);
+    assign iotlb_update_gated = iotlb_update & ~(ptw_update & ptw_orphan_now)
+                                             & ~(msi_update & msi_orphan_now);
+
+    // Same for context walks
+    logic cdw_orphan_q, cdw_orphan_now;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)            cdw_orphan_q <= 1'b0;
+        else if (!cdw_active)   cdw_orphan_q <= 1'b0;
+        else if (!req_trans_i)  cdw_orphan_q <= 1'b1;
+    end
+    assign cdw_orphan_now = cdw_orphan_q | (cdw_active & ~req_trans_i);
+
     always_comb begin : error_routing
 
         trans_error_o   =  ((wrap_error)         |
-                           (cdw_error)          |
-                           (ptw_error)          |
-                           (msiptw_error)       |
+                           (cdw_error & ~cdw_orphan_now) |
+                           (ptw_error & ~ptw_orphan_now) |
+                           (msiptw_error & ~msi_orphan_now) |
                            (mrif_handler_error) |
                            (msi_write_error_i));
 
         priority case (1'b1)
             wrap_error:         cause_code_o = wrap_cause_code;
-            cdw_error:          cause_code_o = cdw_cause_code;
+            (cdw_error & ~cdw_orphan_now): cause_code_o = cdw_cause_code;
             ptw_error:          cause_code_o = ptw_cause_code;
             msiptw_error:       cause_code_o = msiptw_cause_code;
             mrif_handler_error: cause_code_o = mrif_handler_cause_code;
