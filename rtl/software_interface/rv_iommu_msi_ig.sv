@@ -191,14 +191,6 @@ module rv_iommu_msi_ig #(
                             break;  // Use break to set priority
                         end 
                     end
-
-                    for (int unsigned j = 0; j < N_INT_SRCS; j++) begin
-                        
-                        // Clear edged IP bits when input is clear
-                        if (!intp_i[j] && edged_q[j]) begin
-                            edged_n[j] = 1'b0;
-                        end
-                    end
                 end
             end 
 
@@ -252,6 +244,13 @@ module rv_iommu_msi_ig #(
 
             default: state_n = IDLE;
         endcase
+
+        // Clear edged IP bits when input is clear. Checked in all states to catch transitions during a write
+        for (int unsigned j = 0; j < N_INT_SRCS; j++) begin
+            if (!intp_i[j] && edged_q[j]) begin
+                edged_n[j] = 1'b0;
+            end
+        end
     end
 
     always_ff @(posedge clk_i or negedge rst_ni) begin : sequential_logic

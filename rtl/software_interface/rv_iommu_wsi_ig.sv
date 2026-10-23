@@ -47,7 +47,7 @@ module rv_iommu_wsi_ig #(
         if (wsi_en_i) begin
 
             for (int unsigned i = 0; i < N_INT_SRCS; i++) begin
-                wsi_wires_o[intv_i[i][(LOG2_INTVEC-1):0]] = intp_i[i];
+                wsi_wires_o[intv_i[i][(LOG2_INTVEC-1):0]] = wsi_wires_o[intv_i[i][(LOG2_INTVEC-1):0]] | intp_i[i];
             end
         end
     end
