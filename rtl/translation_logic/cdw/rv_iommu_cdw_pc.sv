@@ -783,6 +783,7 @@ module rv_iommu_cdw_pc #(
 
                             // Config checks
                             if ((caps_msi_flat_i && |(dc_msiptp.mode & 4'b1110)) ||
+                                (dc_iohgatp_q.mode == 4'd0 && dc_msiptp.mode != 4'd0) ||  // msiptp must be Off if iohgatp is Bare
                                 (|dc_msiptp.reserved)) begin
 
                                 msi_check_error = 1'b1;
