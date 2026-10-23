@@ -51,7 +51,7 @@ module rv_iommu_axi4_bc (
                 // BURST_FIXED: The final address is Start Addr + 8 (ex: ARADDR + 8)
                 axi_pkg::BURST_FIXED: begin
                     // May be optimized with bitwise AND
-                    if (((addr_i & 12'hfff) + (1'b1 << n_bytes_i)) < (1'b1 << 12)) begin
+                    if (((addr_i & 12'hfff) + (1'b1 << n_bytes_i)) <= (1'b1 << 12)) begin
                         allow_request_o   = 1'b1;     // Allow transaction
                     end
 
@@ -85,7 +85,7 @@ module rv_iommu_axi4_bc (
                     // Check if the highest address crosses a 4 kiB boundary (Highest Addr - Lower Addr >= 4kiB)
                     // Highest addr_i = Wrap_Boundary + (Burst_Length x Number_Bytes)
                     if (!(&log2_len) && 
-                         (((wrap_boundary & 12'hfff) + ((burst_length_i + 1) << n_bytes_i)) < (1'b1 << 12))) begin
+                         (((wrap_boundary & 12'hfff) + ((burst_length_i + 1) << n_bytes_i)) <= (1'b1 << 12))) begin
                         allow_request_o  = 1'b1;     // Allow transaction
                     end
                     
@@ -99,7 +99,7 @@ module rv_iommu_axi4_bc (
                 // BURST_INCR: The final address is Start Addr + Burst_Length x Number_Bytes
                 axi_pkg::BURST_INCR: begin
                     // check if burst is within 4K range
-                    if (((addr_i & 12'hfff) + ((burst_length_i + 1) << n_bytes_i)) < (1'b1 << 12)) begin
+                    if (((addr_i & 12'hfff) + ((burst_length_i + 1) << n_bytes_i)) <= (1'b1 << 12)) begin
                         allow_request_o  = 1'b1;     // Allow transaction
                     end
 
@@ -109,7 +109,8 @@ module rv_iommu_axi4_bc (
                     end
                 end
 
-                default:;
+                // Reserved burst type: reject it so the request terminates
+                default: bound_violation_o = 1'b1;
             endcase
         end
     end
