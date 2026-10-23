@@ -236,7 +236,7 @@ module rv_iommu_msiptw #(
                         if (en_1S_i) begin
                             
                             automatic logic [riscv::GPPNW-1:0] imsic_num;
-                            imsic_num = rv_iommu::extract_imsic_num(gpte_i.ppn[(riscv::GPPNW-1):0], msi_addr_mask_i);
+                            imsic_num = rv_iommu::extract_imsic_num(rv_iommu::make_gppn(1'b1, is_1S_1G_i, is_1S_2M_i, vpn_i, gpte_i), msi_addr_mask_i);
 
                             pptr_n      = {msiptp_ppn_i, 12'b0} | 
                                             ({{riscv::PLEN-riscv::GPPNW{1'b0}}, imsic_num} << 4);

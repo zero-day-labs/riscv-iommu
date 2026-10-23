@@ -181,7 +181,8 @@ module rv_iommu_ptw_sv39x4_pc #(
 
             // GPA is the address of a virtual interrupt file
             assign gpaddr_is_msi    = (msi_en_i && is_store_i &&
-                                        ((pte.ppn[riscv::GPPNW-1:0] & ~msi_addr_mask_i) == 
+                                        ((rv_iommu::make_gppn(1'b1, (main_lvl_q == LVL1), (main_lvl_q == LVL2),
+                                                              iova_q[12 +: 29], pte) & ~msi_addr_mask_i) ==
                                          (msi_addr_pattern_i & ~msi_addr_mask_i)));
 
             // Bus to send first-stage data to MSI PTW                            
