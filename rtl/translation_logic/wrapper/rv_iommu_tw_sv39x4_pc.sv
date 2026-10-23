@@ -1004,20 +1004,20 @@ module rv_iommu_tw_sv39x4_pc #(
                         case ({iotlb_lu_1S_2M, iotlb_lu_1S_1G, iotlb_lu_2S_2M, iotlb_lu_2S_1G})
 
                             // 1-S: 4k | 2-S: 2M:   {PPN[2], PPN[1],  GPPN[0], OFF}
-                            4'b0010:    spaddr_o[20:12] = iotlb_lu_1S_content.ppn[20:12];
+                            4'b0010:    spaddr_o[20:12] = iotlb_lu_1S_content.ppn[8:0];
 
                             // 1-S: 2M | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
                             // 1-S: 1G | 2-S: 2M:   {PPN[2], PPN[1],  VPN[0],  OFF}
                             4'b1010, 4'b0110:   spaddr_o[20:12] = iova_i[20:12];
 
                             // 1-S: 4k | 2-S: 1G:   {PPN[2], GPPN[1], GPPN[0], OFF}
-                            4'b0001:    spaddr_o[29:12] = iotlb_lu_1S_content.ppn[29:12];
+                            4'b0001:    spaddr_o[29:12] = iotlb_lu_1S_content.ppn[17:0];
 
                             // 1-S: 1G | 2-S: 1G:   {PPN[2], VPN[1],  VPN[0],  OFF}
                             4'b0101:    spaddr_o[29:12] = iova_i[29:12];
 
                             // 1-S: 2M | 2-S: 1G:   {PPN[2], GPPN[1], VPN[0],  OFF}
-                            4'b1001:    spaddr_o[29:12] = {iotlb_lu_1S_content.ppn[29:21], iova_i[20:12]};
+                            4'b1001:    spaddr_o[29:12] = {iotlb_lu_1S_content.ppn[17:9], iova_i[20:12]};
                             
                             default:;
                                 // 1-S: 4k | 2-S: 4k:   {PPN[2], PPN[1],  PPN[0],  OFF}
